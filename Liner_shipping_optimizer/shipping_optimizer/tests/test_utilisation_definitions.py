@@ -64,3 +64,19 @@ def test_vessel_utilisation_is_assigned_over_owned():
     assigned = sum(r["vessels"] for r in res.ledger.service_rows.values())
     assert assigned == sum(res.ledger.vessels_by_class.values())
     assert assigned <= 12
+
+
+def test_fleet_inventory_includes_classes_without_any_candidate_model():
+    """A class owned but absent from the candidate pool (e.g. excluded by draft limits) counts in the denominator."""
+    from src.network.strategy_report import build_strategy_report
+    pr, res = _plan()
+    spare = FleetClass(vessel_class="W", quantity=5, capacity_teu=2000.0, tc_rate_daily=9000.0, min_speed=10.0,
+                       design_speed=14.0, max_speed=16.0, bunker_consumption_tons_per_day=10.0,
+                       idle_consumption_tons_per_day=1.0)
+    fleet = Fleet(classes=pr.fleet.classes + [spare])
+    rep = build_strategy_report(res, fleet=fleet, distance_matrix=DM)
+    fl = rep["utilisation"]["fleet"]
+    assert fl["inventory"] == 12 + 5
+    assert fl["by_class"]["W"] == {"vessels_used": 0, "inventory": 5, "inventory_utilisation": 0.0,
+                                   "services_operated": 0}
+    assert fl["inventory_utilisation"] == pytest.approx(fl["vessels_used"] / 17)

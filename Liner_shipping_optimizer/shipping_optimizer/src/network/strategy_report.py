@@ -231,8 +231,14 @@ def build_strategy_report(plan, *, fleet=None, distance_matrix=None, speed_facto
             carried_nm += load * nm_
     leg_sorted = sorted(leg_lf)
     fleet_rows = {}
-    for cname in sorted({m.vessel_class for m in models}):
-        inv = next((m.class_inventory for m in models if m.vessel_class == cname), 0)
+    # EVERY class of the fleet counts in the denominator, also a class for which the candidate pool contains no
+    # model (e.g. excluded by draft limits): the inventory is what the company owns, not what was modelled
+    # (decision phase: the former per-model class list overstated the utilisation, 0.87 reported vs 0.68 of 263).
+    owned = {c.vessel_class: int(c.quantity) for c in getattr(fleet, "classes", [])} if fleet is not None else {}
+    for cname in sorted(set(owned) | {m.vessel_class for m in models}):
+        inv = owned.get(cname)
+        if inv is None:
+            inv = next((m.class_inventory for m in models if m.vessel_class == cname), 0)
         used = int(led.vessels_by_class.get(cname, 0))
         fleet_rows[cname] = {"vessels_used": used, "inventory": int(inv),
                              "inventory_utilisation": (used / inv) if inv else None,
