@@ -1,0 +1,267 @@
+{
+  "meta": {
+    "artifact": "MA_09_METRIC_LINEAGE.json",
+    "system": "AI Vessel Routing System - Multi-Agent Optimizer",
+    "generated": "2026-10-05",
+    "under_audit": "frontend/public/pipeline_output.json",
+    "raw_input": "data/raw/demand_world_small.csv (1764 rows), ports_world_small.csv (47), fleet_world_small.csv (263 vessels), distance_dense.csv (62002)",
+    "note": "Lineage traces each reported metric from its raw CSV source through every transformation to the artifact field. 'defect_ids' cross-reference the MA_xx finding registers."
+  },
+  "writer": {
+    "sole_writer_of_artifact": "tests/test_orchestrator.py:2222-2235",
+    "writes_to": [
+      "<repo>/pipeline_output.json",
+      "shipping_optimizer/frontend/public/pipeline_output.json",
+      "shipping_optimizer/frontend/dist/pipeline_output.json"
+    ],
+    "reader": "backend/server.py:71-79 load_pipeline_data()",
+    "note": "The optimizer never executes at serve time. backend/__pycache__ contains only __init__ and server; backend/services/__pycache__ and backend/routes/__pycache__ do not exist."
+  },
+  "metrics": [
+    {
+      "field": "summary_metrics.weekly_profit",
+      "value": 345495908.06,
+      "unit_declared": "USD/week",
+      "lineage": [
+        "raw: demand_world_small.csv FFEPerWeek, Revenue_1",
+        "network_loader.py:106  weekly_teu = FFE * k",
+        "network_loader.py:109  revenue_per_teu = Revenue_1 * k   [DEFECT k^2]",
+        "service_ga.py:243     revenue = served * avg_rev * yield",
+        "service_ga.py:340-350 profit = rev - op - fuel - trans - port - penalties",
+        "normalization.py:160  fitness = 10*profit + 0.01*cov + 0.1*cost  [DEFECT rewards cost]",
+        "hub_milp.py:294-300   revenue_expr = sum(r_d * x_ds)",
+        "hub_milp.py:367-373   coverage_reward = (w_c/w_p)*(sat/D)*abs(OPEX+1)  [DEFECT scales with cost]",
+        "hub_milp.py:471       profit_v = pulp.value(objective)  [includes coverage_reward]",
+        "hub_milp.py:628       result['profit'] = profit_v",
+        "regional_agent.py:432 profit = sum(cluster profits)",
+        "orchestrator_agent.py:295-303 total_profit = sum(regional)",
+        "orchestrator_agent.py   summary_metrics.weekly_profit"
+      ],
+      "defect_ids": ["MA-02-01", "MA-06-08", "MA-06-01", "MA-06-02", "MA-04-01", "MA-06-20", "MA-06-21"],
+      "independent_bound": {
+        "bound": "gross_revenue - non_fuel_cost",
+        "value": 122288267.79,
+        "excess": 223207640.27,
+        "verdict": "FAIL - reported profit exceeds the fuel-independent ceiling"
+      }
+    },
+    {
+      "field": "summary_metrics.revenue",
+      "value": 1136109658.57,
+      "unit_declared": "USD/week",
+      "lineage": [
+        "orchestrator_agent.py:314-316  weekly_revenue = total_profit + total_cost"
+      ],
+      "defect_ids": ["MA-01-02", "MA-06-15"],
+      "note": "TAUTOLOGY. Not derived from revenue at all. Substituting profit = revenue - cost makes this identity 0 = 0. Carries zero independent information.",
+      "independent_bound": {
+        "bound": "sum(FFE * Revenue_1)  [units cancel, representation-independent]",
+        "value": 264870100.00,
+        "excess": 871239558.57,
+        "ratio": 4.2893,
+        "verdict": "FAIL - 4.29x the dataset's gross revenue"
+      },
+      "explained_by": {
+        "k2_inflation": 4.001773,
+        "multi_service_overlap": 1.0719,
+        "product": 4.28931,
+        "note": "The two factors multiply to the observed ratio with no residual. Both defects fully explain the revenue excess."
+      }
+    },
+    {
+      "field": "summary_metrics.operating_cost",
+      "value": 100822500.00,
+      "unit": "USD/week",
+      "lineage": [
+        "service_generator_agent.py  weekly_cost SYNTHETIC (150k/180k/280k/70k ladders)",
+        "  -- fleet_data.csv 'TC rate daily' loaded at network_loader.py:193 and NEVER read",
+        "hub_milp.py:304-309  OPEX = sum(weekly_cost * freq) for s in services_mask  [Python constant]",
+        "  -- NO port filter: every cluster MILP re-bills every active service",
+        "regional_agent.py:434  operating_cost = sum(r['cost'] for clusters)",
+        "orchestrator_agent.py  summary_metrics.operating_cost"
+      ],
+      "defect_ids": ["MA-04-08", "MA-06-20"],
+      "measured_cluster_duplication": {
+        "method": "reported operating_cost divided by sum of per-service vessel_cost in selected_services",
+        "Asia": 1.311,
+        "Europe": 1.968,
+        "Americas": 1.365,
+        "note": "Confirmed empirically against the artifact. Reported operating cost exceeds the sum of its own per-service detail by 29-97%."
+      }
+    },
+    {
+      "field": "summary_metrics.fuel_cost",
+      "value": 648031918.31,
+      "unit": "USD/week",
+      "share_of_total_cost_pct": 81.97,
+      "lineage": [
+        "hub_milp.py:312-322  FUEL = sum(calculate_weekly_fuel_cost(ports, ...) * freq)",
+        "fuel_cost.py:144     sailing_days = D / (speed*24*0.9)",
+        "fuel_cost.py:155     fuel = sailing_days * consumption * 600",
+        "  -- consumption from HARDCODED table, not fleet_data.csv 'Bunker ton/day'",
+        "  -- NO fleet constraint bounds the service count or frequency",
+        "regional_agent.py:435  fuel_cost = sum(cluster fuel_cost)",
+        "orchestrator_agent.py  summary_metrics.fuel_cost"
+      ],
+      "defect_ids": ["MA-04-01", "MA-04-02", "MA-04-03", "MA-02-10", "MA-06-21"],
+      "independent_bound": {
+        "method": "sum(quantity * consumption_tons_per_day) * BUNKER_PRICE_PER_TON * 7, all 263 vessels underway 24/7",
+        "value": 55335000.0,
+        "ratio": 11.71,
+        "verdict": "FAIL - 11.71x the entire fleet's physical maximum burn"
+      },
+      "per_teu": {
+        "reported": 2371.42,
+        "industry_range": "15-40 USD/TEU-week",
+        "ratio": "59-158x"
+      },
+      "measured_cluster_duplication": {"Asia": 1.290, "Europe": 1.833, "Americas": 1.318}
+    },
+    {
+      "field": "summary_metrics.transship_cost",
+      "value": 22531440.01,
+      "unit": "USD/week",
+      "lineage": [
+        "hub_milp.py:326-329  TRANS = sum(tau(origin) * transfer_flow)",
+        "hub_milp.py:175-188  tau depends on the demand lane's endpoints; hub h IGNORED",
+        "network_loader.py:48  transshipment_cost = CostPerFULLTrnsf * 2.0  [correct conversion]",
+        "regional_agent.py:436  transship_cost = sum(cluster transship_cost)"
+      ],
+      "defect_ids": ["MA-06-05"],
+      "classification": "C - specification ambiguity",
+      "note": "Transfer load is charged in full while the revenue split is hardcoded /2.0. Intent undocumented."
+    },
+    {
+      "field": "summary_metrics.port_cost",
+      "value": 19227892.20,
+      "unit": "USD/week",
+      "lineage": [
+        "hub_milp.py:335-338  port_flow_direct[p].append(var)  [same var appended once PER PORT]",
+        "hub_milp.py:343-351  handling + variable per TEU, plus fixed * freq",
+        "  -- transfer_flow vars NEVER added to port_flow_direct: a transshipped TEU",
+        "     pays ZERO handling at any port, including the hub",
+        "regional_agent.py:437  port_cost = sum(cluster port_cost)"
+      ],
+      "defect_ids": ["MA-04-04", "MA-04-05", "MA-06-06", "MA-06-12"],
+      "anomaly": {
+        "observation": "Asia 913,818 across 104 services (8,786/service) vs Europe 14,825,836 across 100 (148,258/service)",
+        "ratio": 16.9,
+        "note": "Identical code path. Symptom of the per-TEU-per-port basis error interacting with different port mixes."
+      }
+    },
+    {
+      "field": "summary_metrics.total_cost",
+      "value": 790613750.51,
+      "unit": "USD/week",
+      "lineage": [
+        "hub_milp.py:509  total_cost = operating + fuel_v + transship_cost_v + port_cost_v",
+        "regional_agent.py:438  total_cost = sum(cluster total_cost)",
+        "orchestrator_agent.py  summary_metrics.total_cost"
+      ],
+      "defect_ids": ["MA-04-07"],
+      "note": "OMITS the unserved-demand penalty (alpha*sum(u), an objective term) and OMITS the coverage bonus. The comment at orchestrator_agent.py:314-315 claiming the penalty is 'captured in the operating cost component' is factually false - operating_cost is sum(weekly_cost * freq) only.",
+      "identity_check": {
+        "expression": "100822500.00 + 22531440.01 + 19227892.20 + 648031918.31",
+        "computed_total": 790613750.52,
+        "reported": 790613750.51,
+        "holds": true,
+        "detail": "1 cent rounding"
+      }
+    },
+    {
+      "field": "summary_metrics.satisfied_demand",
+      "value": 273267.10,
+      "unit_declared": "TEU/week",
+      "lineage": [
+        "network_loader.py:106  weekly_teu = FFE * k  [field named TEU, contains FFE*k]",
+        "regional_agent.py:349-352  cluster_demands selected by 'origin OR destination in cluster'",
+        "  -- cross-cluster lanes appear in TWO independent MILPs",
+        "regional_agent.py:438  satisfied = sum(cluster satisfied)  [duplicated]",
+        "regional_agent.py:442  satisfied = min(satisfied, total_demand)  [CLAMPED]",
+        "orchestrator_agent.py:305  total_satisfied = min(total_satisfied, true_global)  [CLAMPED AGAIN]",
+        "orchestrator_agent.py  summary_metrics.satisfied_demand"
+      ],
+      "defect_ids": ["MA-02-05", "MA-06-14"],
+      "note": "unserved is clamped at NEITHER level. Two regions show exactly 100.0000% coverage - the signature of a saturated clamp."
+    },
+    {
+      "field": "summary_metrics.unserved_demand",
+      "value": 31754.10,
+      "unit": "TEU/week",
+      "lineage": [
+        "hub_milp.py:288-291  unserved[d] LP variable (>=0)",
+        "regional_agent.py:439  unserved = sum(cluster unserved)  [duplicated, NEVER clamped]",
+        "orchestrator_agent.py  summary_metrics.unserved_demand"
+      ],
+      "defect_ids": ["MA-02-05", "MA-06-14"],
+      "identity_check": {
+        "test": "satisfied + unserved == true_global_demand",
+        "computed": 305021.20,
+        "true_demand": 276446.80,
+        "phantom": 28574.40,
+        "pct_inflation": 10.34,
+        "holds": false
+      }
+    },
+    {
+      "field": "summary_metrics.coverage",
+      "value": 89.5895,
+      "unit": "percent",
+      "lineage": [
+        "orchestrator_agent.py:505  true_global_demand = 276446.80  [CORRECT denominator]",
+        "orchestrator_agent.py:305  total_satisfied = min(sum, true_global)  [clamped numerator]",
+        "orchestrator_agent.py:306-308  coverage = satisfied / true_global * 100",
+        "orchestrator_agent.py:311  assert 0 <= coverage <= 100  [ENFORCES the clamp artifact]"
+      ],
+      "defect_ids": ["MA-02-06", "MA-06-14", "MA-08-10"],
+      "recomputed_from_own_numerator": {
+        "value": 98.8498,
+        "delta_pp": -9.26,
+        "note": "The division is correct; the numerator is corrupted upstream. Reported coverage UNDERSTATES true coverage by 9.26 percentage points."
+      }
+    },
+    {
+      "field": "summary_metrics.total_services",
+      "value": 312,
+      "lineage": [
+        "regional_agent.py:602  services_selected per region (104 + 100 + 108)",
+        "orchestrator_agent.py:300  total_services = sum(regional)",
+        "orchestrator_agent.py  summary_metrics.total_services"
+      ],
+      "identity_check": {"computed": 312, "reported": 312, "holds": true},
+      "detail_discrepancy": {
+        "per_service_list_length": 309,
+        "reported": 312,
+        "delta": 3,
+        "note": "1.0% of reported services have no per-service detail. Europe 100 vs 98, Americas 108 vs 107."
+      },
+      "vessel_implication": {
+        "cycle_time_default": 14,
+        "vessels_per_service": 2,
+        "vessels_required": 624,
+        "vessels_available": 263,
+        "overcommit_ratio": 2.37,
+        "reported_in_artifact": false
+      }
+    },
+    {
+      "field": "summary_metrics.annual_profit",
+      "value": 17965787219.12,
+      "lineage": ["weekly_profit * 52"],
+      "identity_check": {"holds": true, "detail": "345,495,908.06 * 52 = 17,965,787,219.12"},
+      "note": "Arithmetically correct, but inherits every defect in weekly_profit. The figure is ~4x inflated and the 44.8B annualization with it."
+    }
+  ],
+  "absent_metrics": [
+    {"field": "vessels_required", "reason": "Never computed at reporting time"},
+    {"field": "vessels_available", "reason": "Fleet is loaded but total_vessels is never surfaced"},
+    {"field": "vessel_utilization", "reason": "backend/server.py initializes vesselsUtilized = None"},
+    {"field": "fleet_feasibility_flag", "reason": "Does not exist"},
+    {"field": "regional_results[*].revenue", "reason": "hub_milp.py return dict has no revenue key; verified 0.00 for all regions"},
+    {"field": "canal_transit_cost", "reason": "IsPanama/IsSuez flags and panamaFee/suezFee loaded, never read. 30.6% of distance-matrix pairs cross a canal."},
+    {"field": "charter_cost_from_tc_rate", "reason": "tc_rate_daily loaded, never read; weekly_cost is synthetic"},
+    {"field": "milp_solver_gap", "reason": "No ratioGap set on PULP_CBC_CMD; 'Optimal' status may be a truncated incumbent"},
+    {"field": "milp_failure_count", "reason": "Exceptions silently become zero-profit regions; no rollup"},
+    {"field": "num_direct_vars / num_transfer_vars", "reason": "Computed at hub_milp.py:641-642, discarded at the aggregation boundary"}
+  ]
+}

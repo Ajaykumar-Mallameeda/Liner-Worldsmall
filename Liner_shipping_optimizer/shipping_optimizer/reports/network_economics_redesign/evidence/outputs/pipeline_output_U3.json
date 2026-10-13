@@ -1,0 +1,5076 @@
+{
+  "orchestrator": "orchestrator",
+  "status": "complete",
+  "network_ledger": {
+    "verified": true,
+    "status": "feasible",
+    "iteration": 2,
+    "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+    "weekly_usd": {
+      "revenue": 34337892.85714286,
+      "vessel_cost": 10402000.0,
+      "fuel_cost": 12918152.644671505,
+      "port_call_fixed_cost": 157459.0,
+      "handling_cost": 4543621.0,
+      "transshipment_cost": 819519.0,
+      "port_variable_cost": 399232.0,
+      "total_operating_cost": 29239983.644671507,
+      "operating_profit": 5097909.212471351,
+      "profit_margin_on_revenue": 0.14846307645260476
+    },
+    "demand_teu_per_week": {
+      "total": 276446.80000000005,
+      "served": 27982.0,
+      "unserved": 248464.80000000005,
+      "coverage_pct": 10.122019860602473
+    },
+    "fleet_by_class": {
+      "Feeder_450": {
+        "used": 0,
+        "available": 24
+      },
+      "Feeder_800": {
+        "used": 2,
+        "available": 29
+      },
+      "Panamax_1200": {
+        "used": 0,
+        "available": 68
+      },
+      "Panamax_2400": {
+        "used": 5,
+        "available": 74
+      },
+      "Post_panamax": {
+        "used": 28,
+        "available": 58
+      },
+      "Super_panamax": {
+        "used": 7,
+        "available": 10
+      }
+    },
+    "services": {
+      "candidates_offered": 1097,
+      "candidates_modelled": 1097,
+      "candidates_rejected": 0,
+      "operated": 11
+    },
+    "reconciliation": {
+      "milp_profit_before_penalty": 5097909.212471351,
+      "ledger_operating_profit": 5097909.212471351,
+      "difference": 0.0,
+      "relative_difference": 0.0,
+      "reconciled": true,
+      "relaxation_upper_bound": 48617643.89981034,
+      "services_in_relaxation": 1096,
+      "services_in_integer_problem": 429,
+      "unserved_penalty_per_teu": 0.0,
+      "runtime_sec": 30.786
+    },
+    "optimality": {
+      "milp_status": "feasible",
+      "relaxation_upper_bound_usd_per_week": 48617643.89981034,
+      "gap_to_bound_usd_per_week": 43519734.687338986,
+      "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+    },
+    "path_model": {
+      "od_total": 1764,
+      "od_with_direct": 1189,
+      "od_transfer_only": 404,
+      "od_without_path": 171,
+      "od_without_path_time_limit": 171,
+      "od_without_path_no_connection": 0,
+      "od_skipped_missing_port_record": 0,
+      "paths_built": 12638,
+      "paths_dropped_by_cap": 55434,
+      "paths_dropped_by_time_limit": 819158,
+      "max_paths_per_od": 10
+    },
+    "violations": [],
+    "assumptions": {
+      "port_stay_hours": 24.0,
+      "transshipment_min_hours": 48.0,
+      "transfer_wait_days": 3.5,
+      "bunker_price_usd_per_t": 600.0,
+      "speed_factor": 1.0,
+      "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+      "sailing_speed": "class designSpeed (only speed with a source consumption)",
+      "max_transfers_per_od": 1,
+      "capacity_unit": {
+        "status": "provisional",
+        "internal_unit": "TEU",
+        "source_column": "Capacity FFE",
+        "capacity_feasibility_is_conditional": true
+      },
+      "transit_time_unit": "TransitTime column read as days (unverified unit)"
+    },
+    "runtime_sec": 30.79
+  },
+  "problem_analysis": "Size: Small\nComplexity Drivers:\n- 47 ports x 1764 lanes -> combinatorial explosion above 2209 route candidates.\n- Network density 163.2% across 47 ports increases routing difficulty.\n- Total demand 276,447 TEU requires capacity balancing across 0 services.\nDemand Concentration: low - top-5 share 5.6% implies mixed hub and direct strategy.\nDecomposition Rationale: ~15 ports per region enables scalable 3-agent optimization.",
+  "regional_results": [
+    {
+      "agent": "regional_asia",
+      "region": "Asia",
+      "status": "Feasible",
+      "services_generated": 812,
+      "services_filtered": 508,
+      "services_selected": 7,
+      "weekly_profit": 8275558.116883118,
+      "annual_profit": 430329022.0779221,
+      "operating_cost": 6972000.0,
+      "fuel_cost": 8901499.74025974,
+      "transship_cost": 624609.0,
+      "port_cost": 3547766.0,
+      "total_cost": 20045874.74025974,
+      "coverage_percent": 13.118369031071067,
+      "satisfied_demand": 19394.0,
+      "unserved_demand": 128444.5,
+      "total_demand": 147838.5,
+      "profit_margin_pct": 29.2,
+      "profit_per_service": 1182223.0,
+      "cost_per_service": 2863696.0,
+      "uncovered_teu": 128444.5,
+      "hub_ports": [
+        "CNSHA",
+        "MYTPP",
+        "CNYTN",
+        "HKHKG",
+        "CNTAO"
+      ],
+      "archetype_params": {
+        "archetype_mix": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05
+        },
+        "vessel_bias": "balanced",
+        "hub_focus": [],
+        "notes": ""
+      },
+      "regional_policy": {
+        "coverage_priority": 0.35,
+        "profit_priority": 0.65,
+        "min_service_margin": 0.08,
+        "vessel_bias": "large",
+        "hub_focus": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN"
+        ],
+        "corridor_focus": [
+          [
+            "CNYTN",
+            "USLAX"
+          ]
+        ],
+        "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+      },
+      "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density lanes like CNYTN (3,730 TEU/wk) while maintaining hub connectivity.\nReason 2: The network comprises 14 ports and 604 lanes, necessitating a hybrid model to balance the 7.2% top-3 share against the long-tail distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+      "explanation": "Verdict: Good\n  Profit margin 29.2% with coverage 13.1%.\n\nStrengths:\n- Weekly profit $8,275,558 (7 services) -> $1,182,223/service/week.\n- Satisfied 19,394 TEU/wk at 13.1% coverage.\n\nWeaknesses:\n- 86.9% unserved (128,444 TEU/wk).\n- Transshipment $624,609 + port $3,547,766/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+      "selected_services": [
+        {
+          "id": "asia_svc_710",
+          "ports": [
+            "EGPSD",
+            "KRPUS"
+          ],
+          "load": 5410.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1874072.7272727275,
+          "port_cost": 696839.6708234121,
+          "revenue": 5764112.77094098,
+          "cost": 4040912.3980961395,
+          "weekly_profit": 1723200.3728448404,
+          "margin_pct": 29.9,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 40
+        },
+        {
+          "id": "asia_svc_759",
+          "ports": [
+            "EGPSD",
+            "HKHKG"
+          ],
+          "load": 4234.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1225000.0,
+          "fuel_cost": 1611281.8181818181,
+          "port_cost": 829392.2712790864,
+          "revenue": 3861682.0140544493,
+          "cost": 3665674.0894609047,
+          "weekly_profit": 196007.92459354457,
+          "margin_pct": 5.08,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 35
+        },
+        {
+          "id": "asia_svc_768",
+          "ports": [
+            "CNYTN",
+            "EGPSD"
+          ],
+          "load": 4224.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1225000.0,
+          "fuel_cost": 1612527.272727273,
+          "port_cost": 722478.680871361,
+          "revenue": 4267414.05544153,
+          "cost": 3560005.953598634,
+          "weekly_profit": 707408.1018428965,
+          "margin_pct": 16.58,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 35
+        },
+        {
+          "id": "asia_svc_778",
+          "ports": [
+            "CNSHA",
+            "EGPSD"
+          ],
+          "load": 4850.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1800590.9090909094,
+          "port_cost": 752812.7107350652,
+          "revenue": 4538955.488469532,
+          "cost": 4023403.619825974,
+          "weekly_profit": 515551.86864355765,
+          "margin_pct": 11.36,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 39
+        },
+        {
+          "id": "asia_svc_784",
+          "ports": [
+            "EGPSD",
+            "JPYOK"
+          ],
+          "load": 5362.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1967232.7272727275,
+          "port_cost": 784939.7600608441,
+          "revenue": 4842075.529474642,
+          "cost": 4222172.487333572,
+          "weekly_profit": 619903.0421410706,
+          "margin_pct": 12.8,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 42
+        },
+        {
+          "id": "asia_svc_151",
+          "ports": [
+            "CNYTN",
+            "HKHKG"
+          ],
+          "load": 808.0,
+          "capacity": 800.0,
+          "vessel_class": "Feeder_800",
+          "vessel_cost": 56000.0,
+          "fuel_cost": 3423.2142857142853,
+          "port_cost": 115719.98197893382,
+          "revenue": 147653.90434247238,
+          "cost": 175143.1962646481,
+          "weekly_profit": -27489.291922175733,
+          "margin_pct": -18.62,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 3
+        },
+        {
+          "id": "asia_svc_199",
+          "ports": [
+            "CNYTN",
+            "TWKHH"
+          ],
+          "load": 530.0,
+          "capacity": 800.0,
+          "vessel_class": "Feeder_800",
+          "vessel_cost": 56000.0,
+          "fuel_cost": 32371.07142857143,
+          "port_cost": 46384.644503559975,
+          "revenue": 120782.30420154918,
+          "cost": 134755.7159321314,
+          "weekly_profit": -13973.411730582215,
+          "margin_pct": -11.57,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 5
+        }
+      ],
+      "elapsed_sec": 0.4,
+      "llm_actuation": {
+        "component": "regional_Asia",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.4081,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "ga_telemetry": {
+        "algorithm": "ServiceGA",
+        "actual_generations_executed": 11,
+        "max_generations": 120,
+        "stagnation_limit": 11,
+        "early_stop_reason": "stagnation",
+        "best_fitness": -8.508353902194115,
+        "runtime_seconds": 0.0148
+      },
+      "milp_telemetry": {
+        "transfer_pair_budget": 2104,
+        "time_limit_sec": 75,
+        "status": "Optimal"
+      }
+    },
+    {
+      "agent": "regional_europe",
+      "region": "Europe",
+      "status": "Feasible",
+      "services_generated": 623,
+      "services_filtered": 405,
+      "services_selected": 1,
+      "weekly_profit": -28408.375,
+      "annual_profit": -1477235.5,
+      "operating_cost": 735000.0,
+      "fuel_cost": 1062699.375,
+      "transship_cost": 0.0,
+      "port_cost": 317959.0,
+      "total_cost": 2115658.375,
+      "coverage_percent": 3.1292710530058936,
+      "satisfied_demand": 1518.0,
+      "unserved_demand": 46991.7,
+      "total_demand": 48509.7,
+      "profit_margin_pct": -1.4,
+      "profit_per_service": -28408.0,
+      "cost_per_service": 2115658.0,
+      "uncovered_teu": 46991.7,
+      "hub_ports": [
+        "USCHS",
+        "BRSSZ",
+        "USLAX",
+        "PAMIT",
+        "USEWR"
+      ],
+      "archetype_params": {
+        "archetype_mix": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05
+        },
+        "vessel_bias": "balanced",
+        "hub_focus": [],
+        "notes": ""
+      },
+      "regional_policy": {
+        "coverage_priority": 0.35,
+        "profit_priority": 0.65,
+        "min_service_margin": 0.03,
+        "vessel_bias": "large",
+        "hub_focus": [
+          "USCHS",
+          "BRSSZ",
+          "USLAX"
+        ],
+        "corridor_focus": [
+          [
+            "BRSSZ",
+            "DEBRV"
+          ]
+        ],
+        "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+      },
+      "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like BRSSZ -> DEBRV (1,762 TEU/wk)\nReason 2: 12 ports and 391 lanes create a dense network where hybrid routing optimizes the 48,510 TEU/wk total demand\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+      "explanation": "Verdict: Poor\n  Profit margin -1.4% with coverage 3.1%.\n\nStrengths:\n- Weekly profit $-28,408 (1 services) -> $-28,408/service/week.\n- Satisfied 1,518 TEU/wk at 3.1% coverage.\n\nWeaknesses:\n- 96.9% unserved (46,992 TEU/wk).\n- Transshipment $0 + port $317,959/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+      "selected_services": [
+        {
+          "id": "europe_svc_001",
+          "ports": [
+            "DEBRV",
+            "ECGYE"
+          ],
+          "load": 1556.0,
+          "capacity": 2400.0,
+          "vessel_class": "Panamax_2400",
+          "vessel_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "port_cost": 325559.0,
+          "revenue": 2128860.0,
+          "cost": 2123258.375,
+          "weekly_profit": 5601.625,
+          "margin_pct": 0.26,
+          "region": "Europe",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 33
+        }
+      ],
+      "elapsed_sec": 0.4,
+      "llm_actuation": {
+        "component": "regional_Europe",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.3622,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "ga_telemetry": {
+        "algorithm": "ServiceGA",
+        "actual_generations_executed": 19,
+        "max_generations": 120,
+        "stagnation_limit": 11,
+        "early_stop_reason": "stagnation",
+        "best_fitness": 0.051297708654889244,
+        "runtime_seconds": 0.0418
+      },
+      "milp_telemetry": {
+        "transfer_pair_budget": 1891,
+        "time_limit_sec": 67,
+        "status": "Optimal"
+      }
+    },
+    {
+      "agent": "regional_americas",
+      "region": "Americas",
+      "status": "Feasible",
+      "services_generated": 803,
+      "services_filtered": 499,
+      "services_selected": 3,
+      "weekly_profit": -3149240.529411765,
+      "annual_profit": -163760507.52941176,
+      "operating_cost": 2695000.0,
+      "fuel_cost": 2953953.529411765,
+      "transship_cost": 194910.0,
+      "port_cost": 1234587.0,
+      "total_cost": 7078450.529411765,
+      "coverage_percent": 8.826621189384083,
+      "satisfied_demand": 7070.0,
+      "unserved_demand": 73028.6,
+      "total_demand": 80098.6,
+      "profit_margin_pct": -80.1,
+      "profit_per_service": -1049747.0,
+      "cost_per_service": 2359484.0,
+      "uncovered_teu": 73028.6,
+      "hub_ports": [
+        "DEBRV",
+        "NLRTM",
+        "AEJEA",
+        "ITGIT",
+        "ZADUR"
+      ],
+      "archetype_params": {
+        "archetype_mix": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05
+        },
+        "vessel_bias": "balanced",
+        "hub_focus": [],
+        "notes": ""
+      },
+      "regional_policy": {
+        "coverage_priority": 0.35,
+        "profit_priority": 0.65,
+        "min_service_margin": 0.08,
+        "vessel_bias": "large",
+        "hub_focus": [
+          "DEBRV",
+          "NLRTM",
+          "AEJEA"
+        ],
+        "corridor_focus": [
+          [
+            "NLRTM",
+            "HKHKG"
+          ]
+        ],
+        "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+      },
+      "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% of the 80,099 TEU/wk regional demand.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+      "explanation": "Verdict: Poor\n  Profit margin -80.1% with coverage 8.8%.\n\nStrengths:\n- Weekly profit $-3,149,241 (3 services) -> $-1,049,747/service/week.\n- Satisfied 7,070 TEU/wk at 8.8% coverage.\n\nWeaknesses:\n- 91.2% unserved (73,029 TEU/wk).\n- Transshipment $194,910 + port $1,234,587/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+      "selected_services": [
+        {
+          "id": "americas_svc_598",
+          "ports": [
+            "DEBRV",
+            "EGPSD"
+          ],
+          "load": 10694.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1329893.8235294118,
+          "port_cost": 836383.5997107914,
+          "revenue": 4524832.679967358,
+          "cost": 3321277.4232402034,
+          "weekly_profit": 1203555.2567271544,
+          "margin_pct": 26.6,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 20
+        },
+        {
+          "id": "americas_svc_606",
+          "ports": [
+            "EGPSD",
+            "NLRTM"
+          ],
+          "load": 8930.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1254127.0588235294,
+          "port_cost": 658837.7596511174,
+          "revenue": 3572170.599297237,
+          "cost": 3067964.818474647,
+          "weekly_profit": 504205.78082259,
+          "margin_pct": 14.11,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 19
+        },
+        {
+          "id": "americas_svc_619",
+          "ports": [
+            "EGPSD",
+            "ITGIT"
+          ],
+          "load": 3730.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 385000.0,
+          "fuel_cost": 369932.64705882355,
+          "port_cost": 150482.92038582888,
+          "revenue": 569353.5109531067,
+          "cost": 905415.5674446526,
+          "weekly_profit": -336062.05649154587,
+          "margin_pct": -59.03,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 7
+        }
+      ],
+      "elapsed_sec": 0.3,
+      "llm_actuation": {
+        "component": "regional_Americas",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.2817,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "ga_telemetry": {
+        "algorithm": "ServiceGA",
+        "actual_generations_executed": 11,
+        "max_generations": 120,
+        "stagnation_limit": 11,
+        "early_stop_reason": "stagnation",
+        "best_fitness": -1000000000000.0,
+        "runtime_seconds": 0.0056
+      },
+      "milp_telemetry": {
+        "transfer_pair_budget": 2269,
+        "time_limit_sec": 64,
+        "status": "Optimal"
+      }
+    }
+  ],
+  "decision_output": {
+    "agent": "coordinator",
+    "iteration": 2,
+    "status": "evaluated",
+    "global_metrics": {
+      "total_services": 11,
+      "total_profit": 5097909.212471353,
+      "annual_profit": 265091279.04851034,
+      "average_regional_coverage": 8.3581,
+      "global_demand_weighted_coverage": 10.122,
+      "average_coverage": 8.3581,
+      "min_coverage": 3.1292710530058936,
+      "max_coverage": 13.118369031071067,
+      "coverage_variance": 9.989097978065173,
+      "total_cost": 10402000.0,
+      "total_satisfied_demand": 27982.0,
+      "total_unserved_demand": 248464.80000000002,
+      "profit_margin_pct": 32.9
+    },
+    "evaluation": {
+      "score": 3,
+      "max": 5,
+      "status": "good",
+      "reasons": [
+        "regional avg coverage 8.4% < target 70.0%",
+        "cost exceeds profit"
+      ]
+    },
+    "conflicts": [],
+    "resolution_log": [],
+    "decisions": {
+      "actions": [
+        {
+          "region": "Asia",
+          "action": "increase coverage_weight in GA",
+          "expected_gain": "+56.9% coverage"
+        },
+        {
+          "region": "Europe",
+          "action": "increase coverage_weight in GA",
+          "expected_gain": "+66.9% coverage"
+        },
+        {
+          "region": "Americas",
+          "action": "increase coverage_weight in GA",
+          "expected_gain": "+61.2% coverage"
+        }
+      ],
+      "priorities": [
+        "Raise regional avg coverage from 8.4% to 70.0%",
+        "Eliminate 0 conflict(s)"
+      ],
+      "weight_adjustments": {
+        "profit_weight": 0.3,
+        "coverage_weight": 0.6,
+        "cost_weight": 0.1
+      },
+      "notes": "Rule-based fallback: regional coverage 8.4%, profit $5,097,909/week, 0 conflicts."
+    },
+    "feedback": {
+      "needs_rerun": false,
+      "rerun_reason": "coverage 8.4% is 61.6pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+      "coverage_gap": 61.64,
+      "profit_gap": 0.0,
+      "conflict_severity": 0,
+      "weight_adjustments": {
+        "profit_weight": 0.25,
+        "coverage_weight": 0.65,
+        "cost_weight": 0.1
+      },
+      "convergence_score": 0.706,
+      "iteration": 2,
+      "at_iteration_cap": true,
+      "average_regional_coverage": 8.3581,
+      "global_demand_weighted_coverage": 10.122,
+      "conflict_count": 0,
+      "low_coverage": true,
+      "low_profit": false
+    },
+    "llm_runtime_metrics": {
+      "llm_calls": 3,
+      "llm_success": 0,
+      "json_parse_success": 0,
+      "validator_executed": 0,
+      "fallback_count": 3
+    },
+    "llm_actuation": {
+      "component": "coordinator_iter_2",
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "role": "coordinator",
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "fallback_uses": 1,
+      "cache_hits": 0,
+      "error_429": 1,
+      "error_timeout": 0,
+      "error_connection": 0,
+      "error_auth": 0,
+      "error_invalid_model": 0,
+      "error_invalid_json": 0,
+      "error_unknown": 0,
+      "latency_sec": 0.0,
+      "total_latency_sec": 0.0007,
+      "decision_source": "rule-based",
+      "decision_consumed": true,
+      "ai_generated": false,
+      "notes": ""
+    }
+  },
+  "executive_summary": "Verdict: Poor\n  Profit margin 14.8% with 10.1% demand coverage.\n\nStrengths:\n- Weekly profit $5,097,909 across 11 services ($463,446/service/week).\n- Cost breakdown: operating $10,402,000, transship $819,519, port $5,100,312/week.\n\nWeaknesses:\n- 89.9% demand (248,465 TEU/week) unserved.\n- Cost per service $2,658,180/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 3.1% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week).",
+  "summary_metrics": {
+    "weekly_profit": 5097909.212471353,
+    "annual_profit": 265091279.04851034,
+    "revenue": 34337892.85714286,
+    "operating_cost": 10402000.0,
+    "transship_cost": 819519.0,
+    "port_cost": 5100312.0,
+    "fuel_cost": 12918152.644671505,
+    "total_cost": 29239983.644671507,
+    "cost": 29239983.644671507,
+    "total_services": 11,
+    "satisfied_demand": 27982.0,
+    "unserved_demand": 248464.80000000002,
+    "coverage": 10.122,
+    "total_runtime": 143.6
+  },
+  "iteration_audit": [
+    {
+      "iteration": 0,
+      "weights_used": {
+        "profit_weight": 0.6,
+        "coverage_weight": 0.25,
+        "cost_weight": 0.15
+      },
+      "profit": 2423115.7332887696,
+      "coverage": 4.291715307444966,
+      "global_coverage": 5.1308,
+      "convergence_score": 0.687,
+      "coverage_gap": 65.71,
+      "conflict_severity": 0,
+      "needs_rerun": true,
+      "rerun_reason": "coverage 4.3% is 65.7pp below 70.0% target",
+      "resolution_log": [],
+      "selected_as_final": false
+    },
+    {
+      "iteration": 1,
+      "weights_used": {
+        "profit_weight": 0.5709,
+        "coverage_weight": 0.3231,
+        "cost_weight": 0.106
+      },
+      "profit": 3124834.8304367196,
+      "coverage": 7.9114708660198945,
+      "global_coverage": 9.3761,
+      "convergence_score": 0.704,
+      "coverage_gap": 62.09,
+      "conflict_severity": 0,
+      "needs_rerun": true,
+      "rerun_reason": "coverage 7.9% is 62.1pp below 70.0% target",
+      "resolution_log": [],
+      "selected_as_final": false
+    },
+    {
+      "iteration": 2,
+      "weights_used": {
+        "profit_weight": 0.5682,
+        "coverage_weight": 0.3258,
+        "cost_weight": 0.106
+      },
+      "profit": 5097909.212471353,
+      "coverage": 8.35808709115368,
+      "global_coverage": 10.122,
+      "convergence_score": 0.706,
+      "coverage_gap": 61.64,
+      "conflict_severity": 0,
+      "needs_rerun": false,
+      "rerun_reason": "coverage 8.4% is 61.6pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+      "resolution_log": [],
+      "selected_as_final": true
+    }
+  ],
+  "iterations_run": 3,
+  "selected_services": [
+    {
+      "id": "asia_svc_710",
+      "ports": [
+        "EGPSD",
+        "KRPUS"
+      ],
+      "load": 5410.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1470000.0,
+      "fuel_cost": 1874072.7272727275,
+      "port_cost": 696839.6708234121,
+      "revenue": 5764112.77094098,
+      "cost": 4040912.3980961395,
+      "weekly_profit": 1723200.3728448404,
+      "margin_pct": 29.9,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 6,
+      "cycle_time_days": 40
+    },
+    {
+      "id": "asia_svc_759",
+      "ports": [
+        "EGPSD",
+        "HKHKG"
+      ],
+      "load": 4234.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1225000.0,
+      "fuel_cost": 1611281.8181818181,
+      "port_cost": 829392.2712790864,
+      "revenue": 3861682.0140544493,
+      "cost": 3665674.0894609047,
+      "weekly_profit": 196007.92459354457,
+      "margin_pct": 5.08,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 5,
+      "cycle_time_days": 35
+    },
+    {
+      "id": "asia_svc_768",
+      "ports": [
+        "CNYTN",
+        "EGPSD"
+      ],
+      "load": 4224.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1225000.0,
+      "fuel_cost": 1612527.272727273,
+      "port_cost": 722478.680871361,
+      "revenue": 4267414.05544153,
+      "cost": 3560005.953598634,
+      "weekly_profit": 707408.1018428965,
+      "margin_pct": 16.58,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 5,
+      "cycle_time_days": 35
+    },
+    {
+      "id": "asia_svc_778",
+      "ports": [
+        "CNSHA",
+        "EGPSD"
+      ],
+      "load": 4850.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1470000.0,
+      "fuel_cost": 1800590.9090909094,
+      "port_cost": 752812.7107350652,
+      "revenue": 4538955.488469532,
+      "cost": 4023403.619825974,
+      "weekly_profit": 515551.86864355765,
+      "margin_pct": 11.36,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 6,
+      "cycle_time_days": 39
+    },
+    {
+      "id": "asia_svc_784",
+      "ports": [
+        "EGPSD",
+        "JPYOK"
+      ],
+      "load": 5362.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1470000.0,
+      "fuel_cost": 1967232.7272727275,
+      "port_cost": 784939.7600608441,
+      "revenue": 4842075.529474642,
+      "cost": 4222172.487333572,
+      "weekly_profit": 619903.0421410706,
+      "margin_pct": 12.8,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 6,
+      "cycle_time_days": 42
+    },
+    {
+      "id": "asia_svc_151",
+      "ports": [
+        "CNYTN",
+        "HKHKG"
+      ],
+      "load": 808.0,
+      "capacity": 800.0,
+      "vessel_class": "Feeder_800",
+      "vessel_cost": 56000.0,
+      "fuel_cost": 3423.2142857142853,
+      "port_cost": 115719.98197893382,
+      "revenue": 147653.90434247238,
+      "cost": 175143.1962646481,
+      "weekly_profit": -27489.291922175733,
+      "margin_pct": -18.62,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 1,
+      "cycle_time_days": 3
+    },
+    {
+      "id": "asia_svc_199",
+      "ports": [
+        "CNYTN",
+        "TWKHH"
+      ],
+      "load": 530.0,
+      "capacity": 800.0,
+      "vessel_class": "Feeder_800",
+      "vessel_cost": 56000.0,
+      "fuel_cost": 32371.07142857143,
+      "port_cost": 46384.644503559975,
+      "revenue": 120782.30420154918,
+      "cost": 134755.7159321314,
+      "weekly_profit": -13973.411730582215,
+      "margin_pct": -11.57,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 1,
+      "cycle_time_days": 5
+    },
+    {
+      "id": "europe_svc_001",
+      "ports": [
+        "DEBRV",
+        "ECGYE"
+      ],
+      "load": 1556.0,
+      "capacity": 2400.0,
+      "vessel_class": "Panamax_2400",
+      "vessel_cost": 735000.0,
+      "fuel_cost": 1062699.375,
+      "port_cost": 325559.0,
+      "revenue": 2128860.0,
+      "cost": 2123258.375,
+      "weekly_profit": 5601.625,
+      "margin_pct": 0.26,
+      "region": "Europe",
+      "frequency_per_week": 1,
+      "vessels": 5,
+      "cycle_time_days": 33
+    },
+    {
+      "id": "americas_svc_598",
+      "ports": [
+        "DEBRV",
+        "EGPSD"
+      ],
+      "load": 10694.0,
+      "capacity": 7500.0,
+      "vessel_class": "Super_panamax",
+      "vessel_cost": 1155000.0,
+      "fuel_cost": 1329893.8235294118,
+      "port_cost": 836383.5997107914,
+      "revenue": 4524832.679967358,
+      "cost": 3321277.4232402034,
+      "weekly_profit": 1203555.2567271544,
+      "margin_pct": 26.6,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 3,
+      "cycle_time_days": 20
+    },
+    {
+      "id": "americas_svc_606",
+      "ports": [
+        "EGPSD",
+        "NLRTM"
+      ],
+      "load": 8930.0,
+      "capacity": 7500.0,
+      "vessel_class": "Super_panamax",
+      "vessel_cost": 1155000.0,
+      "fuel_cost": 1254127.0588235294,
+      "port_cost": 658837.7596511174,
+      "revenue": 3572170.599297237,
+      "cost": 3067964.818474647,
+      "weekly_profit": 504205.78082259,
+      "margin_pct": 14.11,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 3,
+      "cycle_time_days": 19
+    },
+    {
+      "id": "americas_svc_619",
+      "ports": [
+        "EGPSD",
+        "ITGIT"
+      ],
+      "load": 3730.0,
+      "capacity": 7500.0,
+      "vessel_class": "Super_panamax",
+      "vessel_cost": 385000.0,
+      "fuel_cost": 369932.64705882355,
+      "port_cost": 150482.92038582888,
+      "revenue": 569353.5109531067,
+      "cost": 905415.5674446526,
+      "weekly_profit": -336062.05649154587,
+      "margin_pct": -59.03,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 1,
+      "cycle_time_days": 7
+    }
+  ],
+  "all_selected_services": [
+    {
+      "id": "asia_svc_710",
+      "ports": [
+        "EGPSD",
+        "KRPUS"
+      ],
+      "load": 5410.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1470000.0,
+      "fuel_cost": 1874072.7272727275,
+      "port_cost": 696839.6708234121,
+      "revenue": 5764112.77094098,
+      "cost": 4040912.3980961395,
+      "weekly_profit": 1723200.3728448404,
+      "margin_pct": 29.9,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 6,
+      "cycle_time_days": 40
+    },
+    {
+      "id": "asia_svc_759",
+      "ports": [
+        "EGPSD",
+        "HKHKG"
+      ],
+      "load": 4234.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1225000.0,
+      "fuel_cost": 1611281.8181818181,
+      "port_cost": 829392.2712790864,
+      "revenue": 3861682.0140544493,
+      "cost": 3665674.0894609047,
+      "weekly_profit": 196007.92459354457,
+      "margin_pct": 5.08,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 5,
+      "cycle_time_days": 35
+    },
+    {
+      "id": "asia_svc_768",
+      "ports": [
+        "CNYTN",
+        "EGPSD"
+      ],
+      "load": 4224.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1225000.0,
+      "fuel_cost": 1612527.272727273,
+      "port_cost": 722478.680871361,
+      "revenue": 4267414.05544153,
+      "cost": 3560005.953598634,
+      "weekly_profit": 707408.1018428965,
+      "margin_pct": 16.58,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 5,
+      "cycle_time_days": 35
+    },
+    {
+      "id": "asia_svc_778",
+      "ports": [
+        "CNSHA",
+        "EGPSD"
+      ],
+      "load": 4850.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1470000.0,
+      "fuel_cost": 1800590.9090909094,
+      "port_cost": 752812.7107350652,
+      "revenue": 4538955.488469532,
+      "cost": 4023403.619825974,
+      "weekly_profit": 515551.86864355765,
+      "margin_pct": 11.36,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 6,
+      "cycle_time_days": 39
+    },
+    {
+      "id": "asia_svc_784",
+      "ports": [
+        "EGPSD",
+        "JPYOK"
+      ],
+      "load": 5362.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1470000.0,
+      "fuel_cost": 1967232.7272727275,
+      "port_cost": 784939.7600608441,
+      "revenue": 4842075.529474642,
+      "cost": 4222172.487333572,
+      "weekly_profit": 619903.0421410706,
+      "margin_pct": 12.8,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 6,
+      "cycle_time_days": 42
+    },
+    {
+      "id": "asia_svc_151",
+      "ports": [
+        "CNYTN",
+        "HKHKG"
+      ],
+      "load": 808.0,
+      "capacity": 800.0,
+      "vessel_class": "Feeder_800",
+      "vessel_cost": 56000.0,
+      "fuel_cost": 3423.2142857142853,
+      "port_cost": 115719.98197893382,
+      "revenue": 147653.90434247238,
+      "cost": 175143.1962646481,
+      "weekly_profit": -27489.291922175733,
+      "margin_pct": -18.62,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 1,
+      "cycle_time_days": 3
+    },
+    {
+      "id": "asia_svc_199",
+      "ports": [
+        "CNYTN",
+        "TWKHH"
+      ],
+      "load": 530.0,
+      "capacity": 800.0,
+      "vessel_class": "Feeder_800",
+      "vessel_cost": 56000.0,
+      "fuel_cost": 32371.07142857143,
+      "port_cost": 46384.644503559975,
+      "revenue": 120782.30420154918,
+      "cost": 134755.7159321314,
+      "weekly_profit": -13973.411730582215,
+      "margin_pct": -11.57,
+      "region": "Asia",
+      "frequency_per_week": 1,
+      "vessels": 1,
+      "cycle_time_days": 5
+    },
+    {
+      "id": "europe_svc_001",
+      "ports": [
+        "DEBRV",
+        "ECGYE"
+      ],
+      "load": 1556.0,
+      "capacity": 2400.0,
+      "vessel_class": "Panamax_2400",
+      "vessel_cost": 735000.0,
+      "fuel_cost": 1062699.375,
+      "port_cost": 325559.0,
+      "revenue": 2128860.0,
+      "cost": 2123258.375,
+      "weekly_profit": 5601.625,
+      "margin_pct": 0.26,
+      "region": "Europe",
+      "frequency_per_week": 1,
+      "vessels": 5,
+      "cycle_time_days": 33
+    },
+    {
+      "id": "americas_svc_598",
+      "ports": [
+        "DEBRV",
+        "EGPSD"
+      ],
+      "load": 10694.0,
+      "capacity": 7500.0,
+      "vessel_class": "Super_panamax",
+      "vessel_cost": 1155000.0,
+      "fuel_cost": 1329893.8235294118,
+      "port_cost": 836383.5997107914,
+      "revenue": 4524832.679967358,
+      "cost": 3321277.4232402034,
+      "weekly_profit": 1203555.2567271544,
+      "margin_pct": 26.6,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 3,
+      "cycle_time_days": 20
+    },
+    {
+      "id": "americas_svc_606",
+      "ports": [
+        "EGPSD",
+        "NLRTM"
+      ],
+      "load": 8930.0,
+      "capacity": 7500.0,
+      "vessel_class": "Super_panamax",
+      "vessel_cost": 1155000.0,
+      "fuel_cost": 1254127.0588235294,
+      "port_cost": 658837.7596511174,
+      "revenue": 3572170.599297237,
+      "cost": 3067964.818474647,
+      "weekly_profit": 504205.78082259,
+      "margin_pct": 14.11,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 3,
+      "cycle_time_days": 19
+    },
+    {
+      "id": "americas_svc_619",
+      "ports": [
+        "EGPSD",
+        "ITGIT"
+      ],
+      "load": 3730.0,
+      "capacity": 7500.0,
+      "vessel_class": "Super_panamax",
+      "vessel_cost": 385000.0,
+      "fuel_cost": 369932.64705882355,
+      "port_cost": 150482.92038582888,
+      "revenue": 569353.5109531067,
+      "cost": 905415.5674446526,
+      "weekly_profit": -336062.05649154587,
+      "margin_pct": -59.03,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 1,
+      "cycle_time_days": 7
+    }
+  ],
+  "iteration_results": [
+    {
+      "iteration": 0,
+      "status": "completed",
+      "metrics": {
+        "total_services": 6,
+        "total_profit": 2423115.7332887696,
+        "annual_profit": 126002018.13101602,
+        "average_regional_coverage": 4.2917,
+        "global_demand_weighted_coverage": 5.1308,
+        "average_coverage": 4.2917,
+        "min_coverage": 2.5718302192547684,
+        "max_coverage": 7.1740446500742365,
+        "coverage_variance": 4.602214430819468,
+        "total_cost": 17130964.26671123,
+        "total_satisfied_demand": 14184.0,
+        "total_unserved_demand": 262262.80000000005,
+        "profit_margin_pct": 27.94,
+        "weekly_profit": 2423115.7332887696,
+        "operating_cost": 6251000.0,
+        "satisfied_demand": 14184.0,
+        "unserved_demand": 262262.80000000005,
+        "services_deployed": 6,
+        "negative_profit_regions": 2,
+        "convergence_score": 0.687,
+        "conflict_count": 0,
+        "constraint_violations": 0
+      },
+      "regional_results": [
+        {
+          "agent": "regional_asia",
+          "region": "Asia",
+          "status": "Feasible",
+          "services_generated": 812,
+          "services_filtered": 508,
+          "services_selected": 3,
+          "weekly_profit": 4958711.113636363,
+          "annual_profit": 257852977.90909088,
+          "operating_cost": 4116000.0,
+          "fuel_cost": 5432799.886363637,
+          "transship_cost": 267180.0,
+          "port_cost": 1851339.0,
+          "total_cost": 11667318.886363637,
+          "coverage_percent": 7.1740446500742365,
+          "satisfied_demand": 10606.0,
+          "unserved_demand": 137232.5,
+          "total_demand": 147838.5,
+          "profit_margin_pct": 29.8,
+          "profit_per_service": 1652904.0,
+          "cost_per_service": 3889106.0,
+          "uncovered_teu": 137232.5,
+          "hub_ports": [
+            "CNSHA",
+            "MYTPP",
+            "CNYTN",
+            "HKHKG",
+            "CNTAO"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "corridor_focus": [
+              [
+                "CNYTN",
+                "USLAX"
+              ]
+            ],
+            "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density lanes like CNYTN (3,730 TEU/wk) while maintaining hub connectivity.\nReason 2: The network comprises 14 ports and 604 lanes, necessitating a hybrid model to balance the 7.2% top-3 share against the long-tail distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+          "explanation": "Verdict: Good\n  Profit margin 29.8% with coverage 7.2%.\n\nStrengths:\n- Weekly profit $4,958,711 (3 services) -> $1,652,904/service/week.\n- Satisfied 10,606 TEU/wk at 7.2% coverage.\n\nWeaknesses:\n- 92.8% unserved (137,232 TEU/wk).\n- Transshipment $267,180 + port $1,851,339/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "asia_svc_710",
+              "ports": [
+                "EGPSD",
+                "KRPUS"
+              ],
+              "load": 4556.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1874072.7272727275,
+              "port_cost": 579450.1542905386,
+              "revenue": 5409623.0413146345,
+              "cost": 3923522.8815632663,
+              "weekly_profit": 1486100.1597513682,
+              "margin_pct": 27.47,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 40
+            },
+            {
+              "id": "asia_svc_778",
+              "ports": [
+                "CNSHA",
+                "EGPSD"
+              ],
+              "load": 4514.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1800590.9090909094,
+              "port_cost": 688864.6743121427,
+              "revenue": 4446634.8765526125,
+              "cost": 3959455.583403052,
+              "weekly_profit": 487179.2931495607,
+              "margin_pct": 10.96,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 39
+            },
+            {
+              "id": "asia_svc_003",
+              "ports": [
+                "CNYTN",
+                "NLRTM"
+              ],
+              "load": 2520.0,
+              "capacity": 2400.0,
+              "vessel_class": "Panamax_2400",
+              "vessel_cost": 1176000.0,
+              "fuel_cost": 1758136.25,
+              "port_cost": 520327.0,
+              "revenue": 3460800.0,
+              "cost": 3454463.25,
+              "weekly_profit": 6336.75,
+              "margin_pct": 0.18,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 8,
+              "cycle_time_days": 53
+            }
+          ],
+          "elapsed_sec": 84.0,
+          "llm_actuation": {
+            "component": "regional_Asia",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 84.0029,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -4.570594534538632,
+            "runtime_seconds": 0.0125
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2104,
+            "time_limit_sec": 75,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_europe",
+          "region": "Europe",
+          "status": "Feasible",
+          "services_generated": 623,
+          "services_filtered": 405,
+          "services_selected": 1,
+          "weekly_profit": -28408.375,
+          "annual_profit": -1477235.5,
+          "operating_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "transship_cost": 0.0,
+          "port_cost": 317959.0,
+          "total_cost": 2115658.375,
+          "coverage_percent": 3.1292710530058936,
+          "satisfied_demand": 1518.0,
+          "unserved_demand": 46991.7,
+          "total_demand": 48509.7,
+          "profit_margin_pct": -1.4,
+          "profit_per_service": -28408.0,
+          "cost_per_service": 2115658.0,
+          "uncovered_teu": 46991.7,
+          "hub_ports": [
+            "USCHS",
+            "BRSSZ",
+            "USLAX",
+            "PAMIT",
+            "USEWR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.03,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "corridor_focus": [
+              [
+                "BRSSZ",
+                "DEBRV"
+              ]
+            ],
+            "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like BRSSZ -> DEBRV (1,762 TEU/wk)\nReason 2: 12 ports and 391 lanes create a dense network where hybrid routing optimizes the 48,510 TEU/wk total demand\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+          "explanation": "Verdict: Poor\n  Profit margin -1.4% with coverage 3.1%.\n\nStrengths:\n- Weekly profit $-28,408 (1 services) -> $-28,408/service/week.\n- Satisfied 1,518 TEU/wk at 3.1% coverage.\n\nWeaknesses:\n- 96.9% unserved (46,992 TEU/wk).\n- Transshipment $0 + port $317,959/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "europe_svc_001",
+              "ports": [
+                "DEBRV",
+                "ECGYE"
+              ],
+              "load": 1556.0,
+              "capacity": 2400.0,
+              "vessel_class": "Panamax_2400",
+              "vessel_cost": 735000.0,
+              "fuel_cost": 1062699.375,
+              "port_cost": 325559.0,
+              "revenue": 2128860.0,
+              "cost": 2123258.375,
+              "weekly_profit": 5601.625,
+              "margin_pct": 0.26,
+              "region": "Europe",
+              "frequency_per_week": 1,
+              "vessels": 5,
+              "cycle_time_days": 33
+            }
+          ],
+          "elapsed_sec": 1.7,
+          "llm_actuation": {
+            "component": "regional_Europe",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.6993,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 22,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": 0.051297708654889244,
+            "runtime_seconds": 0.0241
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 1891,
+            "time_limit_sec": 67,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_americas",
+          "region": "Americas",
+          "status": "Feasible",
+          "services_generated": 803,
+          "services_filtered": 499,
+          "services_selected": 2,
+          "weekly_profit": -2507187.0053475937,
+          "annual_profit": -130373724.27807488,
+          "operating_cost": 1400000.0,
+          "fuel_cost": 1577652.0053475937,
+          "transship_cost": 29638.0,
+          "port_cost": 340697.0,
+          "total_cost": 3347987.0053475937,
+          "coverage_percent": 2.5718302192547684,
+          "satisfied_demand": 2060.0,
+          "unserved_demand": 78038.6,
+          "total_demand": 80098.6,
+          "profit_margin_pct": -298.2,
+          "profit_per_service": -1253594.0,
+          "cost_per_service": 1673994.0,
+          "uncovered_teu": 78038.6,
+          "hub_ports": [
+            "DEBRV",
+            "NLRTM",
+            "AEJEA",
+            "ITGIT",
+            "ZADUR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "corridor_focus": [
+              [
+                "NLRTM",
+                "HKHKG"
+              ]
+            ],
+            "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% of the 80,099 TEU/wk regional demand.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+          "explanation": "Verdict: Poor\n  Profit margin -298.2% with coverage 2.6%.\n\nStrengths:\n- Weekly profit $-2,507,187 (2 services) -> $-1,253,594/service/week.\n- Satisfied 2,060 TEU/wk at 2.6% coverage.\n\nWeaknesses:\n- 97.4% unserved (78,039 TEU/wk).\n- Transshipment $29,638 + port $340,697/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "americas_svc_598",
+              "ports": [
+                "DEBRV",
+                "EGPSD"
+              ],
+              "load": 8482.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 1155000.0,
+              "fuel_cost": 1329893.8235294118,
+              "port_cost": 632584.9082269626,
+              "revenue": 3974551.833523779,
+              "cost": 3117478.7317563747,
+              "weekly_profit": 857073.1017674045,
+              "margin_pct": 21.56,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 3,
+              "cycle_time_days": 20
+            },
+            {
+              "id": "americas_svc_753",
+              "ports": [
+                "EGPSD",
+                "ITGIT"
+              ],
+              "load": 688.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 245000.0,
+              "fuel_cost": 247758.18181818182,
+              "port_cost": 60027.26317035634,
+              "revenue": 133610.24860897358,
+              "cost": 552785.4449885382,
+              "weekly_profit": -419175.1963795646,
+              "margin_pct": -313.73,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 1,
+              "cycle_time_days": 7
+            }
+          ],
+          "elapsed_sec": 1.9,
+          "llm_actuation": {
+            "component": "regional_Americas",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.9488,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0107
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2269,
+            "time_limit_sec": 64,
+            "status": "Optimal"
+          }
+        }
+      ],
+      "weights_used": {
+        "profit_weight": 0.6,
+        "coverage_weight": 0.25,
+        "cost_weight": 0.15
+      },
+      "consensus_result": {
+        "final_weight_adjustments": {
+          "profit_weight": 0.5709,
+          "coverage_weight": 0.3231,
+          "cost_weight": 0.106
+        },
+        "final_archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.5117,
+            "hub_loop_ratio": 0.1668,
+            "feeder_ratio": 0.2515,
+            "trunk_ratio": 0.07
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [
+            "CNSHA"
+          ],
+          "notes": "reconciled vote distribution: balanced=0.60; small=0.40"
+        },
+        "confidence_score": 1.0,
+        "conflicts_resolved": [],
+        "conflicts_remaining": [],
+        "notes": "confidence=1.0000; conflicts_detected=0; conflicts_remaining=0; all_conflicts_resolved"
+      },
+      "feedback": {
+        "needs_rerun": true,
+        "rerun_reason": "coverage 4.3% is 65.7pp below 70.0% target",
+        "coverage_gap": 65.71,
+        "profit_gap": 0.0,
+        "conflict_severity": 0,
+        "weight_adjustments": {
+          "profit_weight": 0.25,
+          "coverage_weight": 0.65,
+          "cost_weight": 0.1
+        },
+        "convergence_score": 0.687,
+        "iteration": 0,
+        "at_iteration_cap": false,
+        "average_regional_coverage": 4.2917,
+        "global_demand_weighted_coverage": 5.1308,
+        "conflict_count": 0,
+        "low_coverage": true,
+        "low_profit": false
+      },
+      "decision_output": {
+        "agent": "coordinator",
+        "iteration": 0,
+        "status": "evaluated",
+        "global_metrics": {
+          "total_services": 6,
+          "total_profit": 2423115.7332887696,
+          "annual_profit": 126002018.13101602,
+          "average_regional_coverage": 4.2917,
+          "global_demand_weighted_coverage": 5.1308,
+          "average_coverage": 4.2917,
+          "min_coverage": 2.5718302192547684,
+          "max_coverage": 7.1740446500742365,
+          "coverage_variance": 4.602214430819468,
+          "total_cost": 6251000.0,
+          "total_satisfied_demand": 14184.0,
+          "total_unserved_demand": 262262.80000000005,
+          "profit_margin_pct": 27.9
+        },
+        "evaluation": {
+          "score": 3,
+          "max": 5,
+          "status": "good",
+          "reasons": [
+            "regional avg coverage 4.3% < target 70.0%",
+            "cost exceeds profit"
+          ]
+        },
+        "conflicts": [],
+        "resolution_log": [],
+        "decisions": {
+          "actions": [
+            {
+              "region": "Asia",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+62.8% coverage"
+            },
+            {
+              "region": "Europe",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+66.9% coverage"
+            },
+            {
+              "region": "Americas",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+67.4% coverage"
+            }
+          ],
+          "priorities": [
+            "Raise regional avg coverage from 4.3% to 70.0%",
+            "Eliminate 0 conflict(s)"
+          ],
+          "weight_adjustments": {
+            "profit_weight": 0.3,
+            "coverage_weight": 0.6,
+            "cost_weight": 0.1
+          },
+          "notes": "Rule-based fallback: regional coverage 4.3%, profit $2,423,116/week, 0 conflicts."
+        },
+        "feedback": {
+          "needs_rerun": true,
+          "rerun_reason": "coverage 4.3% is 65.7pp below 70.0% target",
+          "coverage_gap": 65.71,
+          "profit_gap": 0.0,
+          "conflict_severity": 0,
+          "weight_adjustments": {
+            "profit_weight": 0.25,
+            "coverage_weight": 0.65,
+            "cost_weight": 0.1
+          },
+          "convergence_score": 0.687,
+          "iteration": 0,
+          "at_iteration_cap": false,
+          "average_regional_coverage": 4.2917,
+          "global_demand_weighted_coverage": 5.1308,
+          "conflict_count": 0,
+          "low_coverage": true,
+          "low_profit": false
+        },
+        "llm_runtime_metrics": {
+          "llm_calls": 1,
+          "llm_success": 0,
+          "json_parse_success": 0,
+          "validator_executed": 0,
+          "fallback_count": 1
+        },
+        "llm_actuation": {
+          "component": "coordinator_iter_0",
+          "provider": "groq",
+          "model": "qwen/qwen3.8-27b",
+          "role": "coordinator",
+          "attempts": 1,
+          "successes": 0,
+          "failures": 1,
+          "fallback_uses": 1,
+          "cache_hits": 0,
+          "error_429": 1,
+          "error_timeout": 0,
+          "error_connection": 0,
+          "error_auth": 0,
+          "error_invalid_model": 0,
+          "error_invalid_json": 0,
+          "error_unknown": 0,
+          "latency_sec": 0.0,
+          "total_latency_sec": 0.0004,
+          "decision_source": "rule-based",
+          "decision_consumed": true,
+          "ai_generated": false,
+          "notes": ""
+        }
+      },
+      "shared_context": {
+        "global_objectives": {
+          "profit_weight": 0.5709,
+          "coverage_weight": 0.3231,
+          "cost_weight": 0.106,
+          "iteration": 0,
+          "coverage_target": 70.0,
+          "profit_floor": 0.0,
+          "max_iterations": 3,
+          "current_coverage": 4.291715307444966,
+          "current_profit": 2423115.7332887696,
+          "convergence_score": 0.687
+        },
+        "regional_priorities": {
+          "asia": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9282595534992576,
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "min_service_margin": 0.298,
+            "vessel_bias": "balanced",
+            "current_coverage": 7.1740446500742365,
+            "current_profit": 4958711.113636363
+          },
+          "europe": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9687072894699411,
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 3.1292710530058936,
+            "current_profit": -28408.375
+          },
+          "americas": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9742816978074523,
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 2.5718302192547684,
+            "current_profit": -2507187.0053475937
+          }
+        },
+        "service_archetype_plan": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05,
+          "vessel_bias": "balanced"
+        },
+        "hub_strategy": {
+          "primary_hubs": [],
+          "recommended_hubs": {
+            "asia": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "europe": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "americas": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ]
+          },
+          "overlap_hubs": []
+        }
+      },
+      "selected_services": [
+        {
+          "id": "asia_svc_710",
+          "ports": [
+            "EGPSD",
+            "KRPUS"
+          ],
+          "load": 4556.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1874072.7272727275,
+          "port_cost": 579450.1542905386,
+          "revenue": 5409623.0413146345,
+          "cost": 3923522.8815632663,
+          "weekly_profit": 1486100.1597513682,
+          "margin_pct": 27.47,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 40
+        },
+        {
+          "id": "asia_svc_778",
+          "ports": [
+            "CNSHA",
+            "EGPSD"
+          ],
+          "load": 4514.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1800590.9090909094,
+          "port_cost": 688864.6743121427,
+          "revenue": 4446634.8765526125,
+          "cost": 3959455.583403052,
+          "weekly_profit": 487179.2931495607,
+          "margin_pct": 10.96,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 39
+        },
+        {
+          "id": "asia_svc_003",
+          "ports": [
+            "CNYTN",
+            "NLRTM"
+          ],
+          "load": 2520.0,
+          "capacity": 2400.0,
+          "vessel_class": "Panamax_2400",
+          "vessel_cost": 1176000.0,
+          "fuel_cost": 1758136.25,
+          "port_cost": 520327.0,
+          "revenue": 3460800.0,
+          "cost": 3454463.25,
+          "weekly_profit": 6336.75,
+          "margin_pct": 0.18,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 8,
+          "cycle_time_days": 53
+        },
+        {
+          "id": "europe_svc_001",
+          "ports": [
+            "DEBRV",
+            "ECGYE"
+          ],
+          "load": 1556.0,
+          "capacity": 2400.0,
+          "vessel_class": "Panamax_2400",
+          "vessel_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "port_cost": 325559.0,
+          "revenue": 2128860.0,
+          "cost": 2123258.375,
+          "weekly_profit": 5601.625,
+          "margin_pct": 0.26,
+          "region": "Europe",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 33
+        },
+        {
+          "id": "americas_svc_598",
+          "ports": [
+            "DEBRV",
+            "EGPSD"
+          ],
+          "load": 8482.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1329893.8235294118,
+          "port_cost": 632584.9082269626,
+          "revenue": 3974551.833523779,
+          "cost": 3117478.7317563747,
+          "weekly_profit": 857073.1017674045,
+          "margin_pct": 21.56,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 20
+        },
+        {
+          "id": "americas_svc_753",
+          "ports": [
+            "EGPSD",
+            "ITGIT"
+          ],
+          "load": 688.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 245000.0,
+          "fuel_cost": 247758.18181818182,
+          "port_cost": 60027.26317035634,
+          "revenue": 133610.24860897358,
+          "cost": 552785.4449885382,
+          "weekly_profit": -419175.1963795646,
+          "margin_pct": -313.73,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 7
+        }
+      ],
+      "candidate_quality": {
+        "services_deployed": 6,
+        "satisfied_demand": 14184.0,
+        "unserved_demand": 262262.80000000005,
+        "negative_profit_regions": 2,
+        "constraint_violations": 0,
+        "conflict_count": 0
+      },
+      "network_ledger": {
+        "verified": true,
+        "status": "feasible",
+        "iteration": 0,
+        "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+        "weekly_usd": {
+          "revenue": 19554080.0,
+          "vessel_cost": 6251000.0,
+          "fuel_cost": 8073151.26671123,
+          "port_call_fixed_cost": 90706.0,
+          "handling_cost": 2215871.0,
+          "transshipment_cost": 296818.0,
+          "port_variable_cost": 203418.0,
+          "total_operating_cost": 17130964.26671123,
+          "operating_profit": 2423115.7332887687,
+          "profit_margin_on_revenue": 0.12391867749793234
+        },
+        "demand_teu_per_week": {
+          "total": 276446.80000000005,
+          "served": 14184.0,
+          "unserved": 262262.80000000005,
+          "coverage_pct": 5.130824447958883
+        },
+        "fleet_by_class": {
+          "Feeder_450": {
+            "used": 0,
+            "available": 24
+          },
+          "Feeder_800": {
+            "used": 0,
+            "available": 29
+          },
+          "Panamax_1200": {
+            "used": 0,
+            "available": 68
+          },
+          "Panamax_2400": {
+            "used": 13,
+            "available": 74
+          },
+          "Post_panamax": {
+            "used": 13,
+            "available": 58
+          },
+          "Super_panamax": {
+            "used": 3,
+            "available": 10
+          }
+        },
+        "services": {
+          "candidates_offered": 1090,
+          "candidates_modelled": 1090,
+          "candidates_rejected": 0,
+          "operated": 6
+        },
+        "reconciliation": {
+          "milp_profit_before_penalty": 2423115.7332887705,
+          "ledger_operating_profit": 2423115.7332887687,
+          "difference": 1.862645149230957e-09,
+          "relative_difference": 7.686983843330027e-16,
+          "reconciled": true,
+          "relaxation_upper_bound": 48681141.912932694,
+          "services_in_relaxation": 1089,
+          "services_in_integer_problem": 422,
+          "unserved_penalty_per_teu": 0.0,
+          "runtime_sec": 12.833
+        },
+        "optimality": {
+          "milp_status": "feasible",
+          "relaxation_upper_bound_usd_per_week": 48681141.912932694,
+          "gap_to_bound_usd_per_week": 46258026.17964392,
+          "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+        },
+        "path_model": {
+          "od_total": 1764,
+          "od_with_direct": 1180,
+          "od_transfer_only": 387,
+          "od_without_path": 197,
+          "od_without_path_time_limit": 197,
+          "od_without_path_no_connection": 0,
+          "od_skipped_missing_port_record": 0,
+          "paths_built": 12368,
+          "paths_dropped_by_cap": 53663,
+          "paths_dropped_by_time_limit": 803206,
+          "max_paths_per_od": 10
+        },
+        "violations": [],
+        "assumptions": {
+          "port_stay_hours": 24.0,
+          "transshipment_min_hours": 48.0,
+          "transfer_wait_days": 3.5,
+          "bunker_price_usd_per_t": 600.0,
+          "speed_factor": 1.0,
+          "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+          "sailing_speed": "class designSpeed (only speed with a source consumption)",
+          "max_transfers_per_od": 1,
+          "capacity_unit": {
+            "status": "provisional",
+            "internal_unit": "TEU",
+            "source_column": "Capacity FFE",
+            "capacity_feasibility_is_conditional": true
+          },
+          "transit_time_unit": "TransitTime column read as days (unverified unit)"
+        },
+        "runtime_sec": 12.84
+      }
+    },
+    {
+      "iteration": 1,
+      "status": "completed",
+      "metrics": {
+        "total_services": 10,
+        "total_profit": 3124834.8304367196,
+        "annual_profit": 162491411.18270943,
+        "average_regional_coverage": 7.9115,
+        "global_demand_weighted_coverage": 9.3761,
+        "average_coverage": 7.9115,
+        "min_coverage": 3.1292710530058936,
+        "max_coverage": 11.65866807360735,
+        "coverage_variance": 8.529397020601456,
+        "total_cost": 28729017.55051566,
+        "total_satisfied_demand": 25920.0,
+        "total_unserved_demand": 250526.80000000002,
+        "profit_margin_pct": 23.28,
+        "weekly_profit": 3124834.8304367196,
+        "operating_cost": 10297000.0,
+        "satisfied_demand": 25920.0,
+        "unserved_demand": 250526.80000000002,
+        "services_deployed": 10,
+        "negative_profit_regions": 2,
+        "convergence_score": 0.704,
+        "conflict_count": 0,
+        "constraint_violations": 0
+      },
+      "regional_results": [
+        {
+          "agent": "regional_asia",
+          "region": "Asia",
+          "status": "Feasible",
+          "services_generated": 812,
+          "services_filtered": 508,
+          "services_selected": 6,
+          "weekly_profit": 6276851.734848484,
+          "annual_profit": 326396290.2121212,
+          "operating_cost": 6867000.0,
+          "fuel_cost": 9014737.646103898,
+          "transship_cost": 470879.0,
+          "port_cost": 3164484.0,
+          "total_cost": 19517100.646103896,
+          "coverage_percent": 11.65866807360735,
+          "satisfied_demand": 17236.0,
+          "unserved_demand": 130602.5,
+          "total_demand": 147838.5,
+          "profit_margin_pct": 24.3,
+          "profit_per_service": 1046142.0,
+          "cost_per_service": 3252850.0,
+          "uncovered_teu": 130602.5,
+          "hub_ports": [
+            "CNSHA",
+            "MYTPP",
+            "CNYTN",
+            "HKHKG",
+            "CNTAO"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "corridor_focus": [
+              [
+                "CNYTN",
+                "USLAX"
+              ]
+            ],
+            "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density lanes like CNYTN (3,730 TEU/wk) while maintaining hub connectivity.\nReason 2: The network comprises 14 ports and 604 lanes, necessitating a hybrid model to balance the 7.2% top-3 share against the long-tail distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+          "explanation": "Verdict: Moderate\n  Profit margin 24.3% with coverage 11.7%.\n\nStrengths:\n- Weekly profit $6,276,852 (6 services) -> $1,046,142/service/week.\n- Satisfied 17,236 TEU/wk at 11.7% coverage.\n\nWeaknesses:\n- 88.3% unserved (130,602 TEU/wk).\n- Transshipment $470,879 + port $3,164,484/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "asia_svc_710",
+              "ports": [
+                "EGPSD",
+                "KRPUS"
+              ],
+              "load": 5410.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1874072.7272727275,
+              "port_cost": 696839.6708234121,
+              "revenue": 5764112.77094098,
+              "cost": 4040912.3980961395,
+              "weekly_profit": 1723200.3728448404,
+              "margin_pct": 29.9,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 40
+            },
+            {
+              "id": "asia_svc_759",
+              "ports": [
+                "EGPSD",
+                "HKHKG"
+              ],
+              "load": 4234.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1225000.0,
+              "fuel_cost": 1611281.8181818181,
+              "port_cost": 829392.2712790864,
+              "revenue": 3861682.0140544493,
+              "cost": 3665674.0894609047,
+              "weekly_profit": 196007.92459354457,
+              "margin_pct": 5.08,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 5,
+              "cycle_time_days": 35
+            },
+            {
+              "id": "asia_svc_778",
+              "ports": [
+                "CNSHA",
+                "EGPSD"
+              ],
+              "load": 4850.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1800590.9090909094,
+              "port_cost": 752206.4250534292,
+              "revenue": 4557162.770777238,
+              "cost": 4022797.3341443385,
+              "weekly_profit": 534365.4366328991,
+              "margin_pct": 11.73,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 39
+            },
+            {
+              "id": "asia_svc_784",
+              "ports": [
+                "EGPSD",
+                "JPYOK"
+              ],
+              "load": 5362.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1967232.7272727275,
+              "port_cost": 784939.7600608441,
+              "revenue": 4842075.529474642,
+              "cost": 4222172.487333572,
+              "weekly_profit": 619903.0421410706,
+              "margin_pct": 12.8,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 42
+            },
+            {
+              "id": "asia_svc_003",
+              "ports": [
+                "CNYTN",
+                "NLRTM"
+              ],
+              "load": 2520.0,
+              "capacity": 2400.0,
+              "vessel_class": "Panamax_2400",
+              "vessel_cost": 1176000.0,
+              "fuel_cost": 1758136.25,
+              "port_cost": 520327.0,
+              "revenue": 3460800.0,
+              "cost": 3454463.25,
+              "weekly_profit": 6336.75,
+              "margin_pct": 0.18,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 8,
+              "cycle_time_days": 53
+            },
+            {
+              "id": "asia_svc_151",
+              "ports": [
+                "CNYTN",
+                "HKHKG"
+              ],
+              "load": 808.0,
+              "capacity": 800.0,
+              "vessel_class": "Feeder_800",
+              "vessel_cost": 56000.0,
+              "fuel_cost": 3423.2142857142853,
+              "port_cost": 115719.98197893382,
+              "revenue": 147653.90434247238,
+              "cost": 175143.1962646481,
+              "weekly_profit": -27489.291922175733,
+              "margin_pct": -18.62,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 1,
+              "cycle_time_days": 3
+            }
+          ],
+          "elapsed_sec": 0.4,
+          "llm_actuation": {
+            "component": "regional_Asia",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 0.3818,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -9.236975761085873,
+            "runtime_seconds": 0.0199
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2104,
+            "time_limit_sec": 75,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_europe",
+          "region": "Europe",
+          "status": "Feasible",
+          "services_generated": 623,
+          "services_filtered": 405,
+          "services_selected": 1,
+          "weekly_profit": -28408.375,
+          "annual_profit": -1477235.5,
+          "operating_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "transship_cost": 0.0,
+          "port_cost": 317959.0,
+          "total_cost": 2115658.375,
+          "coverage_percent": 3.1292710530058936,
+          "satisfied_demand": 1518.0,
+          "unserved_demand": 46991.7,
+          "total_demand": 48509.7,
+          "profit_margin_pct": -1.4,
+          "profit_per_service": -28408.0,
+          "cost_per_service": 2115658.0,
+          "uncovered_teu": 46991.7,
+          "hub_ports": [
+            "USCHS",
+            "BRSSZ",
+            "USLAX",
+            "PAMIT",
+            "USEWR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "corridor_focus": [
+              [
+                "BRSSZ",
+                "DEBRV"
+              ]
+            ],
+            "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like BRSSZ -> DEBRV (1,762 TEU/wk)\nReason 2: 12 ports and 391 lanes create a dense network where hybrid routing optimizes the 48,510 TEU/wk total demand\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+          "explanation": "Verdict: Poor\n  Profit margin -1.4% with coverage 3.1%.\n\nStrengths:\n- Weekly profit $-28,408 (1 services) -> $-28,408/service/week.\n- Satisfied 1,518 TEU/wk at 3.1% coverage.\n\nWeaknesses:\n- 96.9% unserved (46,992 TEU/wk).\n- Transshipment $0 + port $317,959/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "europe_svc_001",
+              "ports": [
+                "DEBRV",
+                "ECGYE"
+              ],
+              "load": 1556.0,
+              "capacity": 2400.0,
+              "vessel_class": "Panamax_2400",
+              "vessel_cost": 735000.0,
+              "fuel_cost": 1062699.375,
+              "port_cost": 325559.0,
+              "revenue": 2128860.0,
+              "cost": 2123258.375,
+              "weekly_profit": 5601.625,
+              "margin_pct": 0.26,
+              "region": "Europe",
+              "frequency_per_week": 1,
+              "vessels": 5,
+              "cycle_time_days": 33
+            }
+          ],
+          "elapsed_sec": 0.3,
+          "llm_actuation": {
+            "component": "regional_Europe",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 0.3253,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -0.07510406354633938,
+            "runtime_seconds": 0.0332
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 1891,
+            "time_limit_sec": 67,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_americas",
+          "region": "Americas",
+          "status": "Feasible",
+          "services_generated": 803,
+          "services_filtered": 499,
+          "services_selected": 3,
+          "weekly_profit": -3123608.529411765,
+          "annual_profit": -162427643.52941176,
+          "operating_cost": 2695000.0,
+          "fuel_cost": 2953953.529411765,
+          "transship_cost": 194034.0,
+          "port_cost": 1253271.0,
+          "total_cost": 7096258.529411765,
+          "coverage_percent": 8.946473471446442,
+          "satisfied_demand": 7166.0,
+          "unserved_demand": 72932.6,
+          "total_demand": 80098.6,
+          "profit_margin_pct": -78.6,
+          "profit_per_service": -1041203.0,
+          "cost_per_service": 2365420.0,
+          "uncovered_teu": 72932.6,
+          "hub_ports": [
+            "DEBRV",
+            "NLRTM",
+            "AEJEA",
+            "ITGIT",
+            "ZADUR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "corridor_focus": [
+              [
+                "NLRTM",
+                "HKHKG"
+              ]
+            ],
+            "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% of the 80,099 TEU/wk regional demand.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+          "explanation": "Verdict: Poor\n  Profit margin -78.6% with coverage 8.9%.\n\nStrengths:\n- Weekly profit $-3,123,609 (3 services) -> $-1,041,203/service/week.\n- Satisfied 7,166 TEU/wk at 8.9% coverage.\n\nWeaknesses:\n- 91.1% unserved (72,933 TEU/wk).\n- Transshipment $194,034 + port $1,253,271/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "americas_svc_598",
+              "ports": [
+                "DEBRV",
+                "EGPSD"
+              ],
+              "load": 10694.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 1155000.0,
+              "fuel_cost": 1329893.8235294118,
+              "port_cost": 833670.827368462,
+              "revenue": 4529167.517884883,
+              "cost": 3318564.650897874,
+              "weekly_profit": 1210602.866987009,
+              "margin_pct": 26.73,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 3,
+              "cycle_time_days": 20
+            },
+            {
+              "id": "americas_svc_606",
+              "ports": [
+                "EGPSD",
+                "NLRTM"
+              ],
+              "load": 5964.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 1155000.0,
+              "fuel_cost": 1254127.0588235294,
+              "port_cost": 424137.69994533726,
+              "revenue": 2175265.4437933946,
+              "cost": 2833264.758768867,
+              "weekly_profit": -657999.3149754722,
+              "margin_pct": -30.25,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 3,
+              "cycle_time_days": 19
+            },
+            {
+              "id": "americas_svc_619",
+              "ports": [
+                "EGPSD",
+                "ITGIT"
+              ],
+              "load": 2644.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 385000.0,
+              "fuel_cost": 369932.64705882355,
+              "port_cost": 117834.36349049522,
+              "revenue": 387072.4296843221,
+              "cost": 872767.0105493189,
+              "weekly_profit": -485694.58086499677,
+              "margin_pct": -125.48,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 1,
+              "cycle_time_days": 7
+            }
+          ],
+          "elapsed_sec": 0.3,
+          "llm_actuation": {
+            "component": "regional_Americas",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 0.2616,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0138
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2269,
+            "time_limit_sec": 64,
+            "status": "Optimal"
+          }
+        }
+      ],
+      "weights_used": {
+        "profit_weight": 0.5709,
+        "coverage_weight": 0.3231,
+        "cost_weight": 0.106
+      },
+      "consensus_result": {
+        "final_weight_adjustments": {
+          "profit_weight": 0.5682,
+          "coverage_weight": 0.3258,
+          "cost_weight": 0.106
+        },
+        "final_archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.5117,
+            "hub_loop_ratio": 0.1668,
+            "feeder_ratio": 0.2515,
+            "trunk_ratio": 0.07
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [
+            "CNSHA"
+          ],
+          "notes": "reconciled vote distribution: balanced=0.64; small=0.36"
+        },
+        "confidence_score": 1.0,
+        "conflicts_resolved": [],
+        "conflicts_remaining": [],
+        "notes": "confidence=1.0000; conflicts_detected=0; conflicts_remaining=0; all_conflicts_resolved"
+      },
+      "feedback": {
+        "needs_rerun": true,
+        "rerun_reason": "coverage 7.9% is 62.1pp below 70.0% target",
+        "coverage_gap": 62.09,
+        "profit_gap": 0.0,
+        "conflict_severity": 0,
+        "weight_adjustments": {
+          "profit_weight": 0.25,
+          "coverage_weight": 0.65,
+          "cost_weight": 0.1
+        },
+        "convergence_score": 0.704,
+        "iteration": 1,
+        "at_iteration_cap": false,
+        "average_regional_coverage": 7.9115,
+        "global_demand_weighted_coverage": 9.3761,
+        "conflict_count": 0,
+        "low_coverage": true,
+        "low_profit": false
+      },
+      "decision_output": {
+        "agent": "coordinator",
+        "iteration": 1,
+        "status": "evaluated",
+        "global_metrics": {
+          "total_services": 10,
+          "total_profit": 3124834.8304367196,
+          "annual_profit": 162491411.18270943,
+          "average_regional_coverage": 7.9115,
+          "global_demand_weighted_coverage": 9.3761,
+          "average_coverage": 7.9115,
+          "min_coverage": 3.1292710530058936,
+          "max_coverage": 11.65866807360735,
+          "coverage_variance": 8.529397020601456,
+          "total_cost": 10297000.0,
+          "total_satisfied_demand": 25920.0,
+          "total_unserved_demand": 250526.80000000002,
+          "profit_margin_pct": 23.3
+        },
+        "evaluation": {
+          "score": 3,
+          "max": 5,
+          "status": "good",
+          "reasons": [
+            "regional avg coverage 7.9% < target 70.0%",
+            "cost exceeds profit"
+          ]
+        },
+        "conflicts": [],
+        "resolution_log": [],
+        "decisions": {
+          "actions": [
+            {
+              "region": "Asia",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+58.3% coverage"
+            },
+            {
+              "region": "Europe",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+66.9% coverage"
+            },
+            {
+              "region": "Americas",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+61.1% coverage"
+            }
+          ],
+          "priorities": [
+            "Raise regional avg coverage from 7.9% to 70.0%",
+            "Eliminate 0 conflict(s)"
+          ],
+          "weight_adjustments": {
+            "profit_weight": 0.3,
+            "coverage_weight": 0.6,
+            "cost_weight": 0.1
+          },
+          "notes": "Rule-based fallback: regional coverage 7.9%, profit $3,124,835/week, 0 conflicts."
+        },
+        "feedback": {
+          "needs_rerun": true,
+          "rerun_reason": "coverage 7.9% is 62.1pp below 70.0% target",
+          "coverage_gap": 62.09,
+          "profit_gap": 0.0,
+          "conflict_severity": 0,
+          "weight_adjustments": {
+            "profit_weight": 0.25,
+            "coverage_weight": 0.65,
+            "cost_weight": 0.1
+          },
+          "convergence_score": 0.704,
+          "iteration": 1,
+          "at_iteration_cap": false,
+          "average_regional_coverage": 7.9115,
+          "global_demand_weighted_coverage": 9.3761,
+          "conflict_count": 0,
+          "low_coverage": true,
+          "low_profit": false
+        },
+        "llm_runtime_metrics": {
+          "llm_calls": 2,
+          "llm_success": 0,
+          "json_parse_success": 0,
+          "validator_executed": 0,
+          "fallback_count": 2
+        },
+        "llm_actuation": {
+          "component": "coordinator_iter_1",
+          "provider": "groq",
+          "model": "qwen/qwen3.8-27b",
+          "role": "coordinator",
+          "attempts": 1,
+          "successes": 0,
+          "failures": 1,
+          "fallback_uses": 1,
+          "cache_hits": 0,
+          "error_429": 1,
+          "error_timeout": 0,
+          "error_connection": 0,
+          "error_auth": 0,
+          "error_invalid_model": 0,
+          "error_invalid_json": 0,
+          "error_unknown": 0,
+          "latency_sec": 0.0,
+          "total_latency_sec": 0.0004,
+          "decision_source": "rule-based",
+          "decision_consumed": true,
+          "ai_generated": false,
+          "notes": ""
+        }
+      },
+      "shared_context": {
+        "global_objectives": {
+          "profit_weight": 0.5682,
+          "coverage_weight": 0.3258,
+          "cost_weight": 0.106,
+          "iteration": 1,
+          "coverage_target": 70.0,
+          "profit_floor": 0.0,
+          "max_iterations": 3,
+          "current_coverage": 7.9114708660198945,
+          "current_profit": 3124834.8304367196,
+          "convergence_score": 0.704
+        },
+        "regional_priorities": {
+          "asia": {
+            "coverage_priority": 0.1165866807360735,
+            "profit_priority": 0.8834133192639265,
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "min_service_margin": 0.243,
+            "vessel_bias": "balanced",
+            "current_coverage": 11.65866807360735,
+            "current_profit": 6276851.734848484
+          },
+          "europe": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9687072894699411,
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 3.1292710530058936,
+            "current_profit": -28408.375
+          },
+          "americas": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9105352652855356,
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 8.946473471446442,
+            "current_profit": -3123608.529411765
+          }
+        },
+        "service_archetype_plan": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05,
+          "vessel_bias": "balanced"
+        },
+        "hub_strategy": {
+          "primary_hubs": [],
+          "recommended_hubs": {
+            "asia": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "europe": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "americas": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ]
+          },
+          "overlap_hubs": []
+        }
+      },
+      "selected_services": [
+        {
+          "id": "asia_svc_710",
+          "ports": [
+            "EGPSD",
+            "KRPUS"
+          ],
+          "load": 5410.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1874072.7272727275,
+          "port_cost": 696839.6708234121,
+          "revenue": 5764112.77094098,
+          "cost": 4040912.3980961395,
+          "weekly_profit": 1723200.3728448404,
+          "margin_pct": 29.9,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 40
+        },
+        {
+          "id": "asia_svc_759",
+          "ports": [
+            "EGPSD",
+            "HKHKG"
+          ],
+          "load": 4234.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1225000.0,
+          "fuel_cost": 1611281.8181818181,
+          "port_cost": 829392.2712790864,
+          "revenue": 3861682.0140544493,
+          "cost": 3665674.0894609047,
+          "weekly_profit": 196007.92459354457,
+          "margin_pct": 5.08,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 35
+        },
+        {
+          "id": "asia_svc_778",
+          "ports": [
+            "CNSHA",
+            "EGPSD"
+          ],
+          "load": 4850.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1800590.9090909094,
+          "port_cost": 752206.4250534292,
+          "revenue": 4557162.770777238,
+          "cost": 4022797.3341443385,
+          "weekly_profit": 534365.4366328991,
+          "margin_pct": 11.73,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 39
+        },
+        {
+          "id": "asia_svc_784",
+          "ports": [
+            "EGPSD",
+            "JPYOK"
+          ],
+          "load": 5362.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1967232.7272727275,
+          "port_cost": 784939.7600608441,
+          "revenue": 4842075.529474642,
+          "cost": 4222172.487333572,
+          "weekly_profit": 619903.0421410706,
+          "margin_pct": 12.8,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 42
+        },
+        {
+          "id": "asia_svc_003",
+          "ports": [
+            "CNYTN",
+            "NLRTM"
+          ],
+          "load": 2520.0,
+          "capacity": 2400.0,
+          "vessel_class": "Panamax_2400",
+          "vessel_cost": 1176000.0,
+          "fuel_cost": 1758136.25,
+          "port_cost": 520327.0,
+          "revenue": 3460800.0,
+          "cost": 3454463.25,
+          "weekly_profit": 6336.75,
+          "margin_pct": 0.18,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 8,
+          "cycle_time_days": 53
+        },
+        {
+          "id": "asia_svc_151",
+          "ports": [
+            "CNYTN",
+            "HKHKG"
+          ],
+          "load": 808.0,
+          "capacity": 800.0,
+          "vessel_class": "Feeder_800",
+          "vessel_cost": 56000.0,
+          "fuel_cost": 3423.2142857142853,
+          "port_cost": 115719.98197893382,
+          "revenue": 147653.90434247238,
+          "cost": 175143.1962646481,
+          "weekly_profit": -27489.291922175733,
+          "margin_pct": -18.62,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 3
+        },
+        {
+          "id": "europe_svc_001",
+          "ports": [
+            "DEBRV",
+            "ECGYE"
+          ],
+          "load": 1556.0,
+          "capacity": 2400.0,
+          "vessel_class": "Panamax_2400",
+          "vessel_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "port_cost": 325559.0,
+          "revenue": 2128860.0,
+          "cost": 2123258.375,
+          "weekly_profit": 5601.625,
+          "margin_pct": 0.26,
+          "region": "Europe",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 33
+        },
+        {
+          "id": "americas_svc_598",
+          "ports": [
+            "DEBRV",
+            "EGPSD"
+          ],
+          "load": 10694.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1329893.8235294118,
+          "port_cost": 833670.827368462,
+          "revenue": 4529167.517884883,
+          "cost": 3318564.650897874,
+          "weekly_profit": 1210602.866987009,
+          "margin_pct": 26.73,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 20
+        },
+        {
+          "id": "americas_svc_606",
+          "ports": [
+            "EGPSD",
+            "NLRTM"
+          ],
+          "load": 5964.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1254127.0588235294,
+          "port_cost": 424137.69994533726,
+          "revenue": 2175265.4437933946,
+          "cost": 2833264.758768867,
+          "weekly_profit": -657999.3149754722,
+          "margin_pct": -30.25,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 19
+        },
+        {
+          "id": "americas_svc_619",
+          "ports": [
+            "EGPSD",
+            "ITGIT"
+          ],
+          "load": 2644.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 385000.0,
+          "fuel_cost": 369932.64705882355,
+          "port_cost": 117834.36349049522,
+          "revenue": 387072.4296843221,
+          "cost": 872767.0105493189,
+          "weekly_profit": -485694.58086499677,
+          "margin_pct": -125.48,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 7
+        }
+      ],
+      "candidate_quality": {
+        "services_deployed": 10,
+        "satisfied_demand": 25920.0,
+        "unserved_demand": 250526.80000000002,
+        "negative_profit_regions": 2,
+        "constraint_violations": 0,
+        "conflict_count": 0
+      },
+      "network_ledger": {
+        "verified": true,
+        "status": "feasible",
+        "iteration": 1,
+        "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+        "weekly_usd": {
+          "revenue": 31853852.38095238,
+          "vessel_cost": 10297000.0,
+          "fuel_cost": 13031390.550515663,
+          "port_call_fixed_cost": 162304.0,
+          "handling_cost": 4215233.0,
+          "transshipment_cost": 664913.0,
+          "port_variable_cost": 358177.0,
+          "total_operating_cost": 28729017.550515663,
+          "operating_profit": 3124834.8304367177,
+          "profit_margin_on_revenue": 0.09809911821859489
+        },
+        "demand_teu_per_week": {
+          "total": 276446.80000000005,
+          "served": 25920.0,
+          "unserved": 250526.80000000005,
+          "coverage_pct": 9.376125894747197
+        },
+        "fleet_by_class": {
+          "Feeder_450": {
+            "used": 0,
+            "available": 24
+          },
+          "Feeder_800": {
+            "used": 1,
+            "available": 29
+          },
+          "Panamax_1200": {
+            "used": 0,
+            "available": 68
+          },
+          "Panamax_2400": {
+            "used": 13,
+            "available": 74
+          },
+          "Post_panamax": {
+            "used": 23,
+            "available": 58
+          },
+          "Super_panamax": {
+            "used": 7,
+            "available": 10
+          }
+        },
+        "services": {
+          "candidates_offered": 1100,
+          "candidates_modelled": 1100,
+          "candidates_rejected": 0,
+          "operated": 10
+        },
+        "reconciliation": {
+          "milp_profit_before_penalty": 3124834.8304367173,
+          "ledger_operating_profit": 3124834.8304367177,
+          "difference": -4.656612873077393e-10,
+          "relative_difference": -1.4901948825329107e-16,
+          "reconciled": true,
+          "relaxation_upper_bound": 48352534.63649494,
+          "services_in_relaxation": 1099,
+          "services_in_integer_problem": 424,
+          "unserved_penalty_per_teu": 0.0,
+          "runtime_sec": 12.942
+        },
+        "optimality": {
+          "milp_status": "feasible",
+          "relaxation_upper_bound_usd_per_week": 48352534.63649494,
+          "gap_to_bound_usd_per_week": 45227699.80605823,
+          "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+        },
+        "path_model": {
+          "od_total": 1764,
+          "od_with_direct": 1188,
+          "od_transfer_only": 398,
+          "od_without_path": 178,
+          "od_without_path_time_limit": 178,
+          "od_without_path_no_connection": 0,
+          "od_skipped_missing_port_record": 0,
+          "paths_built": 12646,
+          "paths_dropped_by_cap": 55406,
+          "paths_dropped_by_time_limit": 810012,
+          "max_paths_per_od": 10
+        },
+        "violations": [],
+        "assumptions": {
+          "port_stay_hours": 24.0,
+          "transshipment_min_hours": 48.0,
+          "transfer_wait_days": 3.5,
+          "bunker_price_usd_per_t": 600.0,
+          "speed_factor": 1.0,
+          "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+          "sailing_speed": "class designSpeed (only speed with a source consumption)",
+          "max_transfers_per_od": 1,
+          "capacity_unit": {
+            "status": "provisional",
+            "internal_unit": "TEU",
+            "source_column": "Capacity FFE",
+            "capacity_feasibility_is_conditional": true
+          },
+          "transit_time_unit": "TransitTime column read as days (unverified unit)"
+        },
+        "runtime_sec": 12.95
+      }
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "metrics": {
+        "total_services": 11,
+        "total_profit": 5097909.212471353,
+        "annual_profit": 265091279.04851034,
+        "average_regional_coverage": 8.3581,
+        "global_demand_weighted_coverage": 10.122,
+        "average_coverage": 8.3581,
+        "min_coverage": 3.1292710530058936,
+        "max_coverage": 13.118369031071067,
+        "coverage_variance": 9.989097978065173,
+        "total_cost": 29239983.644671507,
+        "total_satisfied_demand": 27982.0,
+        "total_unserved_demand": 248464.80000000002,
+        "profit_margin_pct": 32.89,
+        "weekly_profit": 5097909.212471353,
+        "operating_cost": 10402000.0,
+        "satisfied_demand": 27982.0,
+        "unserved_demand": 248464.80000000002,
+        "services_deployed": 11,
+        "negative_profit_regions": 2,
+        "convergence_score": 0.706,
+        "conflict_count": 0,
+        "constraint_violations": 0
+      },
+      "regional_results": [
+        {
+          "agent": "regional_asia",
+          "region": "Asia",
+          "status": "Feasible",
+          "services_generated": 812,
+          "services_filtered": 508,
+          "services_selected": 7,
+          "weekly_profit": 8275558.116883118,
+          "annual_profit": 430329022.0779221,
+          "operating_cost": 6972000.0,
+          "fuel_cost": 8901499.74025974,
+          "transship_cost": 624609.0,
+          "port_cost": 3547766.0,
+          "total_cost": 20045874.74025974,
+          "coverage_percent": 13.118369031071067,
+          "satisfied_demand": 19394.0,
+          "unserved_demand": 128444.5,
+          "total_demand": 147838.5,
+          "profit_margin_pct": 29.2,
+          "profit_per_service": 1182223.0,
+          "cost_per_service": 2863696.0,
+          "uncovered_teu": 128444.5,
+          "hub_ports": [
+            "CNSHA",
+            "MYTPP",
+            "CNYTN",
+            "HKHKG",
+            "CNTAO"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "corridor_focus": [
+              [
+                "CNYTN",
+                "USLAX"
+              ]
+            ],
+            "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density lanes like CNYTN (3,730 TEU/wk) while maintaining hub connectivity.\nReason 2: The network comprises 14 ports and 604 lanes, necessitating a hybrid model to balance the 7.2% top-3 share against the long-tail distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+          "explanation": "Verdict: Good\n  Profit margin 29.2% with coverage 13.1%.\n\nStrengths:\n- Weekly profit $8,275,558 (7 services) -> $1,182,223/service/week.\n- Satisfied 19,394 TEU/wk at 13.1% coverage.\n\nWeaknesses:\n- 86.9% unserved (128,444 TEU/wk).\n- Transshipment $624,609 + port $3,547,766/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "asia_svc_710",
+              "ports": [
+                "EGPSD",
+                "KRPUS"
+              ],
+              "load": 5410.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1874072.7272727275,
+              "port_cost": 696839.6708234121,
+              "revenue": 5764112.77094098,
+              "cost": 4040912.3980961395,
+              "weekly_profit": 1723200.3728448404,
+              "margin_pct": 29.9,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 40
+            },
+            {
+              "id": "asia_svc_759",
+              "ports": [
+                "EGPSD",
+                "HKHKG"
+              ],
+              "load": 4234.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1225000.0,
+              "fuel_cost": 1611281.8181818181,
+              "port_cost": 829392.2712790864,
+              "revenue": 3861682.0140544493,
+              "cost": 3665674.0894609047,
+              "weekly_profit": 196007.92459354457,
+              "margin_pct": 5.08,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 5,
+              "cycle_time_days": 35
+            },
+            {
+              "id": "asia_svc_768",
+              "ports": [
+                "CNYTN",
+                "EGPSD"
+              ],
+              "load": 4224.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1225000.0,
+              "fuel_cost": 1612527.272727273,
+              "port_cost": 722478.680871361,
+              "revenue": 4267414.05544153,
+              "cost": 3560005.953598634,
+              "weekly_profit": 707408.1018428965,
+              "margin_pct": 16.58,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 5,
+              "cycle_time_days": 35
+            },
+            {
+              "id": "asia_svc_778",
+              "ports": [
+                "CNSHA",
+                "EGPSD"
+              ],
+              "load": 4850.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1800590.9090909094,
+              "port_cost": 752812.7107350652,
+              "revenue": 4538955.488469532,
+              "cost": 4023403.619825974,
+              "weekly_profit": 515551.86864355765,
+              "margin_pct": 11.36,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 39
+            },
+            {
+              "id": "asia_svc_784",
+              "ports": [
+                "EGPSD",
+                "JPYOK"
+              ],
+              "load": 5362.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1470000.0,
+              "fuel_cost": 1967232.7272727275,
+              "port_cost": 784939.7600608441,
+              "revenue": 4842075.529474642,
+              "cost": 4222172.487333572,
+              "weekly_profit": 619903.0421410706,
+              "margin_pct": 12.8,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 6,
+              "cycle_time_days": 42
+            },
+            {
+              "id": "asia_svc_151",
+              "ports": [
+                "CNYTN",
+                "HKHKG"
+              ],
+              "load": 808.0,
+              "capacity": 800.0,
+              "vessel_class": "Feeder_800",
+              "vessel_cost": 56000.0,
+              "fuel_cost": 3423.2142857142853,
+              "port_cost": 115719.98197893382,
+              "revenue": 147653.90434247238,
+              "cost": 175143.1962646481,
+              "weekly_profit": -27489.291922175733,
+              "margin_pct": -18.62,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 1,
+              "cycle_time_days": 3
+            },
+            {
+              "id": "asia_svc_199",
+              "ports": [
+                "CNYTN",
+                "TWKHH"
+              ],
+              "load": 530.0,
+              "capacity": 800.0,
+              "vessel_class": "Feeder_800",
+              "vessel_cost": 56000.0,
+              "fuel_cost": 32371.07142857143,
+              "port_cost": 46384.644503559975,
+              "revenue": 120782.30420154918,
+              "cost": 134755.7159321314,
+              "weekly_profit": -13973.411730582215,
+              "margin_pct": -11.57,
+              "region": "Asia",
+              "frequency_per_week": 1,
+              "vessels": 1,
+              "cycle_time_days": 5
+            }
+          ],
+          "elapsed_sec": 0.4,
+          "llm_actuation": {
+            "component": "regional_Asia",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 0.4081,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -8.508353902194115,
+            "runtime_seconds": 0.0148
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2104,
+            "time_limit_sec": 75,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_europe",
+          "region": "Europe",
+          "status": "Feasible",
+          "services_generated": 623,
+          "services_filtered": 405,
+          "services_selected": 1,
+          "weekly_profit": -28408.375,
+          "annual_profit": -1477235.5,
+          "operating_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "transship_cost": 0.0,
+          "port_cost": 317959.0,
+          "total_cost": 2115658.375,
+          "coverage_percent": 3.1292710530058936,
+          "satisfied_demand": 1518.0,
+          "unserved_demand": 46991.7,
+          "total_demand": 48509.7,
+          "profit_margin_pct": -1.4,
+          "profit_per_service": -28408.0,
+          "cost_per_service": 2115658.0,
+          "uncovered_teu": 46991.7,
+          "hub_ports": [
+            "USCHS",
+            "BRSSZ",
+            "USLAX",
+            "PAMIT",
+            "USEWR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.03,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "corridor_focus": [
+              [
+                "BRSSZ",
+                "DEBRV"
+              ]
+            ],
+            "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like BRSSZ -> DEBRV (1,762 TEU/wk)\nReason 2: 12 ports and 391 lanes create a dense network where hybrid routing optimizes the 48,510 TEU/wk total demand\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+          "explanation": "Verdict: Poor\n  Profit margin -1.4% with coverage 3.1%.\n\nStrengths:\n- Weekly profit $-28,408 (1 services) -> $-28,408/service/week.\n- Satisfied 1,518 TEU/wk at 3.1% coverage.\n\nWeaknesses:\n- 96.9% unserved (46,992 TEU/wk).\n- Transshipment $0 + port $317,959/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "europe_svc_001",
+              "ports": [
+                "DEBRV",
+                "ECGYE"
+              ],
+              "load": 1556.0,
+              "capacity": 2400.0,
+              "vessel_class": "Panamax_2400",
+              "vessel_cost": 735000.0,
+              "fuel_cost": 1062699.375,
+              "port_cost": 325559.0,
+              "revenue": 2128860.0,
+              "cost": 2123258.375,
+              "weekly_profit": 5601.625,
+              "margin_pct": 0.26,
+              "region": "Europe",
+              "frequency_per_week": 1,
+              "vessels": 5,
+              "cycle_time_days": 33
+            }
+          ],
+          "elapsed_sec": 0.4,
+          "llm_actuation": {
+            "component": "regional_Europe",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 0.3622,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 19,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": 0.051297708654889244,
+            "runtime_seconds": 0.0418
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 1891,
+            "time_limit_sec": 67,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_americas",
+          "region": "Americas",
+          "status": "Feasible",
+          "services_generated": 803,
+          "services_filtered": 499,
+          "services_selected": 3,
+          "weekly_profit": -3149240.529411765,
+          "annual_profit": -163760507.52941176,
+          "operating_cost": 2695000.0,
+          "fuel_cost": 2953953.529411765,
+          "transship_cost": 194910.0,
+          "port_cost": 1234587.0,
+          "total_cost": 7078450.529411765,
+          "coverage_percent": 8.826621189384083,
+          "satisfied_demand": 7070.0,
+          "unserved_demand": 73028.6,
+          "total_demand": 80098.6,
+          "profit_margin_pct": -80.1,
+          "profit_per_service": -1049747.0,
+          "cost_per_service": 2359484.0,
+          "uncovered_teu": 73028.6,
+          "hub_ports": [
+            "DEBRV",
+            "NLRTM",
+            "AEJEA",
+            "ITGIT",
+            "ZADUR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [],
+            "notes": ""
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "corridor_focus": [
+              [
+                "NLRTM",
+                "HKHKG"
+              ]
+            ],
+            "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% of the 80,099 TEU/wk regional demand.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+          "explanation": "Verdict: Poor\n  Profit margin -80.1% with coverage 8.8%.\n\nStrengths:\n- Weekly profit $-3,149,241 (3 services) -> $-1,049,747/service/week.\n- Satisfied 7,070 TEU/wk at 8.8% coverage.\n\nWeaknesses:\n- 91.2% unserved (73,029 TEU/wk).\n- Transshipment $194,910 + port $1,234,587/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "americas_svc_598",
+              "ports": [
+                "DEBRV",
+                "EGPSD"
+              ],
+              "load": 10694.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 1155000.0,
+              "fuel_cost": 1329893.8235294118,
+              "port_cost": 836383.5997107914,
+              "revenue": 4524832.679967358,
+              "cost": 3321277.4232402034,
+              "weekly_profit": 1203555.2567271544,
+              "margin_pct": 26.6,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 3,
+              "cycle_time_days": 20
+            },
+            {
+              "id": "americas_svc_606",
+              "ports": [
+                "EGPSD",
+                "NLRTM"
+              ],
+              "load": 8930.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 1155000.0,
+              "fuel_cost": 1254127.0588235294,
+              "port_cost": 658837.7596511174,
+              "revenue": 3572170.599297237,
+              "cost": 3067964.818474647,
+              "weekly_profit": 504205.78082259,
+              "margin_pct": 14.11,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 3,
+              "cycle_time_days": 19
+            },
+            {
+              "id": "americas_svc_619",
+              "ports": [
+                "EGPSD",
+                "ITGIT"
+              ],
+              "load": 3730.0,
+              "capacity": 7500.0,
+              "vessel_class": "Super_panamax",
+              "vessel_cost": 385000.0,
+              "fuel_cost": 369932.64705882355,
+              "port_cost": 150482.92038582888,
+              "revenue": 569353.5109531067,
+              "cost": 905415.5674446526,
+              "weekly_profit": -336062.05649154587,
+              "margin_pct": -59.03,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 1,
+              "cycle_time_days": 7
+            }
+          ],
+          "elapsed_sec": 0.3,
+          "llm_actuation": {
+            "component": "regional_Americas",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 1,
+            "cache_hits": 0,
+            "error_429": 1,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 0,
+            "latency_sec": 0.0,
+            "total_latency_sec": 0.2817,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0056
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2269,
+            "time_limit_sec": 64,
+            "status": "Optimal"
+          }
+        }
+      ],
+      "weights_used": {
+        "profit_weight": 0.5682,
+        "coverage_weight": 0.3258,
+        "cost_weight": 0.106
+      },
+      "consensus_result": {
+        "final_weight_adjustments": {
+          "profit_weight": 0.5664,
+          "coverage_weight": 0.3276,
+          "cost_weight": 0.106
+        },
+        "final_archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.5117,
+            "hub_loop_ratio": 0.1668,
+            "feeder_ratio": 0.2515,
+            "trunk_ratio": 0.07
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [
+            "CNSHA"
+          ],
+          "notes": "reconciled vote distribution: balanced=0.64; small=0.36"
+        },
+        "confidence_score": 1.0,
+        "conflicts_resolved": [],
+        "conflicts_remaining": [],
+        "notes": "confidence=1.0000; conflicts_detected=0; conflicts_remaining=0; all_conflicts_resolved"
+      },
+      "feedback": {
+        "needs_rerun": false,
+        "rerun_reason": "coverage 8.4% is 61.6pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "coverage_gap": 61.64,
+        "profit_gap": 0.0,
+        "conflict_severity": 0,
+        "weight_adjustments": {
+          "profit_weight": 0.25,
+          "coverage_weight": 0.65,
+          "cost_weight": 0.1
+        },
+        "convergence_score": 0.706,
+        "iteration": 2,
+        "at_iteration_cap": true,
+        "average_regional_coverage": 8.3581,
+        "global_demand_weighted_coverage": 10.122,
+        "conflict_count": 0,
+        "low_coverage": true,
+        "low_profit": false
+      },
+      "decision_output": {
+        "agent": "coordinator",
+        "iteration": 2,
+        "status": "evaluated",
+        "global_metrics": {
+          "total_services": 11,
+          "total_profit": 5097909.212471353,
+          "annual_profit": 265091279.04851034,
+          "average_regional_coverage": 8.3581,
+          "global_demand_weighted_coverage": 10.122,
+          "average_coverage": 8.3581,
+          "min_coverage": 3.1292710530058936,
+          "max_coverage": 13.118369031071067,
+          "coverage_variance": 9.989097978065173,
+          "total_cost": 10402000.0,
+          "total_satisfied_demand": 27982.0,
+          "total_unserved_demand": 248464.80000000002,
+          "profit_margin_pct": 32.9
+        },
+        "evaluation": {
+          "score": 3,
+          "max": 5,
+          "status": "good",
+          "reasons": [
+            "regional avg coverage 8.4% < target 70.0%",
+            "cost exceeds profit"
+          ]
+        },
+        "conflicts": [],
+        "resolution_log": [],
+        "decisions": {
+          "actions": [
+            {
+              "region": "Asia",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+56.9% coverage"
+            },
+            {
+              "region": "Europe",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+66.9% coverage"
+            },
+            {
+              "region": "Americas",
+              "action": "increase coverage_weight in GA",
+              "expected_gain": "+61.2% coverage"
+            }
+          ],
+          "priorities": [
+            "Raise regional avg coverage from 8.4% to 70.0%",
+            "Eliminate 0 conflict(s)"
+          ],
+          "weight_adjustments": {
+            "profit_weight": 0.3,
+            "coverage_weight": 0.6,
+            "cost_weight": 0.1
+          },
+          "notes": "Rule-based fallback: regional coverage 8.4%, profit $5,097,909/week, 0 conflicts."
+        },
+        "feedback": {
+          "needs_rerun": false,
+          "rerun_reason": "coverage 8.4% is 61.6pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+          "coverage_gap": 61.64,
+          "profit_gap": 0.0,
+          "conflict_severity": 0,
+          "weight_adjustments": {
+            "profit_weight": 0.25,
+            "coverage_weight": 0.65,
+            "cost_weight": 0.1
+          },
+          "convergence_score": 0.706,
+          "iteration": 2,
+          "at_iteration_cap": true,
+          "average_regional_coverage": 8.3581,
+          "global_demand_weighted_coverage": 10.122,
+          "conflict_count": 0,
+          "low_coverage": true,
+          "low_profit": false
+        },
+        "llm_runtime_metrics": {
+          "llm_calls": 3,
+          "llm_success": 0,
+          "json_parse_success": 0,
+          "validator_executed": 0,
+          "fallback_count": 3
+        },
+        "llm_actuation": {
+          "component": "coordinator_iter_2",
+          "provider": "groq",
+          "model": "qwen/qwen3.8-27b",
+          "role": "coordinator",
+          "attempts": 1,
+          "successes": 0,
+          "failures": 1,
+          "fallback_uses": 1,
+          "cache_hits": 0,
+          "error_429": 1,
+          "error_timeout": 0,
+          "error_connection": 0,
+          "error_auth": 0,
+          "error_invalid_model": 0,
+          "error_invalid_json": 0,
+          "error_unknown": 0,
+          "latency_sec": 0.0,
+          "total_latency_sec": 0.0007,
+          "decision_source": "rule-based",
+          "decision_consumed": true,
+          "ai_generated": false,
+          "notes": ""
+        }
+      },
+      "shared_context": {
+        "global_objectives": {
+          "profit_weight": 0.5664,
+          "coverage_weight": 0.3276,
+          "cost_weight": 0.106,
+          "iteration": 2,
+          "coverage_target": 70.0,
+          "profit_floor": 0.0,
+          "max_iterations": 3,
+          "current_coverage": 8.35808709115368,
+          "current_profit": 5097909.212471353,
+          "convergence_score": 0.706
+        },
+        "regional_priorities": {
+          "asia": {
+            "coverage_priority": 0.13118369031071067,
+            "profit_priority": 0.8688163096892894,
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "min_service_margin": 0.292,
+            "vessel_bias": "balanced",
+            "current_coverage": 13.118369031071067,
+            "current_profit": 8275558.116883118
+          },
+          "europe": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9687072894699411,
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 3.1292710530058936,
+            "current_profit": -28408.375
+          },
+          "americas": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9117337881061591,
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 8.826621189384083,
+            "current_profit": -3149240.529411765
+          }
+        },
+        "service_archetype_plan": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05,
+          "vessel_bias": "balanced"
+        },
+        "hub_strategy": {
+          "primary_hubs": [],
+          "recommended_hubs": {
+            "asia": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "europe": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "americas": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ]
+          },
+          "overlap_hubs": []
+        }
+      },
+      "selected_services": [
+        {
+          "id": "asia_svc_710",
+          "ports": [
+            "EGPSD",
+            "KRPUS"
+          ],
+          "load": 5410.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1874072.7272727275,
+          "port_cost": 696839.6708234121,
+          "revenue": 5764112.77094098,
+          "cost": 4040912.3980961395,
+          "weekly_profit": 1723200.3728448404,
+          "margin_pct": 29.9,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 40
+        },
+        {
+          "id": "asia_svc_759",
+          "ports": [
+            "EGPSD",
+            "HKHKG"
+          ],
+          "load": 4234.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1225000.0,
+          "fuel_cost": 1611281.8181818181,
+          "port_cost": 829392.2712790864,
+          "revenue": 3861682.0140544493,
+          "cost": 3665674.0894609047,
+          "weekly_profit": 196007.92459354457,
+          "margin_pct": 5.08,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 35
+        },
+        {
+          "id": "asia_svc_768",
+          "ports": [
+            "CNYTN",
+            "EGPSD"
+          ],
+          "load": 4224.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1225000.0,
+          "fuel_cost": 1612527.272727273,
+          "port_cost": 722478.680871361,
+          "revenue": 4267414.05544153,
+          "cost": 3560005.953598634,
+          "weekly_profit": 707408.1018428965,
+          "margin_pct": 16.58,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 35
+        },
+        {
+          "id": "asia_svc_778",
+          "ports": [
+            "CNSHA",
+            "EGPSD"
+          ],
+          "load": 4850.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1800590.9090909094,
+          "port_cost": 752812.7107350652,
+          "revenue": 4538955.488469532,
+          "cost": 4023403.619825974,
+          "weekly_profit": 515551.86864355765,
+          "margin_pct": 11.36,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 39
+        },
+        {
+          "id": "asia_svc_784",
+          "ports": [
+            "EGPSD",
+            "JPYOK"
+          ],
+          "load": 5362.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1470000.0,
+          "fuel_cost": 1967232.7272727275,
+          "port_cost": 784939.7600608441,
+          "revenue": 4842075.529474642,
+          "cost": 4222172.487333572,
+          "weekly_profit": 619903.0421410706,
+          "margin_pct": 12.8,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 6,
+          "cycle_time_days": 42
+        },
+        {
+          "id": "asia_svc_151",
+          "ports": [
+            "CNYTN",
+            "HKHKG"
+          ],
+          "load": 808.0,
+          "capacity": 800.0,
+          "vessel_class": "Feeder_800",
+          "vessel_cost": 56000.0,
+          "fuel_cost": 3423.2142857142853,
+          "port_cost": 115719.98197893382,
+          "revenue": 147653.90434247238,
+          "cost": 175143.1962646481,
+          "weekly_profit": -27489.291922175733,
+          "margin_pct": -18.62,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 3
+        },
+        {
+          "id": "asia_svc_199",
+          "ports": [
+            "CNYTN",
+            "TWKHH"
+          ],
+          "load": 530.0,
+          "capacity": 800.0,
+          "vessel_class": "Feeder_800",
+          "vessel_cost": 56000.0,
+          "fuel_cost": 32371.07142857143,
+          "port_cost": 46384.644503559975,
+          "revenue": 120782.30420154918,
+          "cost": 134755.7159321314,
+          "weekly_profit": -13973.411730582215,
+          "margin_pct": -11.57,
+          "region": "Asia",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 5
+        },
+        {
+          "id": "europe_svc_001",
+          "ports": [
+            "DEBRV",
+            "ECGYE"
+          ],
+          "load": 1556.0,
+          "capacity": 2400.0,
+          "vessel_class": "Panamax_2400",
+          "vessel_cost": 735000.0,
+          "fuel_cost": 1062699.375,
+          "port_cost": 325559.0,
+          "revenue": 2128860.0,
+          "cost": 2123258.375,
+          "weekly_profit": 5601.625,
+          "margin_pct": 0.26,
+          "region": "Europe",
+          "frequency_per_week": 1,
+          "vessels": 5,
+          "cycle_time_days": 33
+        },
+        {
+          "id": "americas_svc_598",
+          "ports": [
+            "DEBRV",
+            "EGPSD"
+          ],
+          "load": 10694.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1329893.8235294118,
+          "port_cost": 836383.5997107914,
+          "revenue": 4524832.679967358,
+          "cost": 3321277.4232402034,
+          "weekly_profit": 1203555.2567271544,
+          "margin_pct": 26.6,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 20
+        },
+        {
+          "id": "americas_svc_606",
+          "ports": [
+            "EGPSD",
+            "NLRTM"
+          ],
+          "load": 8930.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 1155000.0,
+          "fuel_cost": 1254127.0588235294,
+          "port_cost": 658837.7596511174,
+          "revenue": 3572170.599297237,
+          "cost": 3067964.818474647,
+          "weekly_profit": 504205.78082259,
+          "margin_pct": 14.11,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 3,
+          "cycle_time_days": 19
+        },
+        {
+          "id": "americas_svc_619",
+          "ports": [
+            "EGPSD",
+            "ITGIT"
+          ],
+          "load": 3730.0,
+          "capacity": 7500.0,
+          "vessel_class": "Super_panamax",
+          "vessel_cost": 385000.0,
+          "fuel_cost": 369932.64705882355,
+          "port_cost": 150482.92038582888,
+          "revenue": 569353.5109531067,
+          "cost": 905415.5674446526,
+          "weekly_profit": -336062.05649154587,
+          "margin_pct": -59.03,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 1,
+          "cycle_time_days": 7
+        }
+      ],
+      "candidate_quality": {
+        "services_deployed": 11,
+        "satisfied_demand": 27982.0,
+        "unserved_demand": 248464.80000000002,
+        "negative_profit_regions": 2,
+        "constraint_violations": 0,
+        "conflict_count": 0
+      },
+      "network_ledger": {
+        "verified": true,
+        "status": "feasible",
+        "iteration": 2,
+        "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+        "weekly_usd": {
+          "revenue": 34337892.85714286,
+          "vessel_cost": 10402000.0,
+          "fuel_cost": 12918152.644671505,
+          "port_call_fixed_cost": 157459.0,
+          "handling_cost": 4543621.0,
+          "transshipment_cost": 819519.0,
+          "port_variable_cost": 399232.0,
+          "total_operating_cost": 29239983.644671507,
+          "operating_profit": 5097909.212471351,
+          "profit_margin_on_revenue": 0.14846307645260476
+        },
+        "demand_teu_per_week": {
+          "total": 276446.80000000005,
+          "served": 27982.0,
+          "unserved": 248464.80000000005,
+          "coverage_pct": 10.122019860602473
+        },
+        "fleet_by_class": {
+          "Feeder_450": {
+            "used": 0,
+            "available": 24
+          },
+          "Feeder_800": {
+            "used": 2,
+            "available": 29
+          },
+          "Panamax_1200": {
+            "used": 0,
+            "available": 68
+          },
+          "Panamax_2400": {
+            "used": 5,
+            "available": 74
+          },
+          "Post_panamax": {
+            "used": 28,
+            "available": 58
+          },
+          "Super_panamax": {
+            "used": 7,
+            "available": 10
+          }
+        },
+        "services": {
+          "candidates_offered": 1097,
+          "candidates_modelled": 1097,
+          "candidates_rejected": 0,
+          "operated": 11
+        },
+        "reconciliation": {
+          "milp_profit_before_penalty": 5097909.212471351,
+          "ledger_operating_profit": 5097909.212471351,
+          "difference": 0.0,
+          "relative_difference": 0.0,
+          "reconciled": true,
+          "relaxation_upper_bound": 48617643.89981034,
+          "services_in_relaxation": 1096,
+          "services_in_integer_problem": 429,
+          "unserved_penalty_per_teu": 0.0,
+          "runtime_sec": 30.786
+        },
+        "optimality": {
+          "milp_status": "feasible",
+          "relaxation_upper_bound_usd_per_week": 48617643.89981034,
+          "gap_to_bound_usd_per_week": 43519734.687338986,
+          "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+        },
+        "path_model": {
+          "od_total": 1764,
+          "od_with_direct": 1189,
+          "od_transfer_only": 404,
+          "od_without_path": 171,
+          "od_without_path_time_limit": 171,
+          "od_without_path_no_connection": 0,
+          "od_skipped_missing_port_record": 0,
+          "paths_built": 12638,
+          "paths_dropped_by_cap": 55434,
+          "paths_dropped_by_time_limit": 819158,
+          "max_paths_per_od": 10
+        },
+        "violations": [],
+        "assumptions": {
+          "port_stay_hours": 24.0,
+          "transshipment_min_hours": 48.0,
+          "transfer_wait_days": 3.5,
+          "bunker_price_usd_per_t": 600.0,
+          "speed_factor": 1.0,
+          "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+          "sailing_speed": "class designSpeed (only speed with a source consumption)",
+          "max_transfers_per_od": 1,
+          "capacity_unit": {
+            "status": "provisional",
+            "internal_unit": "TEU",
+            "source_column": "Capacity FFE",
+            "capacity_feasibility_is_conditional": true
+          },
+          "transit_time_unit": "TransitTime column read as days (unverified unit)"
+        },
+        "runtime_sec": 30.79
+      }
+    }
+  ],
+  "iteration_selection": {
+    "candidate_iterations": [
+      0,
+      1,
+      2
+    ],
+    "pareto_optimal_iterations": [
+      0,
+      1,
+      2
+    ],
+    "selected_iteration": 2,
+    "selection_method": "deterministic_multi_objective",
+    "confidence": 0.0,
+    "reasoning": "Deterministic multi-objective policy selected iteration 2 using active objective weights {'weekly_profit': 0.6, 'global_demand_weighted_coverage': 0.25, 'operating_cost': 0.15} and Pareto analysis.",
+    "fallback_used": false,
+    "llm_selection": null,
+    "scorecards": [
+      {
+        "iteration": 0,
+        "status": "completed",
+        "selection_status": "candidate",
+        "weekly_profit": 2423115.7332887696,
+        "annual_profit": 126002018.13101602,
+        "operating_cost": 6251000.0,
+        "total_cost": 17130964.26671123,
+        "profit_margin_pct": 27.94,
+        "average_regional_coverage": 4.2917,
+        "global_demand_weighted_coverage": 5.1308,
+        "satisfied_demand": 14184.0,
+        "unserved_demand": 262262.80000000005,
+        "services_deployed": 6,
+        "convergence_score": 0.687,
+        "negative_profit_regions": 2,
+        "coverage_variance": 4.602214430819468,
+        "constraint_violations": 0,
+        "conflict_count": 0,
+        "weights_used": {
+          "profit_weight": 0.6,
+          "coverage_weight": 0.25,
+          "cost_weight": 0.15
+        },
+        "profit_rank": 3,
+        "coverage_rank": 3,
+        "cost_rank": 1,
+        "margin_rank": 2,
+        "pareto_optimal": true,
+        "dominated_by": [],
+        "overall_candidate_score": 0.15
+      },
+      {
+        "iteration": 1,
+        "status": "completed",
+        "selection_status": "candidate",
+        "weekly_profit": 3124834.8304367196,
+        "annual_profit": 162491411.18270943,
+        "operating_cost": 10297000.0,
+        "total_cost": 28729017.55051566,
+        "profit_margin_pct": 23.28,
+        "average_regional_coverage": 7.9115,
+        "global_demand_weighted_coverage": 9.3761,
+        "satisfied_demand": 25920.0,
+        "unserved_demand": 250526.80000000002,
+        "services_deployed": 10,
+        "convergence_score": 0.704,
+        "negative_profit_regions": 2,
+        "coverage_variance": 8.529397020601456,
+        "constraint_violations": 0,
+        "conflict_count": 0,
+        "weights_used": {
+          "profit_weight": 0.5709,
+          "coverage_weight": 0.3231,
+          "cost_weight": 0.106
+        },
+        "profit_rank": 2,
+        "coverage_rank": 2,
+        "cost_rank": 2,
+        "margin_rank": 3,
+        "pareto_optimal": true,
+        "dominated_by": [],
+        "overall_candidate_score": 0.373841
+      },
+      {
+        "iteration": 2,
+        "status": "completed",
+        "selection_status": "candidate",
+        "weekly_profit": 5097909.212471353,
+        "annual_profit": 265091279.04851034,
+        "operating_cost": 10402000.0,
+        "total_cost": 29239983.644671507,
+        "profit_margin_pct": 32.89,
+        "average_regional_coverage": 8.3581,
+        "global_demand_weighted_coverage": 10.122,
+        "satisfied_demand": 27982.0,
+        "unserved_demand": 248464.80000000002,
+        "services_deployed": 11,
+        "convergence_score": 0.706,
+        "negative_profit_regions": 2,
+        "coverage_variance": 9.989097978065173,
+        "constraint_violations": 0,
+        "conflict_count": 0,
+        "weights_used": {
+          "profit_weight": 0.5682,
+          "coverage_weight": 0.3258,
+          "cost_weight": 0.106
+        },
+        "profit_rank": 1,
+        "coverage_rank": 1,
+        "cost_rank": 3,
+        "margin_rank": 1,
+        "pareto_optimal": true,
+        "dominated_by": [],
+        "overall_candidate_score": 0.85
+      }
+    ],
+    "llm_actuation": {
+      "component": "iteration_selector",
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "role": "iteration_selector",
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "fallback_uses": 1,
+      "cache_hits": 0,
+      "error_429": 1,
+      "error_timeout": 0,
+      "error_connection": 0,
+      "error_auth": 0,
+      "error_invalid_model": 0,
+      "error_invalid_json": 0,
+      "error_unknown": 0,
+      "latency_sec": 0.0,
+      "total_latency_sec": 0.0,
+      "decision_source": "rule-based",
+      "decision_consumed": true,
+      "ai_generated": false,
+      "notes": ""
+    }
+  },
+  "best_iteration": 2,
+  "final_selected_iteration": 2,
+  "health_status": {
+    "status": "completed",
+    "runtime_seconds": 143.58,
+    "iterations": 2,
+    "current_region": null,
+    "regions_completed": [
+      "regional_asia",
+      "regional_europe",
+      "regional_americas",
+      "regional_asia",
+      "regional_europe",
+      "regional_americas",
+      "regional_asia",
+      "regional_europe",
+      "regional_americas"
+    ],
+    "regions_failed": [],
+    "last_failure": null,
+    "success_rate": 1.0
+  },
+  "consensus_result": {
+    "final_weight_adjustments": {
+      "profit_weight": 0.5664,
+      "coverage_weight": 0.3276,
+      "cost_weight": 0.106
+    },
+    "final_archetype_params": {
+      "archetype_mix": {
+        "direct_ratio": 0.5117,
+        "hub_loop_ratio": 0.1668,
+        "feeder_ratio": 0.2515,
+        "trunk_ratio": 0.07
+      },
+      "vessel_bias": "balanced",
+      "hub_focus": [
+        "CNSHA"
+      ],
+      "notes": "reconciled vote distribution: balanced=0.64; small=0.36"
+    },
+    "confidence_score": 1.0,
+    "conflicts_resolved": [],
+    "conflicts_remaining": [],
+    "notes": "confidence=1.0000; conflicts_detected=0; conflicts_remaining=0; all_conflicts_resolved"
+  },
+  "shared_context": {
+    "global_objectives": {
+      "profit_weight": 0.5664,
+      "coverage_weight": 0.3276,
+      "cost_weight": 0.106,
+      "iteration": 2,
+      "coverage_target": 70.0,
+      "profit_floor": 0.0,
+      "max_iterations": 3,
+      "current_coverage": 8.35808709115368,
+      "current_profit": 5097909.212471353,
+      "convergence_score": 0.706
+    },
+    "regional_priorities": {
+      "asia": {
+        "coverage_priority": 0.13118369031071067,
+        "profit_priority": 0.8688163096892894,
+        "hub_focus": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN"
+        ],
+        "min_service_margin": 0.292,
+        "vessel_bias": "balanced",
+        "current_coverage": 13.118369031071067,
+        "current_profit": 8275558.116883118
+      },
+      "europe": {
+        "coverage_priority": 0.1,
+        "profit_priority": 0.9687072894699411,
+        "hub_focus": [
+          "USCHS",
+          "BRSSZ",
+          "USLAX"
+        ],
+        "min_service_margin": 0.01,
+        "vessel_bias": "balanced",
+        "current_coverage": 3.1292710530058936,
+        "current_profit": -28408.375
+      },
+      "americas": {
+        "coverage_priority": 0.1,
+        "profit_priority": 0.9117337881061591,
+        "hub_focus": [
+          "DEBRV",
+          "NLRTM",
+          "AEJEA"
+        ],
+        "min_service_margin": 0.01,
+        "vessel_bias": "balanced",
+        "current_coverage": 8.826621189384083,
+        "current_profit": -3149240.529411765
+      }
+    },
+    "service_archetype_plan": {
+      "direct_ratio": 0.6,
+      "hub_loop_ratio": 0.15,
+      "feeder_ratio": 0.2,
+      "trunk_ratio": 0.05,
+      "vessel_bias": "balanced"
+    },
+    "hub_strategy": {
+      "primary_hubs": [],
+      "recommended_hubs": {
+        "asia": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN"
+        ],
+        "europe": [
+          "USCHS",
+          "BRSSZ",
+          "USLAX"
+        ],
+        "americas": [
+          "DEBRV",
+          "NLRTM",
+          "AEJEA"
+        ]
+      },
+      "overlap_hubs": []
+    }
+  },
+  "maritime_intelligence": null,
+  "llm_runtime_metrics": {
+    "llm_calls": 6,
+    "coordinator_llm_calls": 3,
+    "coordinator_json_parse_success": 0,
+    "coordinator_validator_executed": 0,
+    "coordinator_fallback_count": 3,
+    "coordinator_ai_generated": false,
+    "servicegen_regions": 3,
+    "servicegen_ai_count": 0,
+    "servicegen_fallback_count": 3
+  },
+  "llm_runtime_aggregate": {
+    "providers_used": {
+      "groq": 22
+    },
+    "models_used": {
+      "qwen/qwen3.8-27b": 22
+    },
+    "coordinator": {
+      "coordinator_provider": "groq",
+      "coordinator_model": "qwen/qwen3.8-27b",
+      "coordinator_llm_attempts": 3,
+      "coordinator_llm_successes": 0,
+      "coordinator_llm_failures": 3,
+      "coordinator_429_count": 3,
+      "coordinator_fallback": true,
+      "coordinator_fallback_reason": "all_providers_failed",
+      "coordinator_llm_latency_sec": 0.0,
+      "coordinator_total_latency_sec": 0.0,
+      "coordinator_decision_source": "rule-based",
+      "coordinator_decision_consumed": true
+    },
+    "iteration_selector": {
+      "iteration_selector_provider": "groq",
+      "iteration_selector_model": "qwen/qwen3.8-27b",
+      "iteration_selector_llm_attempts": 1,
+      "iteration_selector_llm_latency_sec": 0.0,
+      "iteration_selector_fallback": true,
+      "iteration_selector_fallback_reason": "llm_invalid_or_unavailable",
+      "iteration_selected": 2,
+      "selection_source": "deterministic_multi_objective"
+    },
+    "service_generator": {
+      "service_generator_provider": "groq",
+      "service_generator_model": "qwen/qwen3.8-27b",
+      "service_generator_ai_attempts": 9,
+      "service_generator_ai_successes": 0,
+      "service_generator_fallbacks": 9,
+      "service_generator_decision_source": "llm",
+      "service_generator_decision_consumed": true
+    },
+    "provider_telemetry": {
+      "attempts": 10,
+      "successes": 5,
+      "failures": 5,
+      "fallback_uses": 37,
+      "cache_hits": 9,
+      "provider_switches": 0,
+      "circuit_breaker_events": 35,
+      "error_type_counts": {
+        "http_429": 5
+      },
+      "provider_call_counts": {
+        "groq": 42
+      },
+      "model_call_counts": {
+        "qwen/qwen3.8-27b": 42
+      },
+      "provider_order": [
+        "groq"
+      ],
+      "cache_size": 5,
+      "breakers": {
+        "groq/qwen/qwen3.8-27b": {
+          "state": "open",
+          "failure_count": 2,
+          "success_count": 5,
+          "cooldown_until": 1791662535.6951454,
+          "last_error_type": "http_429"
+        }
+      }
+    },
+    "actuation_ledger": {
+      "service_generator_svc_gen": {
+        "component": "service_generator_svc_gen",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "service_generator",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.0745,
+        "decision_source": "llm",
+        "decision_consumed": true,
+        "ai_generated": true,
+        "notes": ""
+      },
+      "regional_Europe": {
+        "component": "regional_Europe",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.3622,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "regional_Americas": {
+        "component": "regional_Americas",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.2817,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "regional_Asia": {
+        "component": "regional_Asia",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.4081,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "coordinator_iter_0": {
+        "component": "coordinator_iter_0",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "coordinator",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.0004,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "coordinator_iter_1": {
+        "component": "coordinator_iter_1",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "coordinator",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.0004,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "coordinator_iter_2": {
+        "component": "coordinator_iter_2",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "coordinator",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.0007,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "iteration_selector": {
+        "component": "iteration_selector",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "iteration_selector",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 1,
+        "cache_hits": 0,
+        "error_429": 1,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 0,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.0,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      }
+    }
+  },
+  "test_scorecard": {
+    "assertions_passed": 265,
+    "assertions_failed": 0,
+    "assertions_total": 265,
+    "warnings": 12,
+    "score": 100.0
+  }
+}

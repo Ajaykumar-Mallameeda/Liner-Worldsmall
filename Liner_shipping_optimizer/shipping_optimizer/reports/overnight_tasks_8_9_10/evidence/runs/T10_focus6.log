@@ -1,0 +1,44 @@
+........................................................................ [ 35%]
+....................................................F................... [ 70%]
+.........F.......FFF........................................             [100%]
+================================== FAILURES ===================================
+_ TestWorldSmallPool.test_long_loops_fall_back_to_a_class_with_enough_vessels _
+tests\test_service_feasibility.py:353: in test_long_loops_fall_back_to_a_class_with_enough_vessels
+    assert rep.class_fallbacks > 0
+E   AssertionError: assert 0 > 0
+E    +  where 0 = CandidateReport(capacity_unit_status='provisional', port_time_basis='assumed: LINERLIB benchmark documentation states ...icate_rotation_class=443, legacy_cycle_inconsistent=558, legacy_cycle_checked=603, rejected_samples=[], max_samples=25).class_fallbacks
+___________ TestGenerateServices.test_pool_size_changes_with_budget ___________
+tests\test_service_generator_activation.py:491: in test_pool_size_changes_with_budget
+    assert len(services_high) >= len(services_low), (
+E   AssertionError: High-budget pool (101) should be >= low-budget pool (108)
+E   assert 101 >= 108
+E    +  where 101 = len([Service(id='0', ports=['P011', 'P002'], capacity=4200.0, weekly_cost=245000.0, cycle_time=3, speed=16.5, fuel_cost=0,...l_cost=0, vessel_class='Post_panamax', distance_nm=200.0, required_vessels=1, capacity_unit_status='provisional'), ...])
+E    +  and   108 = len([Service(id='0', ports=['P011', 'P002'], capacity=4200.0, weekly_cost=245000.0, cycle_time=3, speed=16.5, fuel_cost=0,...l_cost=0, vessel_class='Post_panamax', distance_nm=200.0, required_vessels=1, capacity_unit_status='provisional'), ...])
+_______________ TestLoggingTags.test_ai_generated_on_llm_output _______________
+tests\test_service_generator_activation.py:605: in test_ai_generated_on_llm_output
+    assert "AI_GENERATED" in tags, f"AI_GENERATED not found in {tags}"
+E   AssertionError: AI_GENERATED not found in ['AI_VALIDATED']
+E   assert 'AI_GENERATED' in ['AI_VALIDATED']
+________________ TestLoggingTags.test_ai_applied_on_validation ________________
+tests\test_service_generator_activation.py:633: in test_ai_applied_on_validation
+    assert "AI_APPLIED" in tags, f"AI_APPLIED not found in {tags}"
+E   AssertionError: AI_APPLIED not found in ['AI_VALIDATED']
+E   assert 'AI_APPLIED' in ['AI_VALIDATED']
+_________________ TestLoggingTags.test_all_five_tags_in_flow __________________
+tests\test_service_generator_activation.py:662: in test_all_five_tags_in_flow
+    assert required in tags, f"Required tag {required} not found in {tags}"
+E   AssertionError: Required tag AI_GENERATED not found in ['AI_VALIDATED']
+E   assert 'AI_GENERATED' in ['AI_VALIDATED']
+============================== warnings summary ===============================
+..\..\..\..\..\..\..\..\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Lib\site-packages\pulp\apis\xpress_api.py:322
+  C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Lib\site-packages\pulp\apis\xpress_api.py:322: DeprecationWarning: invalid escape sequence '\ '
+    """
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_service_feasibility.py::TestWorldSmallPool::test_long_loops_fall_back_to_a_class_with_enough_vessels
+FAILED tests/test_service_generator_activation.py::TestGenerateServices::test_pool_size_changes_with_budget
+FAILED tests/test_service_generator_activation.py::TestLoggingTags::test_ai_generated_on_llm_output
+FAILED tests/test_service_generator_activation.py::TestLoggingTags::test_ai_applied_on_validation
+FAILED tests/test_service_generator_activation.py::TestLoggingTags::test_all_five_tags_in_flow
+5 failed, 199 passed, 1 warning in 52.88s

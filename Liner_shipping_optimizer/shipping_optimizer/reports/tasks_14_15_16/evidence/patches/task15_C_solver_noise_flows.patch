@@ -1,0 +1,62 @@
+diff --git a/src/network/network_milp.py b/src/network/network_milp.py
+--- a/src/network/network_milp.py
++++ b/src/network/network_milp.py
+@@ -116,6 +116,13 @@
+             sol.objective_components.get("vessel_cost", 0.0) - slack_cost)
+         sol.objective_value += slack_cost
+ 
++
++#: A routed quantity at or below this (TEU/week) is solver feasibility noise, not a flow.
++#: HiGHS / CBC accept constraint violations of ~1e-7..1e-9, so a path through a service that
++#: is not operated (``q <= capacity * f`` with ``f = 0``) can carry ~1e-9 TEU; reporting it
++#: would present a flow on an inactive service.  A quantity above this on an inactive service
++#: is NOT dropped: the independent ledger flags it.
++FLOW_NOISE_TEU = 1e-6
+ 
+ #: relative MIP gap at which HiGHS's own optimality status is accepted as "optimal" (its
+ #: default ``mip_rel_gap``); the gap actually reached is always reported in ``mip_gap``
+@@ -457,7 +464,7 @@
+     sol.vessels = {si: int(round(n[si].varValue or 0)) for si in res["active"]}
+     for (di, k), v in q.items():
+         val = float(v.varValue or 0.0)
+-        if val > 1e-9:
++        if val > FLOW_NOISE_TEU:
+             sol.flows.append((di, k, val))
+     sol.unserved = {di: float(u[di].varValue or 0.0) for di in u}
+     t = res["terms"]
+diff --git a/tests/test_milp_backend.py b/tests/test_milp_backend.py
+--- a/tests/test_milp_backend.py
++++ b/tests/test_milp_backend.py
+@@ -120,6 +120,32 @@
+         self._fake(monkeypatch, dict(x=None, status=2, message="infeasible"))
+         assert _plan().status == "infeasible"
+ 
++    def test_solver_noise_is_not_reported_as_a_flow_on_an_inactive_service(self, monkeypatch):
++        """Gate finding (orchestrator run T15_orch_highs_run3, 341/342): HiGHS returned
++        ~1e-9 TEU on paths through services with frequency 0 (constraint tolerance); the
++        test's independent recomputation rightly flagged ``flow_on_inactive_service``.
++        Noise below FLOW_NOISE_TEU must not become a plan flow."""
++        import numpy as np
++        import scipy.optimize as so
++        real = so.milp
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++
++        def noisy(c, **kw):
++            r = real(c, **kw)
++            x = np.where(np.abs(r.x) < 1e-12, 1.5e-9, r.x)       # every zero becomes 1.5e-9
++            return SimpleNamespace(x=x, status=r.status, message=str(r.message),
++                                   mip_gap=getattr(r, "mip_gap", None),
++                                   mip_dual_bound=getattr(r, "mip_dual_bound", None), fun=r.fun)
++        monkeypatch.setattr(so, "milp", noisy)
++        p = _plan()
++        assert p.ok and p.ledger.valid and not p.ledger.violations
++        assert all(teu > 1e-6 for _, _, teu in p.solution.flows)   # no noise-level flow
++        assert nm.FLOW_NOISE_TEU == 1e-6
++        operated = {m.service_id for m in p.models
++                    if p.solution.frequencies.get(p.models.index(m), 0) > 0}
++        assert operated                                          # something is operated
++        assert p.reconciliation["reconciled"] is True
++
+     def test_exception_is_a_solver_error(self, monkeypatch):
+         import scipy.optimize as so
+         monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")

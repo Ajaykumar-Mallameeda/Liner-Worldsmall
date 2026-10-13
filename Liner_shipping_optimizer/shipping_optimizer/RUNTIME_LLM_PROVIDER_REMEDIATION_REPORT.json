@@ -1,0 +1,100 @@
+{
+  "report_type": "runtime_llm_provider_remediation",
+  "report_date": "2026-08-14",
+  "execution_spec": "EXECUTION 1 — Multi-provider LLM resilience + runtime remediation",
+  "forensic_baseline": {
+    "source": "RUNTIME_PERFORMANCE_FALLBACK_FORENSIC_AUDIT.json",
+    "total_runtime_sec": 970.42,
+    "iterations": 3,
+    "llm_attempts": 219,
+    "llm_failures": 186,
+    "failure_rate": 0.849,
+    "primary_provider": "opencode",
+    "primary_model": "opencode/deepseek-v4-flash-free",
+    "error_signature": "HTTP 429 / FreeUsageLimitError",
+    "ai_consumption": {
+      "coordinator_ai_generated_rate": 0.0,
+      "service_generator_ai_generated_rate": 0.0,
+      "iteration_selector_ai_generated_rate": 0.0,
+      "regional_agents_ai_generated_rate": 0.0
+    }
+  },
+  "post_remediation_benchmark": {
+    "source": "RUNTIME_PIPELINE_BENCHMARK.json",
+    "total_runtime_sec": 318.87,
+    "iterations": 3,
+    "llm_attempts": 35,
+    "llm_successes": 35,
+    "llm_failures": 0,
+    "failure_rate": 0.0,
+    "fallback_uses": 0,
+    "cache_hits": 33,
+    "provider_switches": 0,
+    "circuit_breaker_events": 0,
+    "primary_provider_used": "groq",
+    "ai_consumption": {
+      "coordinator_ai_generated_rate": 1.0,
+      "service_generator_ai_generated_rate": 1.0,
+      "iteration_selector_ai_generated_rate": 1.0
+    }
+  },
+  "comparison": {
+    "runtime_speedup_x": 3.04,
+    "runtime_reduction_pct": 67.1,
+    "failure_rate_change": {"from": 0.849, "to": 0.0, "improvement": "absolute -84.9pp"},
+    "ai_consumption_change": {"from": "0% across all components", "to": "100% AI across coordinator, service_generator, iteration_selector"},
+    "cache_hit_change": {"from": 37, "to": 33, "note": "smaller denominator because total LLM calls dropped from 219 to 35 — every prompt that survived to completion was AI, not retry storms"},
+    "fallback_uses_change": {"from": 17, "to": 0}
+  },
+  "remediation": {
+    "architecture": "Provider-independent router with Groq, OpenRouter, Google Gemini",
+    "ordering_default": "groq,openrouter,google",
+    "circuit_breaker": "per-(provider, model), HALF_OPEN probe after cooldown",
+    "policy": {
+      "HTTP_429": "immediate failover, 60s cooldown",
+      "AUTH": "skip provider, 600s cooldown",
+      "INVALID_MODEL": "skip provider, 600s cooldown",
+      "TIMEOUT": "1 retry within provider, then failover",
+      "CONNECTION": "1 retry within provider, then failover",
+      "INVALID_JSON": "1 retry within provider, then failover"
+    },
+    "cache": "MD5(model,system,user_message) -> LLMResponse",
+    "deterministic_fallback_text": "Service temporarily unavailable. Using default optimization parameters.",
+    "actuation_ledger": "tracks per-component provider/model/role/attempts/successes/fallback_uses/cache_hits/error_type_counts/latency_sec/decision_source/ai_generated"
+  },
+  "validation": {
+    "phase_n_unit_tests": "tests/test_provider_system/ - 32 passed / 2 documented behavioural mismatches",
+    "phase_q_failover_scenarios": "6/6 passed (RUNTIME_FAILOVER_TEST_REPORT.json)",
+    "phase_p_pipeline_benchmark": "RUNTIME_PIPELINE_BENCHMARK.json - 318.87s total, 0 failures, 100% AI consumption",
+    "provider_health_probe": "see PROVIDER_HEALTH_REPORT.json",
+    "model_validation_method": "Direct curl against each provider's /models and /chat/completions endpoint before configuring .env; the configured model is verified against the actual account at runtime via the health probe."
+  },
+  "constraint_preservation": {
+    "MIN_ITERATIONS": 3,
+    "MAX_ITERATIONS": 3,
+    "GA_POPULATION_SIZE": 80,
+    "GA_GENERATIONS": 120,
+    "MILP_TIME_LIMIT": 120,
+    "no_changes_to": [
+      "GA algorithm",
+      "GA population size",
+      "GA generations",
+      "MILP formulation",
+      "MILP objective",
+      "scoring formulas",
+      "optimization constraints",
+      "vessel/port/demand/distance datasets",
+      "regional parallelism / executor architecture",
+      "iteration count / semantics",
+      "dashboard behaviour",
+      "routing math"
+    ]
+  },
+  "deliverables": {
+    "report_md": "RUNTIME_LLM_PROVIDER_REMEDIATION_REPORT.md",
+    "report_json": "RUNTIME_LLM_PROVIDER_REMEDIATION_REPORT.json",
+    "health_report": "PROVIDER_HEALTH_REPORT.json",
+    "failover_test_report": "RUNTIME_FAILOVER_TEST_REPORT.json",
+    "pipeline_benchmark": "RUNTIME_PIPELINE_BENCHMARK.json"
+  }
+}

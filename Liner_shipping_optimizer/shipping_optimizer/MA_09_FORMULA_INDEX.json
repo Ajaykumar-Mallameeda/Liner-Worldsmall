@@ -1,0 +1,469 @@
+{
+  "meta": {
+    "artifact": "MA_09_FORMULA_INDEX.json",
+    "system": "AI Vessel Routing System - Multi-Agent Optimizer",
+    "generated": "2026-10-05",
+    "audit_mode": "forensic, evidence-driven, read-only",
+    "repo_root": "C:/Users/WINDOWS/Downloads/Liner_shipping_optimizer/shipping_optimizer",
+    "read_only": true,
+    "files_modified_by_audit": 0
+  },
+  "verdict_legend": {
+    "correct": "Formula is dimensionally sound and correctly applied",
+    "correct_input_defective": "Formula sound, but its input carries an upstream defect",
+    "defect": "Verified implementation defect",
+    "dead": "Code exists but never executes or never binds",
+    "ambiguous": "Intent undocumented; may be a formulation choice"
+  },
+  "loading": [
+    {
+      "id": "F-01",
+      "formula": "weekly_teu = FFEPerWeek * k",
+      "location": "src/data/network_loader.py:106",
+      "unit_actual": "FFE*k/week",
+      "unit_declared": "TEU/week",
+      "verdict": "correct",
+      "note": "Volume scaling by k is the correct FFE->TEU direction"
+    },
+    {
+      "id": "F-02",
+      "formula": "revenue_per_teu = Revenue_1 * k",
+      "location": "src/data/network_loader.py:109",
+      "unit_actual": "$/FFE * k",
+      "unit_declared": "$/TEU",
+      "verdict": "defect",
+      "severity": "CRITICAL",
+      "finding_ids": ["MA-02-01", "MA-03-01"],
+      "correct_formula": "revenue_per_teu = Revenue_1 / k",
+      "measured_inflation": 4.001773,
+      "note": "Revenue rate scaled by k instead of divided by k. Combined with F-01 the product carries k^2. Reproduced by direct arithmetic; two independent computations agree to 10 significant figures."
+    },
+    {
+      "id": "F-03",
+      "formula": "handling_cost = CostPerFULL * 2.0",
+      "location": "src/data/network_loader.py:45",
+      "verdict": "correct",
+      "note": "Per-FFE rate -> per-TEU rate. Verified against all 47 WorldSmall ports."
+    },
+    {
+      "id": "F-04",
+      "formula": "transshipment_cost = CostPerFULLTrnsf * 2.0",
+      "location": "src/data/network_loader.py:48",
+      "verdict": "correct"
+    },
+    {
+      "id": "F-05",
+      "formula": "variable_port_call_cost = PortCallCostPerFFE * 2.0",
+      "location": "src/data/network_loader.py:49",
+      "verdict": "correct"
+    },
+    {
+      "id": "F-06",
+      "formula": "port_call_cost = PortCallCostFixed * 1.0",
+      "location": "src/data/network_loader.py:47",
+      "verdict": "correct",
+      "note": "Only port column not scaled; correctly, since it is per call"
+    },
+    {
+      "id": "F-07",
+      "formula": "d.weekly_teu *= DEMAND_SCALE (6)",
+      "location": "src/data/network_loader.py:275-277",
+      "verdict": "defect",
+      "finding_ids": ["MA-02-04"],
+      "note": "Applied unconditionally on the JSON path. Docstring claims a WorldSmall exemption that does not exist in code. Revenue is NOT scaled, creating a 6x revenue/cost skew."
+    },
+    {
+      "id": "F-08",
+      "formula": "vessels_required = ceil(cycle_time * freq / 7)",
+      "location": "src/optimization/hierarchical_ga.py:177; src/optimization/frequency_ga.py:133",
+      "verdict": "correct",
+      "note": "Arithmetic is unit-clean. The defect is scope, not formula: each region is checked against the full unpartitioned fleet."
+    }
+  ],
+  "service_ga": [
+    {
+      "id": "F-09",
+      "formula": "avg_rev_per_teu = sum(d.weekly_teu * d.revenue_per_teu) / total_demand",
+      "location": "src/optimization/service_ga.py:146-148",
+      "verdict": "correct_input_defective",
+      "measured_value": 3834.1919,
+      "correct_value": 958.1232,
+      "inflation": 4.001773,
+      "note": "Formula is a correct weighted mean; its input revenue_per_teu carries the k^2 defect."
+    },
+    {
+      "id": "F-10",
+      "formula": "effective_capacity = svc.capacity * (7 / cycle_time)",
+      "location": "src/optimization/service_ga.py:235",
+      "verdict": "correct"
+    },
+    {
+      "id": "F-11",
+      "formula": "served = min(effective_capacity, direct)",
+      "location": "src/optimization/service_ga.py:236",
+      "verdict": "defect",
+      "finding_ids": ["MA-03-03"],
+      "note": "service_direct_demand[i] credits each lane to EVERY service covering both endpoints (service_ga.py:134-138). Implied served volume 296,310 TEU/wk vs 276,446.80 true = 1.0719x over-count."
+    },
+    {
+      "id": "F-12",
+      "formula": "yield_factor = 0.6 + 0.4 * (served / effective_capacity)",
+      "location": "src/optimization/service_ga.py:242",
+      "verdict": "correct",
+      "note": "Range (0.6, 1.0]. It is a utilization discount, correctly implemented. Named misleadingly."
+    },
+    {
+      "id": "F-13",
+      "formula": "revenue += served * avg_rev_per_teu * yield_factor",
+      "location": "src/optimization/service_ga.py:243",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-03-02"],
+      "note": "Applies ONE network-average rate to all lanes. Lane profitability differences never enter service selection."
+    },
+    {
+      "id": "F-14",
+      "formula": "port_cost += served * handling_cost + fixed_cost + served * variable_cost",
+      "location": "src/optimization/service_ga.py:275",
+      "verdict": "defect",
+      "finding_ids": ["MA-04-04", "MA-04-05"],
+      "note": "served is the service-total load, applied once per port in the loop. Per-TEU rates should multiply the load at THAT port."
+    },
+    {
+      "id": "F-15",
+      "formula": "transship_cost = hub_ratio * satisfied_demand * tc_per_teu",
+      "location": "src/optimization/service_ga.py:331",
+      "verdict": "ambiguous",
+      "note": "hub_ratio derived from num_hubs = 0.1 * num_ports, clamped to [0.3, 0.7]. Heuristic, undocumented."
+    },
+    {
+      "id": "F-16",
+      "formula": "total_capacity = sum(svc.capacity); overcap = beta * unused_cap * (opex/total_capacity)",
+      "location": "src/optimization/service_ga.py:336-338",
+      "verdict": "defect",
+      "finding_ids": ["MA-06-11"],
+      "note": "total_capacity OMITS the 7/cycle_time factor that F-10 applies to served. Overcapacity penalty is computed on capacity that does not exist."
+    },
+    {
+      "id": "F-17",
+      "formula": "profit = revenue - operating - fuel - transship - port - unserved_pen - overcap_pen - alignment_pen - neg_svc_pen",
+      "location": "src/optimization/service_ga.py:340-350",
+      "verdict": "correct",
+      "note": "Eight terms, all correctly signed."
+    },
+    {
+      "id": "F-18",
+      "formula": "fitness = sum(weight * value) for all components incl. cost",
+      "location": "src/optimization/normalization.py:147-165; weights at :114-118",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-01-04", "MA-06-08"],
+      "effective_weights": {"profit": 10.0, "coverage": 0.01, "cost": 0.1},
+      "note": "No sign handling. Operating cost carries a POSITIVE coefficient, so the GA rewards higher operating cost."
+    },
+    {
+      "id": "F-19",
+      "formula": "fitness = w_profit*profit + w_coverage*coverage - w_cost*cost",
+      "location": "src/optimization/service_ga.py:377-379",
+      "verdict": "dead",
+      "finding_ids": ["MA-01-05", "MA-06-19"],
+      "note": "Sign is correct but guarded by objective_mode=='legacy'; production mode is 'profit_first'. CONFIG weights (0.60/0.25/0.15) reach service_ga.w_* and are consumed ONLY here."
+    },
+    {
+      "id": "F-20",
+      "formula": "service_cost = weekly_cost + service_fuel + (served * port_hc if 'port_hc' in locals() else 0)",
+      "location": "src/optimization/service_ga.py:295",
+      "verdict": "defect",
+      "finding_ids": ["MA-04-05", "MA-06-12"],
+      "note": "port_hc is a stale loop variable retaining the LAST port processed. Drives the negative-margin penalty ladder against one arbitrary port's rate."
+    },
+    {
+      "id": "F-21",
+      "formula": "fuel computed twice per service",
+      "location": "src/optimization/service_ga.py:161-166 and :287-293",
+      "verdict": "defect",
+      "finding_ids": ["MA-06-13"],
+      "note": "Identical inputs and identical function. Pure waste; the two values can never be reconciled if either changes."
+    }
+  ],
+  "frequency_ga": [
+    {
+      "id": "F-22",
+      "formula": "avg_rev_per_teu = self.problem.demands[0].revenue_per_teu",
+      "location": "src/optimization/frequency_ga.py:200",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-03-04", "MA-06-10"],
+      "note": "Named avg_ but assigns a single arbitrary lane's rate. service_ga.py:146 computes the true average in another module; it is not shared."
+    },
+    {
+      "id": "F-23",
+      "formula": "fitness = revenue - operating_cost - transship_cost - overcap_penalty - port_cost",
+      "location": "src/optimization/frequency_ga.py:211",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-04-03", "MA-06-09"],
+      "note": "fuel_cost is computed at :161-166 then OMITTED from the return. The frequency optimizer is blind to the dominant cost term."
+    },
+    {
+      "id": "F-24",
+      "formula": "cap = svc.capacity * f * (7 / cycle_time)",
+      "location": "src/optimization/frequency_ga.py:155",
+      "verdict": "correct"
+    },
+    {
+      "id": "F-25",
+      "formula": "vessels_used = ceil(cycle_time * f / 7); reject if > fleet_size (returns -1e9)",
+      "location": "src/optimization/frequency_ga.py:128-138",
+      "verdict": "correct",
+      "note": "This fleet check WORKS. fleet_size resolves to problem.fleet.total_vessels = 263 on the production path. Recorded to correct an earlier working assumption."
+    },
+    {
+      "id": "F-26",
+      "formula": "transship_cost = hub_ratio * satisfied * avg_rev_per_teu * 0.05",
+      "location": "src/optimization/frequency_ga.py:201",
+      "verdict": "ambiguous",
+      "note": "Hardcoded 0.05 factor, undocumented"
+    }
+  ],
+  "hub_milp": [
+    {
+      "id": "F-27",
+      "formula": "max Pi = REV - OPEX - FUEL - TRANS - PORT - alpha*sum(u) + COVBONUS",
+      "location": "src/optimization/hub_milp.py:358-373",
+      "verdict": "defect",
+      "severity": "CRITICAL",
+      "note": "Objective is not profit. See F-31 and F-37."
+    },
+    {
+      "id": "F-28",
+      "formula": "REV = sum_d sum_s r_d * x_ds + sum_d sum_(s1,s2) r_d * t_d,s1,s2",
+      "location": "src/optimization/hub_milp.py:294-300",
+      "verdict": "correct_input_defective",
+      "note": "Only lane-specific revenue model in the system. Inherits k^2 from F-02."
+    },
+    {
+      "id": "F-29",
+      "formula": "OPEX = sum_{s in A} svc.weekly_cost * max(1, round(freq[s]))",
+      "location": "src/optimization/hub_milp.py:304-309",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-06-20"],
+      "note": "Python CONSTANT, not an LP expression. Critically: sums over services_mask WITHOUT port filtering, so every cluster's MILP re-bills every active service. Measured inflation of reported operating_cost vs per-service detail: 1.311x (Asia), 1.968x (Europe), 1.365x (Americas)."
+    },
+    {
+      "id": "F-30",
+      "formula": "FUEL = sum_{s in A} calculate_weekly_fuel_cost(s.ports, ...) * max(1, round(freq[s]))",
+      "location": "src/optimization/hub_milp.py:312-322",
+      "verdict": "defect",
+      "severity": "CRITICAL",
+      "finding_ids": ["MA-04-01", "MA-04-02", "MA-06-21"],
+      "note": "Python CONSTANT. Same missing port filter as F-29 (measured 1.290x / 1.833x / 1.318x inflation). No fleet constraint bounds frequency. Reported total is 11.71x the entire 263-vessel fleet's physical maximum burn."
+    },
+    {
+      "id": "F-31",
+      "formula": "TRANS = sum_d tau(o_d) * t_d,s1,s2",
+      "location": "src/optimization/hub_milp.py:326-329; rate at :175-188",
+      "verdict": "defect",
+      "finding_ids": ["MA-06-05"],
+      "note": "Rate depends only on the demand lane's endpoints; the hub h actually used is ignored. Same rate regardless of routing."
+    },
+    {
+      "id": "F-32",
+      "formula": "PORT = sum_p [ h_p * sum(v) + sum(v * phi_p) + pi_p * sum_s f_s ]",
+      "location": "src/optimization/hub_milp.py:341-353",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-04-04", "MA-06-06"],
+      "note": "port_flow_direct[p].append(var) at :337 appends the SAME variable once per port on the route, so per-TEU handling+variable is charged once PER PORT. A 2-port service pays twice; a 7-port hub loop pays 7x. Hub loops list the hub twice (service_generator_agent.py:165), charging the hub 2x per TEU. Separately, transfer_flow vars are never added to port_flow_direct, so a transshipped TEU pays zero handling at any port."
+    },
+    {
+      "id": "F-33",
+      "formula": "COVBONUS = (w_coverage/w_profit) * (sum(x)+sum(t))/D_tot * abs(OPEX + 1)",
+      "location": "src/optimization/hub_milp.py:367-373",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-01-07", "MA-06-01"],
+      "note": "Multiplicative in operating cost. Raising cost raises the objective. Reduces to a linear per-TEU bonus lambda = (w_c/w_p)*(OPEX+1)/D_tot, which GROWS with service count - the model can buy coverage by inflating the service count."
+    },
+    {
+      "id": "F-34",
+      "formula": "prob += total_vessels_used <= self.fleet_size",
+      "location": "src/optimization/hub_milp.py:389",
+      "verdict": "defect",
+      "severity": "CRITICAL",
+      "finding_ids": ["MA-01-03", "MA-05-02", "MA-06-03"],
+      "note": "Both operands are Python ints, so this is a bool. Empirically verified against pulp 2.7.0: True case silently adds ZERO constraints; False case raises TypeError: A False object cannot be passed as a constraint. fleet_size hardcoded at 300 (hub_milp.py:61), never overridden - GA uses 263. A violation therefore CRASHES solve() and regional_agent.py:381-395 converts it to a zero-profit fallback region."
+    },
+    {
+      "id": "F-35",
+      "formula": "C1: sum_s x_ds + sum t_d,s1,s2 + u_d == D_d",
+      "location": "src/optimization/hub_milp.py:392-401",
+      "verdict": "correct",
+      "note": "Correct equality. Every TEU is shipped, transferred, or explicitly unserved. The one structurally sound part of the MILP."
+    },
+    {
+      "id": "F-36",
+      "formula": "C2: sum(x)+sum(t) >= min_coverage * D_tot",
+      "location": "src/optimization/hub_milp.py:403-404",
+      "verdict": "dead",
+      "note": "min_coverage defaults to 0.0 (hub_milp.py:56) AND regional_agent.py:31 passes MIN_COVERAGE_FLOOR = 0.0. Condition 'if self.min_coverage > 0' never true. Verified by grep across src/."
+    },
+    {
+      "id": "F-37",
+      "formula": "C3: sum x + sum t <= C_s * f_s * (7/cycle_time)",
+      "location": "src/optimization/hub_milp.py:406-419",
+      "verdict": "correct",
+      "note": "Correctly applies the same 7/cycle_time normalization as the revenue side, so capacity and demand are scaled consistently."
+    },
+    {
+      "id": "F-38",
+      "formula": "C4: sum(v) <= 50000 + 0.1 * demand_score_p",
+      "location": "src/optimization/hub_milp.py:117-120",
+      "verdict": "defect",
+      "note": "demand_score sums weekly_teu over BOTH origin and destination roles, double-counting. Binds only when score > 55,556. WorldSmall max = 39,722 (DEBRV). Zero ports qualify. Decorative."
+    },
+    {
+      "id": "F-39",
+      "formula": "profit_v = pulp.value(prob.objective)",
+      "location": "src/optimization/hub_milp.py:471",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-01-07", "MA-06-02"],
+      "note": "Returns REV - ... + COVBONUS, i.e. includes the cost-proportional coverage bonus. This is what is reported as profit."
+    },
+    {
+      "id": "F-40",
+      "formula": "if total_vessels_used > fleet_size: logger.warning(...)",
+      "location": "src/optimization/hub_milp.py:558-565",
+      "verdict": "defect",
+      "finding_ids": ["MA-06-04"],
+      "note": "Warn-only, then returns a full result anyway. Also unreachable: control flow cannot reach it with total_vessels_used > fleet_size because line 389 would already have raised."
+    },
+    {
+      "id": "F-41",
+      "formula": "return dict omits 'revenue'",
+      "location": "src/optimization/hub_milp.py:625-643",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-06-07"],
+      "note": "Verified consequence: every regional_results[*].revenue in the artifact is 0.00. Per-region revenue is structurally absent."
+    }
+  ],
+  "orchestrator": [
+    {
+      "id": "F-42",
+      "formula": "true_global_demand = sum(d.weekly_teu for d in problem.demands)",
+      "location": "src/agents/orchestrator_agent.py:505",
+      "verdict": "correct",
+      "measured": 276446.80
+    },
+    {
+      "id": "F-43",
+      "formula": "total_satisfied = min(total_satisfied, true_global_demand)",
+      "location": "src/agents/orchestrator_agent.py:305",
+      "verdict": "defect",
+      "severity": "HIGH",
+      "finding_ids": ["MA-01-08", "MA-06-14"],
+      "note": "satisfied clamped at TWO levels (regional_agent.py:442 and here); unserved clamped at NEITHER. Result: satisfied+unserved = 305,021.20 vs true 276,446.80 = +10.34% phantom. Coverage understated 9.26pp."
+    },
+    {
+      "id": "F-44",
+      "formula": "coverage = total_satisfied / true_global_demand * 100",
+      "location": "src/agents/orchestrator_agent.py:306-308",
+      "verdict": "correct_input_defective",
+      "note": "Arithmetic is correct; the numerator is corrupted upstream by F-43."
+    },
+    {
+      "id": "F-45",
+      "formula": "weekly_revenue = total_profit + total_cost",
+      "location": "src/agents/orchestrator_agent.py:316",
+      "verdict": "defect",
+      "severity": "CRITICAL",
+      "finding_ids": ["MA-01-02", "MA-06-15"],
+      "note": "TAUTOLOGY. Substituting profit = revenue - cost yields revenue == revenue. Revenue carries zero independent information and cannot be falsified. The accompanying comment (unserved penalty captured in operating cost) is factually false."
+    },
+    {
+      "id": "F-46",
+      "formula": "annual_profit = weekly_profit * 52",
+      "location": "src/agents/orchestrator_agent.py:321",
+      "verdict": "correct"
+    },
+    {
+      "id": "F-47",
+      "formula": "n_clusters = 3 if num_ports < 50 else 5",
+      "location": "src/agents/orchestrator_agent.py:510",
+      "verdict": "ambiguous",
+      "note": "Fixed heuristic, not data-driven"
+    },
+    {
+      "id": "F-48",
+      "formula": "satisfied = min(sum(cluster satisfied), total_demand)",
+      "location": "src/agents/regional_agent.py:442",
+      "verdict": "defect",
+      "finding_ids": ["MA-02-05"],
+      "note": "Cluster demands are selected with 'd.origin in cluster OR d.destination in cluster' (:349-352), so cross-cluster lanes appear in TWO independent MILPs. satisfied is clamped; unserved is not."
+    }
+  ],
+  "fuel_model": [
+    {
+      "id": "F-49",
+      "formula": "sailing_days = distance_nm / (speed_knots * 24 * 0.9)",
+      "location": "src/utils/fuel_cost.py:144",
+      "verdict": "correct",
+      "note": "The 0.9 at-sea factor is plausible."
+    },
+    {
+      "id": "F-50",
+      "formula": "fuel_cost = sailing_days * consumption_tons_per_day * bunker_price",
+      "location": "src/utils/fuel_cost.py:155-157",
+      "verdict": "correct_input_defective",
+      "note": "consumption comes from the hardcoded VESSEL_FUEL_CONSUMPTION table, not from fleet_data.csv 'Bunker ton per day at designSpeed'. Table speed values are 1.19-1.35x the fleet file's designSpeed."
+    },
+    {
+      "id": "F-51",
+      "formula": "weekly_fuel_cost = cycle_fuel_cost * (7.0 / cycle_time_days)",
+      "location": "src/utils/fuel_cost.py:209",
+      "verdict": "correct"
+    },
+    {
+      "id": "F-52",
+      "formula": "if origin not in distance_matrix[origin]: total_distance += 500.0",
+      "location": "src/utils/fuel_cost.py:205",
+      "verdict": "defect",
+      "finding_ids": ["MA-02-10"],
+      "note": "Silent 500nm substitution. Never triggers on WorldSmall (47/47 ports present). Fires for 227 of 435 WorldLarge ports."
+    },
+    {
+      "id": "F-53",
+      "formula": "fleet physical ceiling = sum(quantity * consumption_tons_per_day) * 600 * 7",
+      "location": "derived from data/raw/fleet_world_small.csv + fuel_cost.py:19-56,62",
+      "verdict": "reference_bound",
+      "value": 55335000.0,
+      "note": "All 263 vessels underway 24/7 at design consumption. Reported fuel is 11.71x this bound."
+    }
+  ],
+  "identities": [
+    {"identity": "sum(cost components) == total_cost", "holds": true, "detail": "790,613,750.52 vs 790,613,750.51 (1 cent rounding)"},
+    {"identity": "revenue - total_cost == weekly_profit", "holds": true, "detail": "but revenue is a tautology, so this carries no validation value"},
+    {"identity": "annual == weekly * 52", "holds": true, "detail": "345,495,908.06 * 52 = 17,965,787,219.12"},
+    {"identity": "sum(regional) == global", "holds": true, "detail": "all cost components and profit reconcile exactly"},
+    {"identity": "sum(regional services) == total_services", "holds": true, "detail": "104 + 100 + 108 = 312"},
+    {"identity": "coverage == satisfied / true_demand * 100", "holds": true, "detail": "arithmetic only; numerator is clamp-corrupted"},
+    {"identity": "satisfied + unserved == true_demand", "holds": false, "detail": "305,021.20 vs 276,446.80 = +10.34%"},
+    {"identity": "revenue == sum(r_d * x_ds)", "holds": false, "detail": "tautologically defined as profit + cost"},
+    {"identity": "vessels_required <= vessels_available", "holds": false, "detail": "624 vs 263 = 2.37x overcommit"},
+    {"identity": "revenue <= dataset gross revenue", "holds": false, "detail": "1,136,109,658.57 vs 264,870,100.00 = 4.29x"},
+    {"identity": "fuel <= fleet physical maximum", "holds": false, "detail": "648,031,918.31 vs 55,335,000 = 11.71x"},
+    {"identity": "profit <= revenue - non_fuel_cost", "holds": false, "detail": "345,495,908.06 vs 122,288,267.79 = +223,207,640.27"}
+  ],
+  "dead_code": [
+    {"symbol": "FlowOptimizer", "location": "src/optimization/flow_optimizer.py", "status": "imported at backend/real_orchestrator_integration.py:19, never instantiated"},
+    {"symbol": "_total_port_cost", "location": "src/optimization/hub_milp.py:157-173", "status": "defined, never called"},
+    {"symbol": "DEFAULT_PORT_CAPACITY", "location": "src/optimization/hub_milp.py:55,82", "status": "assigned, never read"},
+    {"symbol": "skip_milp", "location": "src/optimization/hierarchical_ga.py:223", "status": "written, never read by hub_milp or regional_agent"},
+    {"symbol": "min_coverage", "location": "src/optimization/hub_milp.py:403", "status": "always 0.0"},
+    {"symbol": "backend/routes/*", "location": "backend/routes/", "status": "mounted by no entrypoint"},
+    {"symbol": "backend/services/pipeline_service.py", "location": "backend/services/pipeline_service.py", "status": "returns MockProblem with zero distance matrix"}
+  ]
+}

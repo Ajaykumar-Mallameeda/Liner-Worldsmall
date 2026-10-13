@@ -1,0 +1,285 @@
+{
+  "p0_1_coordinator_influence": {
+    "experiment": "P0.1 \u2014 Coordinator Influence",
+    "summary": {
+      "total_iterations": 2,
+      "llm_call_status": "FAILED (rule-based fallback used throughout)",
+      "llm_decisions_notes": "Rule-based fallback: coverage 63.0%, profit $443,860,872/week, 0 conflicts.",
+      "is_using_llm_weights": false,
+      "rule_based_active": true,
+      "coverage_trajectory": "64.7% \u2192 63.0%",
+      "profit_trajectory": "$599,513,064 \u2192 $443,860,872",
+      "convergence_achieved": false
+    },
+    "iterations": [
+      {
+        "iteration": 0,
+        "coverage_pct": 64.72114805094525,
+        "weekly_profit": 599513064.3043485,
+        "cov_gap": 5.278851949054754,
+        "llm_status": "FAILED (rule-based fallback used)",
+        "rule_based_weights": {
+          "profit_weight": 0.421,
+          "coverage_weight": 0.479,
+          "cost_weight": 0.1
+        },
+        "actual_weights_used": {
+          "profit_weight": 0.6,
+          "coverage_weight": 0.25,
+          "cost_weight": 0.15
+        },
+        "convergence_score": 0.975,
+        "needs_rerun": true,
+        "rerun_reason": "coverage 64.7% is 5.3pp below 70.0% target"
+      },
+      {
+        "iteration": 1,
+        "coverage_pct": 62.97780893025379,
+        "weekly_profit": 443860872.387166,
+        "cov_gap": 7.0221910697462135,
+        "llm_status": "FAILED (rule-based fallback used)",
+        "rule_based_weights": {
+          "profit_weight": 0.395,
+          "coverage_weight": 0.505,
+          "cost_weight": 0.1
+        },
+        "actual_weights_used": {
+          "profit_weight": 0.372,
+          "coverage_weight": 0.482,
+          "cost_weight": 0.146
+        },
+        "convergence_score": 0.967,
+        "needs_rerun": true,
+        "rerun_reason": "coverage 63.0% is 7.0pp below 70.0% target"
+      }
+    ],
+    "verdict": "The Coordinator LLM decisions had ZERO influence on the pipeline. All weight_adjustments came from the rule-based fallback path. The LLM either returned invalid JSON (parse failure) or was unreachable, causing the fallback to activate. The applied weights from the rule-based fallback correlated with worsening outcomes."
+  },
+  "p0_2_service_generator_influence": {
+    "experiment": "P0.2 \u2014 Service Generator Influence",
+    "summary": {
+      "num_regions": 5,
+      "all_regions_use_default_mix": true,
+      "llm_archetype_active": false,
+      "total_services_generated": 3998,
+      "total_services_filtered": 2000,
+      "total_services_selected": 424,
+      "default_mix": {
+        "direct_ratio": 0.6,
+        "hub_loop_ratio": 0.15,
+        "feeder_ratio": 0.2,
+        "trunk_ratio": 0.05
+      },
+      "default_vessel_bias": "balanced"
+    },
+    "regional_archetypes": {
+      "Asia": {
+        "archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.6,
+            "hub_loop_ratio": 0.15,
+            "feeder_ratio": 0.2,
+            "trunk_ratio": 0.05
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [],
+          "notes": ""
+        },
+        "llm_source": "DEFAULT",
+        "services_generated": 781,
+        "services_filtered": 400,
+        "services_selected": 87
+      },
+      "Europe": {
+        "archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.6,
+            "hub_loop_ratio": 0.15,
+            "feeder_ratio": 0.2,
+            "trunk_ratio": 0.05
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [],
+          "notes": ""
+        },
+        "llm_source": "DEFAULT",
+        "services_generated": 875,
+        "services_filtered": 400,
+        "services_selected": 78
+      },
+      "Americas": {
+        "archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.6,
+            "hub_loop_ratio": 0.15,
+            "feeder_ratio": 0.2,
+            "trunk_ratio": 0.05
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [],
+          "notes": ""
+        },
+        "llm_source": "DEFAULT",
+        "services_generated": 806,
+        "services_filtered": 400,
+        "services_selected": 68
+      },
+      "Middle East": {
+        "archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.6,
+            "hub_loop_ratio": 0.15,
+            "feeder_ratio": 0.2,
+            "trunk_ratio": 0.05
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [],
+          "notes": ""
+        },
+        "llm_source": "DEFAULT",
+        "services_generated": 744,
+        "services_filtered": 400,
+        "services_selected": 106
+      },
+      "Africa": {
+        "archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.6,
+            "hub_loop_ratio": 0.15,
+            "feeder_ratio": 0.2,
+            "trunk_ratio": 0.05
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [],
+          "notes": ""
+        },
+        "llm_source": "DEFAULT",
+        "services_generated": 792,
+        "services_filtered": 400,
+        "services_selected": 85
+      }
+    },
+    "verdict": "The Service Generator LLM archetype prompt had ZERO influence. All regions used DEFAULT_ARCHETYPE_PARAMS (direct=0.60, hub_loop=0.15, feeder=0.20, trunk=0.05, vessel_bias=balanced). The LLM call either failed or produced output that fell back to defaults. Service pool composition is purely rule-determined."
+  },
+  "p0_3_consensus_influence": {
+    "experiment": "P0.3 \u2014 Consensus Influence",
+    "summary": {
+      "consensus_confidence": 1.0,
+      "coordinator_raw_weights": {
+        "profit_weight": 0.4298,
+        "coverage_weight": 0.4702,
+        "cost_weight": 0.1
+      },
+      "consensus_final_weights": {
+        "profit_weight": 0.4244,
+        "coverage_weight": 0.4656,
+        "cost_weight": 0.11
+      },
+      "feedback_gradient_weights": {
+        "profit_weight": 0.395,
+        "coverage_weight": 0.505,
+        "cost_weight": 0.1
+      },
+      "weight_delta_coordinator_to_consensus": {
+        "profit_weight": -0.0054,
+        "coverage_weight": -0.0046,
+        "cost_weight": 0.01
+      },
+      "consensus_active": true,
+      "consensus_accepted": true,
+      "conflicts_detected": 0
+    },
+    "verdict": "Consensus Engine was ACTIVE (confidence=1.0). It modified weights from coordinator's {'profit_weight': 0.4298, 'coverage_weight': 0.4702, 'cost_weight': 0.1} to {'profit_weight': 0.4244, 'coverage_weight': 0.4656, 'cost_weight': 0.11}. The delta per component: {'profit_weight': -0.0054, 'coverage_weight': -0.0046, 'cost_weight': 0.01}. This is a MODERATE influence \u2014 weights shifted but directionally similar to coordinator suggestions. Without consensus, the coordinator's raw weights would have been applied directly."
+  },
+  "p0_4_shared_context_opportunity": {
+    "experiment": "P0.4 \u2014 SharedContext Opportunity",
+    "summary": {
+      "information_gaps_identified": 4,
+      "prompts_affected": [
+        "#1 Coordinator Decisions",
+        "#3 ServiceGen Archetype JSON",
+        "#4 Regional Strategy"
+      ],
+      "current_trajectory_is_convergent": false,
+      "estimated_gain": "HIGH \u2014 expected 3-8pp coverage improvement per iteration"
+    },
+    "information_gaps": {
+      "global_objectives_from_shared_context": {
+        "available_in": "SharedContext.global_objectives",
+        "fields": [
+          "profit_weight",
+          "coverage_weight",
+          "cost_weight",
+          "iteration",
+          "coverage_target",
+          "convergence_score",
+          "current_coverage",
+          "current_profit"
+        ],
+        "currently_injected_to_prompt": false,
+        "prompts_affected": [
+          "#1 Coordinator Decisions",
+          "#3 ServiceGen Archetype JSON",
+          "#4 Regional Strategy"
+        ]
+      },
+      "regional_priorities_from_shared_context": {
+        "available_in": "SharedContext.regional_priorities",
+        "fields": [
+          "coverage_priority",
+          "profit_priority",
+          "hub_focus",
+          "vessel_bias",
+          "current_coverage",
+          "current_profit"
+        ],
+        "currently_injected_to_prompt": false,
+        "prompts_affected": [
+          "#1 Coordinator Decisions"
+        ]
+      },
+      "iteration_history": {
+        "available_in": "Orchestrator.iteration_audit",
+        "fields": [
+          "weights trajectory",
+          "coverage trajectory",
+          "convergence scores"
+        ],
+        "currently_injected_to_prompt": false,
+        "prompts_affected": [
+          "#1 Coordinator Decisions"
+        ]
+      },
+      "regional_intelligence_metrics": {
+        "available_in": "RegionalMetrics.compute_regional_metrics()",
+        "fields": [
+          "concentration_level",
+          "density_level",
+          "imbalance_level",
+          "hub_dominance",
+          "median_lane_volume",
+          "network_density"
+        ],
+        "currently_injected_to_prompt": false,
+        "prompts_affected": [
+          "#1 Coordinator Decisions",
+          "#3 ServiceGen Archetype JSON"
+        ]
+      }
+    },
+    "decision_improvement_estimate": {
+      "coverage_trajectory": "64.7% \u2192 63.0% (DECLINED)",
+      "profit_trajectory": "$599,513,064 \u2192 $443,860,872 (DECLINED)",
+      "estimated_improvement_with_context": "With SharedContext, the coordinator would have seen that iteration 0's weight increase toward coverage (0.25\u21920.482) did NOT improve coverage (64.7%\u219263.0%). This feedback would likely have produced a DIFFERENT weight adjustment at iteration 1 \u2014 either a smaller coverage increase or a reversion toward profit-focused weights.",
+      "estimated_improvement_magnitude": "Estimated 3-8pp coverage improvement per iteration if trajectory data informs weight decisions, vs the current -1.7pp regression."
+    },
+    "verdict": "SharedContext is the SINGLE LARGEST INFORMATION OPPORTUNITY. The system computes rich state (global objectives, regional priorities, iteration history) but never injects it into prompts. The evidence from pipeline_output.json shows that weight adjustments without trajectory awareness DEGRADE outcomes. Injecting SharedContext would prevent the coordinator from repeating ineffective weight strategies."
+  },
+  "influence_summary": {
+    "coordinator_llm_actual_influence": 0.0,
+    "service_gen_llm_actual_influence": 0.0,
+    "consensus_engine_actual_influence": 0.35,
+    "feedback_gradient_actual_influence": 0.65,
+    "shared_context_opportunity": "HIGH"
+  }
+}

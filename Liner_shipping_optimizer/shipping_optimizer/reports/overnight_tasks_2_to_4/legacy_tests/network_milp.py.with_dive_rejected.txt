@@ -1,0 +1,418 @@
+"""Network design MILP over candidate services and OD paths.
+
+Decision variables
+    f_s  integer  weekly departures of service s            (0 = not operated)
+    n_s  integer  vessels deployed on service s
+    q_p  >= 0     TEU/week of OD d routed on path p
+    u_d  >= 0     TEU/week of OD d left unserved
+
+Constraints
+    demand        sum_p q_p + u_d == weekly_teu_d                     (each OD once)
+    leg capacity  sum_{p uses (s,leg)} q_p <= capacity_s * f_s        (EVERY leg)
+    vessels       7 * n_s >= cycle_time_days_s * f_s                  (ceil(T f / 7))
+    fleet         sum_{s in class c} n_s <= vessels available of c    (per class)
+
+Objective (maximise)
+    sum_p (revenue_per_teu_d - port_cost_per_teu_p) q_p
+    - sum_s [ vessel_week_cost_s n_s + (rotation_fuel_s + port_fixed_s) f_s ]
+    - unserved_penalty * sum_d u_d          <- optimisation-only; default 0.0
+
+With ``unserved_penalty = 0`` the objective IS the operating profit. Any penalty is
+reported separately (``objective_components``) and is never part of the ledger.
+Transit-time limits are enforced when paths are built (see ``paths.py``).
+
+Solution method (``lp_guided=True``, default when frequencies are free)
+    1. solve the LP relaxation (f, n continuous): its value is a valid UPPER BOUND
+       on the achievable profit and is reported as ``relaxation_bound``;
+    2. keep only the services the relaxation uses and the paths that use only them,
+       and solve the integer problem on that restriction.
+    The restriction can exclude better integer solutions, so the result is a
+    feasible plan with a stated bound, not a proof of optimality: ``status`` is
+    ``"optimal"`` only if the restricted MILP closed AND no service was dropped.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+import os
+import time
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import pulp
+
+from src.network.economics import ServiceModel
+from src.network.paths import OdPath
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class NetworkSolution:
+    status: str                          # optimal | feasible | infeasible | not_solved | solver_error
+    solver_status: str = ""
+    message: str = ""
+    objective_value: float = 0.0
+    relaxation_bound: Optional[float] = None     # LP upper bound on the objective
+    dive: Dict = field(default_factory=dict)     # second primal heuristic: what it found
+    frequencies: Dict[int, int] = field(default_factory=dict)     # service index -> f
+    vessels: Dict[int, int] = field(default_factory=dict)         # service index -> n
+    flows: List[Tuple[int, int, float]] = field(default_factory=list)  # (od, path#, TEU)
+    unserved: Dict[int, float] = field(default_factory=dict)
+    objective_components: Dict[str, float] = field(default_factory=dict)
+    n_variables: int = 0
+    n_constraints: int = 0
+    n_paths: int = 0
+    n_services_considered: int = 0
+    n_services_restricted_to: int = 0
+    runtime_sec: float = 0.0
+
+    @property
+    def usable(self) -> bool:
+        """A solution whose values may be reported (optimal, or a feasible incumbent)."""
+        return self.status in ("optimal", "feasible")
+
+
+def _solver(time_limit_sec: float, threads: Optional[int], warm: bool):
+    # threads is opt-in: the bundled parallel CBC stalled (idle, ignoring its time
+    # limit) on a 5k-row model, so the default is the single-threaded solver.
+    return pulp.PULP_CBC_CMD(
+        msg=bool(os.environ.get("NETWORK_MILP_LOG")),
+        timeLimit=max(1, int(math.ceil(time_limit_sec))),
+        threads=threads if threads and threads > 1 else None,
+        warmStart=warm,
+    )
+
+
+def _build_and_solve(
+    models, demands, paths_by_od, limits, services: Sequence[int], *, integer: bool,
+    penalty: float, fixed: Optional[Dict[int, int]], initial: Optional[Dict[int, int]],
+    max_departures_cap: Optional[int], time_limit_sec: float, threads: Optional[int],
+    total_vessel_limit: Optional[int] = None,
+    port_capacity: Optional[Dict[str, float]] = None,
+    min_served_fraction: Optional[float] = None,
+    min_departures: Optional[Dict[int, int]] = None,
+):
+    """Build the model over ``services`` (indices) and solve it. Returns a dict with
+    the PuLP problem, variables and statuses; raises nothing for solver outcomes.
+    ``min_departures`` imposes a lower bound on chosen services (used by the dive)."""
+    keep = set(services)
+    # only paths whose every segment service is kept
+    sub_paths: Dict[int, List[Tuple[int, OdPath]]] = {}
+    used: Dict[int, float] = defaultdict(float)
+    for di, plist in paths_by_od.items():
+        kept = [(k, p) for k, p in enumerate(plist) if all(s in keep for s in p.services)]
+        if kept:
+            sub_paths[di] = kept
+            for _, p in kept:
+                for si in p.services:
+                    used[si] += demands[di].weekly_teu
+    active = sorted(used)
+
+    prob = pulp.LpProblem("NetworkDesign", pulp.LpMaximize)
+    cat = "Integer" if integer else "Continuous"
+    f: Dict[int, pulp.LpVariable] = {}
+    n: Dict[int, pulp.LpVariable] = {}
+    for si in active:
+        m = models[si]
+        limit = int(limits.get(m.vessel_class, m.class_inventory))
+        ub = m.max_departures(limit)
+        if max_departures_cap is not None:
+            ub = min(ub, int(max_departures_cap))
+        ub = min(ub, max(1, int(math.ceil(used[si] / m.capacity_teu))))
+        if fixed is not None:
+            # imposed exactly; an unsustainable frequency makes the fleet constraint
+            # infeasible (explicit status) - it is never silently clipped
+            lb = ub = max(0, int(fixed.get(si, 0)))
+        else:
+            lb = 0
+            if min_departures and si in min_departures:
+                lb = min(int(min_departures[si]), max(int(m.max_departures(limit)), 0))
+                ub = max(ub, lb)
+        f[si] = pulp.LpVariable(f"f_{si}", lowBound=lb, upBound=max(ub, 0), cat=cat)
+        n[si] = pulp.LpVariable(f"n_{si}", lowBound=0, upBound=max(limit, 0), cat=cat)
+        if integer and initial and si in initial:
+            f0 = min(max(int(initial[si]), lb), max(ub, 0))
+            f[si].setInitialValue(f0)
+            n[si].setInitialValue(m.vessels(f0))
+
+    q: Dict[Tuple[int, int], pulp.LpVariable] = {}
+    for di, kept in sub_paths.items():
+        for k, _ in kept:
+            q[(di, k)] = pulp.LpVariable(f"q_{di}_{k}", lowBound=0)
+    u = {di: pulp.LpVariable(f"u_{di}", lowBound=0)
+         for di, d in enumerate(demands) if d.weekly_teu > 0}
+
+    path_of = {(di, k): p for di, kept in sub_paths.items() for k, p in kept}
+    revenue = pulp.lpSum(demands[di].revenue_per_teu * v for (di, k), v in q.items())
+    per_teu_port = pulp.lpSum(path_of[(di, k)].port_cost_per_teu * v for (di, k), v in q.items())
+    vessel_cost = pulp.lpSum(models[si].vessel_week_cost * n[si] for si in active)
+    fuel_cost = pulp.lpSum(models[si].fuel_cost_per_rotation * f[si] for si in active)
+    port_fixed = pulp.lpSum(models[si].port_fixed_per_rotation * f[si] for si in active)
+    pen = penalty * pulp.lpSum(u.values())
+    prob += revenue - per_teu_port - vessel_cost - fuel_cost - port_fixed - pen
+
+    for di, d in enumerate(demands):
+        if d.weekly_teu > 0:
+            prob += (
+                pulp.lpSum(q[(di, k)] for k, _ in sub_paths.get(di, ())) + u[di]
+                == d.weekly_teu
+            ), f"dem_{di}"
+    leg_load: Dict[Tuple[int, int], List[pulp.LpVariable]] = defaultdict(list)
+    for (di, k), v in q.items():
+        for seg in path_of[(di, k)].segments:
+            for leg in seg.legs:
+                leg_load[(seg.service, leg)].append(v)
+    for (si, leg), vs in leg_load.items():
+        prob += pulp.lpSum(vs) <= models[si].capacity_teu * f[si], f"cap_{si}_{leg}"
+    for si in active:
+        prob += 7 * n[si] >= models[si].cycle_time_days * f[si], f"veh_{si}"
+    by_class: Dict[str, List[int]] = defaultdict(list)
+    for si in active:
+        by_class[models[si].vessel_class].append(si)
+    for cls, sis in by_class.items():
+        limit = int(limits.get(cls, models[sis[0]].class_inventory))
+        prob += pulp.lpSum(n[si] for si in sis) <= limit, f"fleet_{cls}"
+    if total_vessel_limit is not None and active:
+        prob += pulp.lpSum(n[si] for si in active) <= int(total_vessel_limit), "fleet_total"
+    if port_capacity:
+        events: Dict[str, List[Tuple[pulp.LpVariable, float]]] = defaultdict(list)
+        for (di, k), v in q.items():
+            pth = path_of[(di, k)]
+            events[pth.segments[0].from_port].append((v, 1.0))
+            events[pth.segments[-1].to_port].append((v, 1.0))
+            if pth.hub is not None:
+                events[pth.hub].append((v, 2.0))
+        for port, terms in events.items():
+            if port in port_capacity:
+                prob += (pulp.lpSum(c * v for v, c in terms) <= float(port_capacity[port]),
+                         f"port_{port}")
+    if min_served_fraction and q:
+        total = sum(d.weekly_teu for d in demands if d.weekly_teu > 0)
+        prob += pulp.lpSum(q.values()) >= float(min_served_fraction) * total, "min_coverage"
+
+    out = dict(prob=prob, f=f, n=n, q=q, u=u, active=active, terms=dict(
+        revenue=revenue, per_teu_port=per_teu_port, vessel_cost=vessel_cost,
+        fuel_cost=fuel_cost, port_fixed=port_fixed, pen=pen), status=None, error=None)
+    if not q:
+        return out
+    try:
+        prob.solve(_solver(time_limit_sec, threads, bool(integer and initial)))
+    except Exception as exc:                                   # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def _dive(models, demands, paths_by_od, limits, services, *, penalty, max_departures_cap,
+          deadline: float, threads, total_vessel_limit, port_capacity, min_served_fraction,
+          fix_fraction: float = 0.25, max_rounds: int = 14):
+    """Relax-and-fix dive. Repeatedly solve the LP relaxation, commit (lower-bound at the
+    rounded-up value) the most-used fractional services, and drop the services the
+    relaxation does not use. Returns ``(services, min_departures)`` for a final integer
+    solve over a much smaller set, or ``None`` if the relaxation fails."""
+    keep = sorted(services)
+    floor_dep: Dict[int, int] = {}
+    last = None
+    for _ in range(max_rounds):
+        left = deadline - time.perf_counter()
+        if left < 4.0:
+            break
+        lp = _build_and_solve(models, demands, paths_by_od, limits, keep, integer=False,
+                              penalty=penalty, fixed=None, initial=None,
+                              max_departures_cap=max_departures_cap,
+                              time_limit_sec=min(60.0, left * 0.5), threads=threads,
+                              total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
+                              min_served_fraction=min_served_fraction, min_departures=floor_dep)
+        if lp["error"] or lp["prob"].status != pulp.LpStatusOptimal:
+            break
+        fv = {si: float(lp["f"][si].varValue or 0.0) for si in lp["active"]}
+        positive = {si: v for si, v in fv.items() if v > 1e-6}
+        if not positive:
+            break
+        last = (sorted(positive), dict(floor_dep))
+        frac = {si: v for si, v in positive.items() if abs(v - round(v)) > 1e-6}
+        for si, v in positive.items():
+            if si not in frac:                        # already whole: commit it
+                floor_dep[si] = max(floor_dep.get(si, 0), int(round(v)))
+        if not frac:
+            keep = sorted(positive)
+            last = (keep, dict(floor_dep))
+            break
+        order = sorted(frac, key=lambda s: -frac[s])
+        for si in order[:max(1, int(len(order) * fix_fraction))]:
+            floor_dep[si] = max(floor_dep.get(si, 0), int(math.ceil(frac[si] - 1e-9)))
+        keep = sorted(positive)
+        last = (keep, dict(floor_dep))
+    return last
+
+
+def solve_network(
+    models: Sequence[ServiceModel],
+    demands: Sequence,
+    paths_by_od: Dict[int, List[OdPath]],
+    class_vessel_limit: Dict[str, int],
+    *,
+    unserved_penalty_per_teu: float = 0.0,
+    fixed_frequencies: Optional[Dict[int, int]] = None,
+    initial_frequencies: Optional[Dict[int, int]] = None,
+    max_departures_cap: Optional[int] = None,
+    time_limit_sec: float = 120.0,
+    lp_guided: Optional[bool] = None,
+    lp_keep_threshold: float = 1e-6,
+    threads: Optional[int] = None,
+    total_vessel_limit: Optional[int] = None,
+    port_capacity: Optional[Dict[str, float]] = None,
+    min_served_fraction: Optional[float] = None,
+    dive: bool = True,
+) -> NetworkSolution:
+    """Solve the network design problem. Never raises for solver outcomes: the
+    status field says what happened and ``usable`` says whether values may be used."""
+    t0 = time.perf_counter()
+    if unserved_penalty_per_teu < 0 or not math.isfinite(unserved_penalty_per_teu):
+        raise ValueError("unserved_penalty_per_teu must be a finite number >= 0")
+
+    referenced = sorted({s for plist in paths_by_od.values() for p in plist for s in p.services})
+    sol = NetworkSolution(status="not_solved", n_services_considered=len(referenced),
+                          n_paths=sum(len(v) for v in paths_by_od.values()))
+    if not referenced:        # nothing can be carried: every OD stays unserved (explicit, valid)
+        sol.status, sol.solver_status = "optimal", "no_paths"
+        sol.unserved = {di: float(d.weekly_teu) for di, d in enumerate(demands) if d.weekly_teu > 0}
+        pen_total = unserved_penalty_per_teu * sum(sol.unserved.values())
+        sol.objective_value = -pen_total
+        sol.objective_components = {
+            "revenue": 0.0, "per_teu_port_cost": 0.0, "vessel_cost": 0.0,
+            "fuel_cost": 0.0, "port_fixed_cost": 0.0, "unserved_penalty": pen_total,
+        }
+        sol.relaxation_bound = -pen_total
+        sol.runtime_sec = time.perf_counter() - t0
+        return sol
+
+    if lp_guided is None:
+        lp_guided = fixed_frequencies is None
+    services = referenced
+    dropped = False
+    budget = max(1.0, time_limit_sec)
+
+    # ---- phase 1: LP relaxation (bound + service restriction) -----------------------
+    if lp_guided and fixed_frequencies is None:
+        lp = _build_and_solve(models, demands, paths_by_od, class_vessel_limit, referenced,
+                              integer=False, penalty=unserved_penalty_per_teu, fixed=None,
+                              initial=None, max_departures_cap=max_departures_cap,
+                              time_limit_sec=min(60.0, budget * 0.4), threads=threads,
+                              total_vessel_limit=total_vessel_limit,
+                              port_capacity=port_capacity,
+                              min_served_fraction=min_served_fraction)
+        if lp["error"] or lp["prob"].status != pulp.LpStatusOptimal:
+            lp_guided = False        # fall back to the unrestricted integer solve
+        else:
+            sol.relaxation_bound = float(pulp.value(lp["prob"].objective) or 0.0)
+            used = [si for si in lp["active"] if (lp["f"][si].varValue or 0.0) > lp_keep_threshold]
+            dropped = len(used) < len(lp["active"])
+            services = used
+            sol.n_services_restricted_to = len(used)
+            if not used:
+                # the relaxation operates nothing: the empty network is the answer
+                sol.status, sol.solver_status = "optimal", "lp_operates_nothing"
+                sol.unserved = {di: float(d.weekly_teu) for di, d in enumerate(demands) if d.weekly_teu > 0}
+                pen_total = unserved_penalty_per_teu * sum(sol.unserved.values())
+                sol.objective_value = -pen_total
+                sol.objective_components = {
+                    "revenue": 0.0, "per_teu_port_cost": 0.0, "vessel_cost": 0.0,
+                    "fuel_cost": 0.0, "port_fixed_cost": 0.0, "unserved_penalty": pen_total,
+                }
+                sol.runtime_sec = time.perf_counter() - t0
+                return sol
+            budget = max(1.0, time_limit_sec - (time.perf_counter() - t0))
+    if not sol.n_services_restricted_to:
+        sol.n_services_restricted_to = len(services)
+
+    # ---- phase 2: integer problem on the (restricted) service set --------------------
+    res = _build_and_solve(models, demands, paths_by_od, class_vessel_limit, services,
+                           integer=True, penalty=unserved_penalty_per_teu,
+                           fixed=fixed_frequencies, initial=initial_frequencies,
+                           max_departures_cap=max_departures_cap, time_limit_sec=budget,
+                           threads=threads, total_vessel_limit=total_vessel_limit,
+                           port_capacity=port_capacity,
+                           min_served_fraction=min_served_fraction)
+    # ---- phase 3: relax-and-fix dive (second primal heuristic) --------------------
+    # The LP support is a restriction, not a proof: services outside it, or services
+    # whose fractional use rounds badly, can be better. The dive builds a second
+    # integer plan from the relaxation and the better of the two is kept.
+    if (lp_guided and fixed_frequencies is None and dive
+            and res["error"] is None and res["prob"].status == pulp.LpStatusOptimal):
+        deadline = t0 + time_limit_sec
+        if deadline - time.perf_counter() > 12.0:
+            try:
+                dv = _dive(models, demands, paths_by_od, class_vessel_limit, referenced,
+                           penalty=unserved_penalty_per_teu, max_departures_cap=max_departures_cap,
+                           deadline=deadline - 0.25 * max(0.0, deadline - time.perf_counter()),
+                           threads=threads, total_vessel_limit=total_vessel_limit,
+                           port_capacity=port_capacity, min_served_fraction=min_served_fraction)
+            except Exception as exc:                          # noqa: BLE001
+                logger.warning("network_milp_dive_error | %s: %s", type(exc).__name__, exc)
+                dv = None
+            if dv is not None:
+                dv_services, dv_floor = dv
+                left = max(1.0, deadline - time.perf_counter())
+                alt = _build_and_solve(models, demands, paths_by_od, class_vessel_limit, dv_services,
+                                       integer=True, penalty=unserved_penalty_per_teu, fixed=None,
+                                       initial=initial_frequencies,
+                                       max_departures_cap=max_departures_cap, time_limit_sec=left,
+                                       threads=threads, total_vessel_limit=total_vessel_limit,
+                                       port_capacity=port_capacity,
+                                       min_served_fraction=min_served_fraction,
+                                       min_departures=dv_floor)
+                if (alt["error"] is None and alt["prob"].status == pulp.LpStatusOptimal
+                        and all(v.varValue is not None for v in alt["f"].values())):
+                    a_obj = float(pulp.value(alt["prob"].objective) or 0.0)
+                    b_obj = float(pulp.value(res["prob"].objective) or 0.0)
+                    sol.dive = {"restricted_objective": b_obj, "dive_objective": a_obj,
+                                "dive_services": len(dv_services), "used": a_obj > b_obj + 1e-6}
+                    if a_obj > b_obj + 1e-6:
+                        res = alt
+                        dropped = True
+    prob = res["prob"]
+    sol.n_variables = len(res["f"]) + len(res["n"]) + len(res["q"]) + len(res["u"])
+    sol.n_constraints = len(prob.constraints)
+    sol.runtime_sec = time.perf_counter() - t0
+
+    if res["error"]:
+        sol.status, sol.message = "solver_error", res["error"]
+        logger.error("network_milp_solver_error | %s", res["error"])
+        return sol
+    sol.solver_status = pulp.LpStatus.get(prob.status, str(prob.status))
+    if prob.status == pulp.LpStatusInfeasible:
+        sol.status = "infeasible"
+        return sol
+    if prob.status != pulp.LpStatusOptimal:
+        sol.status = "not_solved"
+        sol.message = f"solver status {sol.solver_status}"
+        return sol
+    f, n, q, u = res["f"], res["n"], res["q"], res["u"]
+    if any(v.varValue is None for v in list(f.values()) + list(q.values())):
+        sol.status = "not_solved"
+        sol.message = "solver reported optimal but returned no variable values"
+        return sol
+
+    closed = getattr(prob, "sol_status", 1) == pulp.LpSolutionOptimal
+    sol.status = "optimal" if (closed and not dropped) else "feasible"
+    sol.objective_value = float(pulp.value(prob.objective) or 0.0)
+    sol.frequencies = {si: int(round(f[si].varValue or 0)) for si in res["active"]}
+    sol.vessels = {si: int(round(n[si].varValue or 0)) for si in res["active"]}
+    for (di, k), v in q.items():
+        val = float(v.varValue or 0.0)
+        if val > 1e-9:
+            sol.flows.append((di, k, val))
+    sol.unserved = {di: float(u[di].varValue or 0.0) for di in u}
+    t = res["terms"]
+    sol.objective_components = {
+        "revenue": float(pulp.value(t["revenue"]) or 0.0),
+        "per_teu_port_cost": float(pulp.value(t["per_teu_port"]) or 0.0),
+        "vessel_cost": float(pulp.value(t["vessel_cost"]) or 0.0),
+        "fuel_cost": float(pulp.value(t["fuel_cost"]) or 0.0),
+        "port_fixed_cost": float(pulp.value(t["port_fixed"]) or 0.0),
+        "unserved_penalty": float(pulp.value(t["pen"]) or 0.0),
+    }
+    return sol

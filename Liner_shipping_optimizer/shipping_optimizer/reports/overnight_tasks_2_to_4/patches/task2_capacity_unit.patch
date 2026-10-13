@@ -1,0 +1,323 @@
+diff --git a/src/data/network_loader.py b/src/data/network_loader.py
+index ce46869..442e80c 100644
+--- a/src/data/network_loader.py
++++ b/src/data/network_loader.py
+@@ -10,7 +10,10 @@ despite the ``.csv`` extension):
+     fleet_WorldSmall.csv            vessel-class quantities (263 vessels)
+     fleet_data.csv                  per-vessel specifications
+                                     ``Capacity FFE`` is used directly as
+-                                    ``capacity_teu`` (no further x2)
++                                    ``capacity_teu`` (no further x2). This
++                                    reading is PROVISIONAL: no authoritative
++                                    source defines the unit (see
++                                    ``CAPACITY_UNIT_PROVENANCE``).
+ 
+ Unit contract (FFE -> TEU; 1 FFE = 2 TEU):
+ 
+@@ -104,6 +107,49 @@ LEGACY_WORLDLARGE_DEMAND_SCALE = 6
+ # revenue factors do not apply to port costs.
+ TEU_PER_FFE = 2.0
+ 
++# --------------------------------
++# Vessel capacity unit: provenance and status
++# --------------------------------
++# The fleet specification column is named "Capacity FFE". No document available to
++# this project defines its unit, so it is used as TEU capacity as-is and that reading
++# is recorded here as PROVISIONAL. It must only become "verified" together with an
++# authoritative source entry (see tests/test_capacity_units.py, which enforces it).
++# Not applied, only documented: if the column really were FFE, TEU capacity would be
++# TEU_PER_FFE times the loaded value and every capacity-derived feasibility result
++# would change by that factor.
++CAPACITY_SOURCE_COLUMN = "Capacity FFE"
++CAPACITY_INTERNAL_UNIT = "TEU"
++CAPACITY_UNIT_STATUS = "provisional"        # "verified" requires authoritative_source
++CAPACITY_UNIT_PROVENANCE = {
++    "source_file": "data/raw/WorldSmall/fleet_data.csv",
++    "source_column": CAPACITY_SOURCE_COLUMN,
++    "internal_unit": CAPACITY_INTERNAL_UNIT,
++    "conversion_applied": "none (value used as-is; no x2)",
++    "status": CAPACITY_UNIT_STATUS,
++    "authoritative_source": None,
++    "reason": (
++        "the source defines the column only by its name; no document available to "
++        "this project states whether the number is FFE or TEU"
++    ),
++    "capacity_feasibility_is_conditional": True,
++    "unapplied_alternative": (
++        f"if the column is FFE, capacity in TEU = {TEU_PER_FFE} x the loaded value"
++    ),
++    "evidence_checked": [
++        "fleet_data.csv header 'Capacity FFE': column name only, no unit definition",
++        "LINERLIB README (github.com/blof/LINERLIB): describes fleet_data.csv as 'all "
++        "data on the 6 vessel types'; states no capacity unit (it calls demand 'FFe')",
++        "Google OR-tools LINERLIB benchmark page: states no vessel capacity unit",
++        "upstream LINERLIB data/fleet_data.csv: same header and numeric values as the "
++        "local file (establishes provenance of the file, not the unit)",
++        "Brouer et al., Transportation Science 48(2) 281-312 (2014), "
++        "doi:10.1287/trsc.2013.0471: full text not retrievable in this environment; "
++        "not checked",
++        "repository documents (MA_02, MA_05, reports/worldsmall_phase1_5_2_audit.md) "
++        "restate the column name; derived, not authoritative",
++    ],
++}
++
+ _PORT_REQUIRED = [
+     "unlocode", "name", "latitude", "longitude", "draft",
+     "costperfull", "costperfulltrnsf", "portcallcostfixed", "portcallcostperffe",
+@@ -561,8 +607,10 @@ class NetworkLoader:
+                                              Bunker ton per day at designSpeed, Idle Consumption ton/day,
+                                              panamaFee, suezFee
+ 
+-        ``Capacity FFE`` is already the per-vessel capacity used as TEU in the
+-        project's model and is NOT multiplied again. Quantities and
++        ``Capacity FFE`` is used as the per-vessel TEU capacity and is NOT
++        multiplied again. That reading is PROVISIONAL (see
++        ``CAPACITY_UNIT_PROVENANCE``): the returned ``Fleet`` carries
++        ``capacity_unit_status == "provisional"``. Quantities and
+         specifications must describe exactly the same set of vessel classes.
+ 
+         Returns:
+@@ -675,8 +723,21 @@ class NetworkLoader:
+             # Blank canal fees are unknown (None), never an implied 0.0 or a
+             # statement about whether the class may transit the canal.
+             "canal_fee_blank": fee_blank,
++            # Capacity unit is an assumption, not a verified fact (see the
++            # constants above); consumers must not present capacity feasibility
++            # as source-verified while this says "provisional".
++            "capacity_unit": dict(CAPACITY_UNIT_PROVENANCE),
+         }
+-        return Fleet(classes=classes)
++        logger.info(
++            "fleet capacity unit is %s: '%s' used as %s as-is (no x2)",
++            CAPACITY_UNIT_STATUS, CAPACITY_SOURCE_COLUMN, CAPACITY_INTERNAL_UNIT,
++        )
++        return Fleet(
++            classes=classes,
++            capacity_unit=CAPACITY_INTERNAL_UNIT,
++            capacity_unit_status=CAPACITY_UNIT_STATUS,
++            capacity_source_column=CAPACITY_SOURCE_COLUMN,
++        )
+ 
+     # --------------------------------
+     # Cross-file validation
+diff --git a/src/optimization/data.py b/src/optimization/data.py
+index 1f89e02..12c04e1 100644
+--- a/src/optimization/data.py
++++ b/src/optimization/data.py
+@@ -100,8 +100,19 @@ class FleetClass:
+ 
+ @dataclass
+ class Fleet:
+-    """Collection of vessel classes available for deployment."""
++    """Collection of vessel classes available for deployment.
++
++    ``capacity_unit`` is the unit in which ``FleetClass.capacity_teu`` is used by
++    the model; ``capacity_unit_status`` says whether that reading is backed by
++    authoritative source documentation (``"verified"``) or is an assumption
++    (``"provisional"``, the default). Any capacity feasibility derived from this
++    fleet is conditional on that status. ``capacity_source_column`` names the
++    source column the value was read from.
++    """
+     classes: List[FleetClass] = field(default_factory=list)
++    capacity_unit: str = "TEU"
++    capacity_unit_status: str = "provisional"
++    capacity_source_column: str = "Capacity FFE"
+ 
+     @property
+     def total_vessels(self) -> int:
+diff --git a/tests/test_capacity_units.py b/tests/test_capacity_units.py
+new file mode 100644
+index 0000000..a9522bc
+--- /dev/null
++++ b/tests/test_capacity_units.py
+@@ -0,0 +1,190 @@
++"""
++Vessel-capacity unit contract (Task 2).
++
++Question: what unit is the fleet column ``Capacity FFE``?
++Finding: no authoritative document available to this project defines it. The loader
++therefore keeps the established reading (used as TEU capacity, no x2) and records it as
++PROVISIONAL. These tests pin that behaviour and make it impossible to present the
++convention as source-verified without adding an authoritative source entry.
++
++Canonical files are read from data/raw/WorldSmall and compared with an independent
++``csv`` read; malformed input uses small synthetic fixtures in tmp_path.
++"""
++
++import csv
++import math
++import sys
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.data import network_loader as nl
++from src.data.network_loader import (
++    CAPACITY_INTERNAL_UNIT,
++    CAPACITY_SOURCE_COLUMN,
++    CAPACITY_UNIT_PROVENANCE,
++    CAPACITY_UNIT_STATUS,
++    DataValidationError,
++    NetworkLoader,
++    WORLDSMALL_FILES,
++)
++from src.optimization.data import Fleet, FleetClass, Problem
++
++
++def _raw(path):
++    with open(path, newline="", encoding="utf-8-sig") as fh:
++        return list(csv.DictReader(fh, delimiter="\t"))
++
++
++QTY_HEADER = ["Vessel class", "Quantity"]
++SPEC_HEADER = ["Vessel class", "Capacity FFE", "TC rate daily (fixed Cost)", "draft", "minSpeed",
++               "maxSpeed", "designSpeed", "Bunker ton per day at designSpeed",
++               "Idle Consumption ton/day", "panamaFee", "suezFee"]
++
++
++def _write(path, header, rows):
++    path.write_text("\n".join("\t".join(str(c) for c in r) for r in [header] + rows) + "\n",
++                    encoding="utf-8")
++    return path
++
++
++def _spec(cls, capacity):
++    return [cls, capacity, 8000, 10, 10, 20, 15, 30, 3, 1000, 2000]
++
++
++@pytest.fixture
++def loader():
++    return NetworkLoader()
++
++
++# ---------------------------------------------------------------------------
++# Fleet-field interpretation: read as-is, never rescaled
++# ---------------------------------------------------------------------------
++class TestFieldInterpretation:
++    def test_every_class_capacity_equals_the_raw_column_value(self, loader):
++        raw = {r["Vessel class"].strip(): float(r["Capacity FFE"])
++               for r in _raw(WORLDSMALL_FILES["fleet_data"])}
++        assert len(raw) == 6
++        loaded = {c.vessel_class: c.capacity_teu for c in loader.load_fleet().classes}
++        assert loaded == raw                      # exact: no x2, no rounding
++
++    def test_canonical_capacities(self, loader):
++        loaded = {c.vessel_class: c.capacity_teu for c in loader.load_fleet().classes}
++        assert loaded == {"Feeder_450": 450.0, "Feeder_800": 800.0, "Panamax_1200": 1200.0,
++                          "Panamax_2400": 2400.0, "Post_panamax": 4200.0, "Super_panamax": 7500.0}
++
++    def test_synthetic_value_is_not_scaled(self, loader, tmp_path):
++        q = _write(tmp_path / "q.csv", QTY_HEADER, [["X", 1]])
++        s = _write(tmp_path / "s.csv", SPEC_HEADER, [_spec("X", 1234)])
++        assert loader.load_fleet(q, s).get_class("X").capacity_teu == 1234.0
++
++
++# ---------------------------------------------------------------------------
++# Class identity consistency between the two fleet files and the model
++# ---------------------------------------------------------------------------
++class TestClassIdentity:
++    def test_both_fleet_files_name_the_same_classes(self):
++        q = {r["Vessel class"].strip() for r in _raw(WORLDSMALL_FILES["fleet"])}
++        s = {r["Vessel class"].strip() for r in _raw(WORLDSMALL_FILES["fleet_data"])}
++        assert q == s and len(q) == 6
++
++    def test_model_classes_are_those_names_and_lookup_returns_the_right_spec(self, loader):
++        fleet = loader.load_fleet()
++        names = {c.vessel_class for c in fleet.classes}
++        assert names == {r["Vessel class"].strip() for r in _raw(WORLDSMALL_FILES["fleet"])}
++        raw_cap = {r["Vessel class"].strip(): float(r["Capacity FFE"])
++                   for r in _raw(WORLDSMALL_FILES["fleet_data"])}
++        for name in names:
++            assert fleet.get_class(name).capacity_teu == raw_cap[name]
++        assert fleet.get_class("Not_A_Class") is None
++
++    def test_classes_missing_from_either_file_are_rejected(self, loader, tmp_path):
++        q = _write(tmp_path / "q.csv", QTY_HEADER, [["A", 1], ["B", 1]])
++        s = _write(tmp_path / "s.csv", SPEC_HEADER, [_spec("A", 100)])
++        with pytest.raises(DataValidationError, match="vessel classes do not match"):
++            loader.load_fleet(q, s)
++
++
++# ---------------------------------------------------------------------------
++# Provisional status is declared, propagated, and cannot silently become "verified"
++# ---------------------------------------------------------------------------
++class TestProvisionalStatus:
++    def test_constants_declare_the_provisional_teu_reading(self):
++        assert CAPACITY_SOURCE_COLUMN == "Capacity FFE"
++        assert CAPACITY_INTERNAL_UNIT == "TEU"
++        assert CAPACITY_UNIT_STATUS == "provisional"
++        assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is True
++        assert CAPACITY_UNIT_PROVENANCE["authoritative_source"] is None
++
++    def test_verified_status_requires_an_authoritative_source(self):
++        """Invariant: 'verified' is only legal together with a named source."""
++        if CAPACITY_UNIT_PROVENANCE["status"] == "verified":
++            src = CAPACITY_UNIT_PROVENANCE["authoritative_source"]
++            assert isinstance(src, str) and src.strip(), "verified without a cited source"
++            assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is False
++        else:
++            assert CAPACITY_UNIT_PROVENANCE["status"] == "provisional"
++            assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is True
++
++    def test_evidence_trail_is_recorded_and_states_no_unit_definition_was_found(self):
++        ev = CAPACITY_UNIT_PROVENANCE["evidence_checked"]
++        assert len(ev) >= 4 and all(isinstance(e, str) and e for e in ev)
++        assert any("not retrievable" in e or "not checked" in e for e in ev)
++        assert "x the loaded value" in CAPACITY_UNIT_PROVENANCE["unapplied_alternative"]
++
++    def test_loaded_fleet_carries_the_status(self, loader):
++        fleet = loader.load_fleet()
++        assert fleet.capacity_unit == "TEU"
++        assert fleet.capacity_unit_status == "provisional"
++        assert fleet.capacity_source_column == "Capacity FFE"
++
++    def test_problem_built_by_the_loader_exposes_the_status(self, loader):
++        problem = loader.load_problem()
++        assert isinstance(problem, Problem)
++        assert problem.fleet.capacity_unit_status == "provisional"
++
++    def test_validation_report_states_the_assumption(self, loader):
++        loader.load_fleet()
++        cu = loader.validation_report["fleet"]["capacity_unit"]
++        assert cu["status"] == "provisional"
++        assert cu["conversion_applied"].startswith("none")
++        assert cu["capacity_feasibility_is_conditional"] is True
++
++    def test_hand_built_fleet_defaults_to_provisional(self):
++        f = Fleet(classes=[FleetClass(vessel_class="X", quantity=1, capacity_teu=10.0)])
++        assert f.capacity_unit_status == "provisional" and f.capacity_unit == "TEU"
++
++    def test_report_copy_cannot_mutate_the_module_constant(self, loader):
++        loader.load_fleet()
++        loader.validation_report["fleet"]["capacity_unit"]["status"] = "verified"
++        assert nl.CAPACITY_UNIT_PROVENANCE["status"] == "provisional"
++
++
++# ---------------------------------------------------------------------------
++# Missing or malformed capacity inputs are rejected, never defaulted
++# ---------------------------------------------------------------------------
++class TestMalformedCapacity:
++    @pytest.mark.parametrize("value", ["", "0", "-450", "abc", "nan", "inf", "-inf"])
++    def test_invalid_capacity_is_rejected_and_names_the_column(self, value, loader, tmp_path):
++        q = _write(tmp_path / "q.csv", QTY_HEADER, [["X", 1]])
++        s = _write(tmp_path / "s.csv", SPEC_HEADER, [_spec("X", value)])
++        with pytest.raises(DataValidationError, match="Capacity FFE"):
++            loader.load_fleet(q, s)
++
++    def test_missing_capacity_column_is_rejected(self, loader, tmp_path):
++        header = [h for h in SPEC_HEADER if h != "Capacity FFE"]
++        row = [v for h, v in zip(SPEC_HEADER, _spec("X", 100)) if h != "Capacity FFE"]
++        q = _write(tmp_path / "q.csv", QTY_HEADER, [["X", 1]])
++        s = _write(tmp_path / "s.csv", header, [row])
++        with pytest.raises(DataValidationError, match="Capacity FFE"):
++            loader.load_fleet(q, s)
++
++    def test_rejected_capacity_never_produces_a_default_class(self, loader, tmp_path):
++        q = _write(tmp_path / "q.csv", QTY_HEADER, [["X", 1]])
++        s = _write(tmp_path / "s.csv", SPEC_HEADER, [_spec("X", "")])
++        with pytest.raises(DataValidationError):
++            loader.load_fleet(q, s)
++        assert "fleet" not in loader.validation_report or \
++            loader.validation_report["fleet"].get("classes") != 1

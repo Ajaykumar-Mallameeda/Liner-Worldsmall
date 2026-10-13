@@ -1,0 +1,4037 @@
+{
+  "orchestrator": "orchestrator",
+  "status": "complete",
+  "network_ledger": {
+    "verified": true,
+    "status": "feasible",
+    "iteration": 1,
+    "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+    "weekly_usd": {
+      "revenue": 5211220.0,
+      "vessel_cost": 1715000.0,
+      "fuel_cost": 2561367.25,
+      "port_call_fixed_cost": 32974.0,
+      "handling_cost": 713032.0,
+      "transshipment_cost": 0.0,
+      "port_variable_cost": 40900.0,
+      "total_operating_cost": 5063273.25,
+      "operating_profit": 147946.75,
+      "profit_margin_on_revenue": 0.02839004110361873
+    },
+    "demand_teu_per_week": {
+      "total": 276446.80000000005,
+      "served": 4568.0,
+      "unserved": 271878.80000000005,
+      "coverage_pct": 1.6523974956483487
+    },
+    "fleet_by_class": {
+      "Feeder_450": {
+        "used": 0,
+        "available": 24
+      },
+      "Feeder_800": {
+        "used": 0,
+        "available": 29
+      },
+      "Panamax_1200": {
+        "used": 0,
+        "available": 68
+      },
+      "Panamax_2400": {
+        "used": 0,
+        "available": 74
+      },
+      "Post_panamax": {
+        "used": 7,
+        "available": 58
+      },
+      "Super_panamax": {
+        "used": 0,
+        "available": 10
+      }
+    },
+    "services": {
+      "candidates_offered": 1089,
+      "candidates_modelled": 1089,
+      "candidates_rejected": 0,
+      "operated": 1
+    },
+    "reconciliation": {
+      "milp_profit_before_penalty": 147946.75,
+      "ledger_operating_profit": 147946.75,
+      "difference": 0.0,
+      "relative_difference": 0.0,
+      "reconciled": true,
+      "relaxation_upper_bound": 34729669.608982034,
+      "services_in_relaxation": 1087,
+      "services_in_integer_problem": 392,
+      "unserved_penalty_per_teu": 0.0,
+      "runtime_sec": 8.485
+    },
+    "plan": {
+      "services": [
+        {
+          "id": "americas_svc_683",
+          "ports": [
+            "DEBRV",
+            "NLRTM",
+            "MYTPP"
+          ],
+          "vessel_class": "Post_panamax",
+          "frequency_per_week": 1,
+          "fuel_price_usd_per_t": 715.0,
+          "fuel_price_basis": "observed_port",
+          "bunkering_port": "NLRTM",
+          "price_observed_on": "2026-10-09"
+        }
+      ],
+      "flows": [
+        {
+          "origin": "MYTPP",
+          "destination": "DEBRV",
+          "teu": 2082.0,
+          "kind": "direct",
+          "segments": [
+            [
+              "americas_svc_683",
+              "MYTPP",
+              "DEBRV"
+            ]
+          ]
+        },
+        {
+          "origin": "DEBRV",
+          "destination": "MYTPP",
+          "teu": 414.0,
+          "kind": "direct",
+          "segments": [
+            [
+              "americas_svc_683",
+              "DEBRV",
+              "MYTPP"
+            ]
+          ]
+        },
+        {
+          "origin": "NLRTM",
+          "destination": "MYTPP",
+          "teu": 548.0,
+          "kind": "direct",
+          "segments": [
+            [
+              "americas_svc_683",
+              "NLRTM",
+              "MYTPP"
+            ]
+          ]
+        },
+        {
+          "origin": "MYTPP",
+          "destination": "NLRTM",
+          "teu": 1524.0,
+          "kind": "direct",
+          "segments": [
+            [
+              "americas_svc_683",
+              "MYTPP",
+              "NLRTM"
+            ]
+          ]
+        }
+      ]
+    },
+    "optimality": {
+      "milp_status": "feasible",
+      "relaxation_upper_bound_usd_per_week": 34729669.608982034,
+      "gap_to_bound_usd_per_week": 34581722.858982034,
+      "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+    },
+    "path_model": {
+      "od_total": 1764,
+      "od_with_direct": 1175,
+      "od_transfer_only": 396,
+      "od_without_path": 193,
+      "od_without_path_time_limit": 193,
+      "od_without_path_no_connection": 0,
+      "od_skipped_missing_port_record": 0,
+      "paths_built": 12428,
+      "paths_dropped_by_cap": 53503,
+      "paths_dropped_by_time_limit": 804390,
+      "max_paths_per_od": 10
+    },
+    "violations": [],
+    "assumptions": {
+      "port_stay_hours": 24.0,
+      "transshipment_min_hours": 48.0,
+      "transfer_wait_days": 3.5,
+      "bunker_price_usd_per_t": 895.5,
+      "fuel_pricing": {
+        "mode": "regional_snapshot",
+        "snapshot_id": "shipandbunker_vlsfo_2026-10-09",
+        "sha256": "fa39a8f206b3f41569cdece795017107482934f6b6c6a6dd79b017cfe5636f73",
+        "fuel_grade": "VLSFO",
+        "currency": "USD",
+        "unit": "USD_per_metric_tonne",
+        "as_of": "2026-10-09",
+        "max_age_days": 14,
+        "valuation_date": "2026-10-09",
+        "location_rule": "cheapest_observed_port_on_rotation",
+        "fallback": "reference",
+        "location_assumption": "all fuel of a service is bought at the cheapest OBSERVED bunkering port on its rotation (optimistic bound); a rotation without an observed port is priced at the snapshot's global reference",
+        "observations": [
+          {
+            "hub": "SGSIN",
+            "price_usd_per_t": 889.5,
+            "observed_on": "2026-10-09",
+            "provenance": "observed",
+            "source": "Ship & Bunker, Singapore VLSFO, latest row 'F Oct 9' (high 916.00, low 860.00)",
+            "source_url": "https://shipandbunker.com/prices/apac/sea/sg-sin-singapore",
+            "note": "Retrieved 2026-10-11. Corroborated by a secondary report quoting Ship & Bunker's 6 Oct snapshot at 890.00 (https://www.shipuniverse.com/?p=22139)."
+          },
+          {
+            "hub": "NLRTM",
+            "price_usd_per_t": 715.0,
+            "observed_on": "2026-10-09",
+            "provenance": "observed",
+            "source": "Ship & Bunker, Rotterdam VLSFO, latest row 'F Oct 9' (high 727.00, low 690.00)",
+            "source_url": "https://shipandbunker.com/prices/emea/nwe/nl-rtm-rotterdam",
+            "note": "Retrieved 2026-10-11. The same secondary report quotes 682.50 for 6 Oct."
+          },
+          {
+            "hub": "HKHKG",
+            "price_usd_per_t": 949.0,
+            "observed_on": "2026-10-09",
+            "provenance": "observed",
+            "source": "Ship & Bunker, Hong Kong VLSFO, latest row 'F Oct 9' (high 962.50, low 935.00)",
+            "source_url": "https://shipandbunker.com/prices/apac/ea/cn-hok-hong-kong",
+            "note": "Retrieved 2026-10-11."
+          },
+          {
+            "hub": "USLAX",
+            "price_usd_per_t": 1044.0,
+            "observed_on": "2026-10-09",
+            "provenance": "observed",
+            "source": "Ship & Bunker, LA / Long Beach VLSFO, latest row 'F Oct 9' (high 1091.00, low 1000.00)",
+            "source_url": "https://shipandbunker.com/prices/am/nampac/us-lax-la-long-beach",
+            "note": "Retrieved 2026-10-11. The source market is 'LA / Long Beach'; it is applied to WorldSmall port USLAX (Los Angeles). The market quoted 1,055.00 for 6 Oct in the same secondary report."
+          },
+          {
+            "hub": "BRSSZ",
+            "price_usd_per_t": 850.5,
+            "observed_on": "2026-10-09",
+            "provenance": "observed",
+            "source": "Ship & Bunker, Santos VLSFO, latest row 'F Oct 9' (high 879.00, low 822.00)",
+            "source_url": "https://shipandbunker.com/prices/am/samatl/br-ssz-santos",
+            "note": "Retrieved 2026-10-11. The source repeated the same 850.50 quote for 6, 7, 8 and 9 Oct: treat as indicative."
+          }
+        ],
+        "reference": {
+          "hub": "GLOBAL",
+          "price_usd_per_t": 895.5,
+          "observed_on": "2026-10-09",
+          "provenance": "observed",
+          "source": "Ship & Bunker, Global 20 Ports Average, VLSFO, latest row 'F Oct 9'",
+          "source_url": "https://shipandbunker.com/prices/av/global/av-g20-global-20-ports-average",
+          "note": "A published index (average of 20 bunkering ports), not a port price. Retrieved 2026-10-11."
+        },
+        "description": "VLSFO spot indications for the five WorldSmall ports that Ship & Bunker publishes on its free price pages, plus the Global 20 Ports Average as the reference price. Latest row of each page on 2026-10-11 (page label 'F Oct 9'). The pages show weekday and month-day only; the year 2026 is inferred from the weekday (Friday 9 October is 2026) and the retrieval date. Only 5 of the 47 WorldSmall ports have an observation; every other rotation is priced at the reference (basis 'global_reference').",
+        "licence_note": "Read from public Ship & Bunker price pages (full markets and downloads require login/subscription; no reuse licence is stated on the pages; https://shipandbunker.com/terms was not reviewed). Six individual dated figures are recorded here for audit and benchmark pinning; this is not a redistributable dataset. Check the provider's terms before sharing the file outside the project."
+      },
+      "speed_factor": 1.0,
+      "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+      "sailing_speed": "class designSpeed (only speed with a source consumption)",
+      "max_transfers_per_od": 1,
+      "capacity_unit": {
+        "status": "provisional",
+        "internal_unit": "TEU",
+        "source_column": "Capacity FFE",
+        "capacity_feasibility_is_conditional": true
+      },
+      "transit_time_unit": "TransitTime column read as days (unverified unit)"
+    },
+    "runtime_sec": 8.51
+  },
+  "problem_analysis": "Size: Small\nComplexity Drivers:\n- High network density at 163.2% indicates significant lane overlap and routing flexibility\n- Low demand concentration with Top-5 corridors accounting for only 5.6% of total volume\n- Moderate average lane demand of 156.7 TEU across 1,764 lanes suggests fragmented flow distribution\nDemand Concentration: low - The dispersed demand profile across 1,764 lanes implies that no single corridor dominates the network, requiring a balanced allocation strategy rather than prioritizing a few high-volume routes.\nDecomposition Rationale: With 47 ports and a low concentration metric, the network should be decomposed into three regional clusters of approximately 15-16 ports each to maintain manageable MILP sub-problem sizes while preserving inter-regional connectivity.",
+  "regional_results": [
+    {
+      "agent": "regional_asia",
+      "region": "Asia",
+      "status": "Feasible",
+      "services_generated": 812,
+      "services_filtered": 508,
+      "services_selected": 0,
+      "weekly_profit": 4211121.0,
+      "annual_profit": 218978292.0,
+      "operating_cost": 0.0,
+      "fuel_cost": 0.0,
+      "transship_cost": 0.0,
+      "port_cost": 595269.0,
+      "total_cost": 595269.0,
+      "coverage_percent": 2.4391481244736655,
+      "satisfied_demand": 3606.0,
+      "unserved_demand": 144232.5,
+      "total_demand": 147838.5,
+      "profit_margin_pct": 87.6,
+      "profit_per_service": 0,
+      "cost_per_service": 0,
+      "uncovered_teu": 144232.5,
+      "hub_ports": [
+        "CNSHA",
+        "MYTPP",
+        "CNYTN",
+        "HKHKG",
+        "CNTAO"
+      ],
+      "archetype_params": {
+        "archetype_mix": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05
+        },
+        "vessel_bias": "balanced",
+        "hub_focus": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN",
+          "HKHKG",
+          "CNTAO"
+        ],
+        "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates."
+      },
+      "regional_policy": {
+        "coverage_priority": 0.35,
+        "profit_priority": 0.65,
+        "min_service_margin": 0.08,
+        "vessel_bias": "large",
+        "hub_focus": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN"
+        ],
+        "corridor_focus": [
+          [
+            "CNYTN",
+            "USLAX"
+          ]
+        ],
+        "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+      },
+      "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model balances the 7.2% top-3 share concentration against the long-tail demand distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+      "explanation": "Verdict: Good\n  Profit margin 87.6% with coverage 2.4%.\n\nStrengths:\n- Weekly profit $4,211,121 (0 services) -> $0/service/week.\n- Satisfied 3,606 TEU/wk at 2.4% coverage.\n\nWeaknesses:\n- 97.6% unserved (144,232 TEU/wk).\n- Transshipment $0 + port $595,269/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+      "selected_services": [],
+      "elapsed_sec": 1.2,
+      "llm_actuation": {
+        "component": "regional_Asia",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 1.2355,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "ga_telemetry": {
+        "algorithm": "ServiceGA",
+        "actual_generations_executed": 11,
+        "max_generations": 120,
+        "stagnation_limit": 11,
+        "early_stop_reason": "stagnation",
+        "best_fitness": -1000000000000.0,
+        "runtime_seconds": 0.068
+      },
+      "milp_telemetry": {
+        "transfer_pair_budget": 2104,
+        "time_limit_sec": 75,
+        "status": "Optimal"
+      }
+    },
+    {
+      "agent": "regional_europe",
+      "region": "Europe",
+      "status": "Feasible",
+      "services_generated": 623,
+      "services_filtered": 405,
+      "services_selected": 0,
+      "weekly_profit": 0.0,
+      "annual_profit": 0.0,
+      "operating_cost": 0.0,
+      "fuel_cost": 0.0,
+      "transship_cost": 0.0,
+      "port_cost": 0.0,
+      "total_cost": 0.0,
+      "coverage_percent": 0.0,
+      "satisfied_demand": 0.0,
+      "unserved_demand": 48509.7,
+      "total_demand": 48509.7,
+      "profit_margin_pct": 0,
+      "profit_per_service": 0,
+      "cost_per_service": 0,
+      "uncovered_teu": 48509.7,
+      "hub_ports": [
+        "USCHS",
+        "BRSSZ",
+        "USLAX",
+        "PAMIT",
+        "USEWR"
+      ],
+      "archetype_params": {
+        "archetype_mix": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05
+        },
+        "vessel_bias": "balanced",
+        "hub_focus": [
+          "DEBRV",
+          "NLRTM",
+          "JPYOK"
+        ],
+        "notes": "The hybrid archetype is confirmed by the low median demand of 48.0 TEU against a total network volume of 48,510 TEU, necessitating a mix of direct and hub services. With a top-3 share of only 9.0%, approximately 15-20% of the ~800 candidate lanes are expected to retain General Availability (GA) as direct services, while the remaining 80-85% will be consolidated into hub-and-spoke loops."
+      },
+      "regional_policy": {
+        "coverage_priority": 0.35,
+        "profit_priority": 0.65,
+        "min_service_margin": 0.08,
+        "vessel_bias": "large",
+        "hub_focus": [
+          "USCHS",
+          "BRSSZ",
+          "USLAX"
+        ],
+        "corridor_focus": [
+          [
+            "BRSSZ",
+            "DEBRV"
+          ]
+        ],
+        "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+      },
+      "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, where a top-3 share of only 9.0% confirms that hub-and-spoke alone is insufficient, requiring a hybrid model to balance the 48,510 TEU/wk total demand across the 5 designated hubs.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+      "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (48,510 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+      "selected_services": [],
+      "elapsed_sec": 1.5,
+      "llm_actuation": {
+        "component": "regional_Europe",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 1.5338,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "ga_telemetry": {
+        "algorithm": "ServiceGA",
+        "actual_generations_executed": 11,
+        "max_generations": 120,
+        "stagnation_limit": 11,
+        "early_stop_reason": "stagnation",
+        "best_fitness": -0.16923564131419658,
+        "runtime_seconds": 0.0992
+      },
+      "milp_telemetry": {
+        "transfer_pair_budget": 1891,
+        "time_limit_sec": 67,
+        "status": "Optimal"
+      }
+    },
+    {
+      "agent": "regional_americas",
+      "region": "Americas",
+      "status": "Feasible",
+      "services_generated": 803,
+      "services_filtered": 499,
+      "services_selected": 1,
+      "weekly_profit": -4063174.25,
+      "annual_profit": -211285061.0,
+      "operating_cost": 1715000.0,
+      "fuel_cost": 2561367.25,
+      "transship_cost": 0.0,
+      "port_cost": 191637.0,
+      "total_cost": 4468004.25,
+      "coverage_percent": 1.201019743166547,
+      "satisfied_demand": 962.0,
+      "unserved_demand": 79136.6,
+      "total_demand": 80098.6,
+      "profit_margin_pct": -1003.7,
+      "profit_per_service": -4063174.0,
+      "cost_per_service": 4468004.0,
+      "uncovered_teu": 79136.6,
+      "hub_ports": [
+        "DEBRV",
+        "NLRTM",
+        "AEJEA",
+        "ITGIT",
+        "ZADUR"
+      ],
+      "archetype_params": {
+        "archetype_mix": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05
+        },
+        "vessel_bias": "balanced",
+        "hub_focus": [
+          "NLRTM",
+          "DEBRV",
+          "ZADUR"
+        ],
+        "notes": "The hybrid archetype is confirmed by the low median demand of 38.0 TEU against a total network volume of 80,099 TEU, necessitating a mix of direct top-corridor services and hub consolidation. With 97.4% of demand concentrated in the top-500 lanes, approximately 780 of the 800 candidate lanes are expected to retain General Availability via this structure."
+      },
+      "regional_policy": {
+        "coverage_priority": 0.35,
+        "profit_priority": 0.65,
+        "min_service_margin": 0.08,
+        "vessel_bias": "large",
+        "hub_focus": [
+          "DEBRV",
+          "NLRTM",
+          "AEJEA"
+        ],
+        "corridor_focus": [
+          [
+            "NLRTM",
+            "HKHKG"
+          ]
+        ],
+        "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+      },
+      "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, creating a complex topology where a hybrid model balances the 5.0% top-3 share concentration against the need for broad coverage across the 769 connections.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+      "explanation": "Verdict: Poor\n  Profit margin -1003.7% with coverage 1.2%.\n\nStrengths:\n- Weekly profit $-4,063,174 (1 services) -> $-4,063,174/service/week.\n- Satisfied 962 TEU/wk at 1.2% coverage.\n\nWeaknesses:\n- 98.8% unserved (79,137 TEU/wk).\n- Transshipment $0 + port $191,637/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+      "selected_services": [
+        {
+          "id": "americas_svc_683",
+          "ports": [
+            "DEBRV",
+            "NLRTM",
+            "MYTPP"
+          ],
+          "load": 4568.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1715000.0,
+          "fuel_cost": 2561367.25,
+          "port_cost": 786906.0,
+          "revenue": 5211220.0,
+          "cost": 5063273.25,
+          "weekly_profit": 147946.75,
+          "margin_pct": 2.84,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 7,
+          "cycle_time_days": 47
+        }
+      ],
+      "elapsed_sec": 1.3,
+      "llm_actuation": {
+        "component": "regional_Americas",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 1.3109,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "ga_telemetry": {
+        "algorithm": "ServiceGA",
+        "actual_generations_executed": 11,
+        "max_generations": 120,
+        "stagnation_limit": 11,
+        "early_stop_reason": "stagnation",
+        "best_fitness": -1000000000000.0,
+        "runtime_seconds": 0.039
+      },
+      "milp_telemetry": {
+        "transfer_pair_budget": 2269,
+        "time_limit_sec": 64,
+        "status": "Optimal"
+      }
+    }
+  ],
+  "decision_output": {
+    "agent": "coordinator",
+    "iteration": 1,
+    "status": "evaluated",
+    "global_metrics": {
+      "total_services": 1,
+      "total_profit": 147946.75,
+      "annual_profit": 7693231.0,
+      "average_regional_coverage": 1.2134,
+      "global_demand_weighted_coverage": 1.6524,
+      "average_coverage": 1.2134,
+      "min_coverage": 0.0,
+      "max_coverage": 2.4391481244736655,
+      "coverage_variance": 2.4391481244736655,
+      "revenue": 5211220.0,
+      "total_cost": 5063273.25,
+      "vessel_hire_cost": 1715000.0,
+      "profit_margin_pct": 2.839004110361873,
+      "accounting_status": "verified",
+      "accounting_verified": true,
+      "accounting_basis": "network_ledger",
+      "accounting_issues": [],
+      "total_satisfied_demand": 4568.0,
+      "total_unserved_demand": 271878.80000000005
+    },
+    "evaluation": {
+      "score": 3,
+      "max": 5,
+      "status": "good",
+      "reasons": [
+        "regional avg coverage 1.2% < target 70.0%",
+        "profit margin 2.8% < target 15.0%"
+      ],
+      "accounting_verified": true
+    },
+    "conflicts": [],
+    "resolution_log": [],
+    "decisions": {
+      "actions": [
+        {
+          "region": "Europe",
+          "action": "Deploy 2 additional feeder vessels to establish baseline service",
+          "expected_gain": "Increase Europe coverage from 0.0% to 15.0%"
+        },
+        {
+          "region": "Asia",
+          "action": "Add 1 large container ship to high-density lanes",
+          "expected_gain": "Increase Asia coverage from 2.4% to 10.0%"
+        },
+        {
+          "region": "Americas",
+          "action": "Optimize transshipment hubs to reduce cost per TEU",
+          "expected_gain": "Reduce total cost by $150,000/week"
+        }
+      ],
+      "priorities": [
+        "Establish minimum viable coverage in Europe (0.0% -> 15.0%)",
+        "Improve global demand-weighted coverage from 1.7% to 5.0%"
+      ],
+      "weight_adjustments": {
+        "profit_weight": 0.3,
+        "coverage_weight": 0.6,
+        "cost_weight": 0.1
+      },
+      "notes": "Current profit margin of 2.8% is insufficient to justify ignoring 0.0% Europe coverage; shifting weight to coverage (0.6) addresses the critical gap in the weakest region."
+    },
+    "feedback": {
+      "needs_rerun": true,
+      "rerun_reason": "coverage 1.2% is 68.8pp below 70.0% target",
+      "coverage_gap": 68.79,
+      "profit_gap": 0.0,
+      "conflict_severity": 0,
+      "weight_adjustments": {
+        "profit_weight": 0.25,
+        "coverage_weight": 0.65,
+        "cost_weight": 0.1
+      },
+      "convergence_score": 0.672,
+      "iteration": 1,
+      "at_iteration_cap": false,
+      "average_regional_coverage": 1.2134,
+      "global_demand_weighted_coverage": 1.6524,
+      "conflict_count": 0,
+      "low_coverage": true,
+      "low_profit": false
+    },
+    "llm_runtime_metrics": {
+      "llm_calls": 2,
+      "llm_success": 0,
+      "json_parse_success": 2,
+      "validator_executed": 2,
+      "fallback_count": 0
+    },
+    "llm_actuation": {
+      "component": "coordinator_iter_1",
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "role": "coordinator",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "fallback_uses": 0,
+      "cache_hits": 0,
+      "error_429": 0,
+      "error_timeout": 0,
+      "error_connection": 0,
+      "error_auth": 0,
+      "error_invalid_model": 0,
+      "error_invalid_json": 0,
+      "error_unknown": 1,
+      "latency_sec": 0.942,
+      "total_latency_sec": 1.4913,
+      "decision_source": "llm",
+      "decision_consumed": true,
+      "ai_generated": true,
+      "notes": ""
+    }
+  },
+  "executive_summary": "Verdict: Poor\n  Profit margin 2.8% with 1.7% demand coverage.\n\nStrengths:\n- Weekly profit $147,947 across 1 services ($147,947/service/week).\n- Cost breakdown: operating $1,715,000, transship $0, port $786,906/week.\n\nWeaknesses:\n- 98.3% demand (271,879 TEU/week) unserved.\n- Cost per service $5,063,273/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 0.0% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week).",
+  "summary_metrics": {
+    "weekly_profit": 147946.75,
+    "annual_profit": 7693231.0,
+    "revenue": 5211220.0,
+    "operating_cost": 1715000.0,
+    "transship_cost": 0.0,
+    "port_cost": 786906.0,
+    "fuel_cost": 2561367.25,
+    "total_cost": 5063273.25,
+    "cost": 5063273.25,
+    "total_services": 1,
+    "satisfied_demand": 4568.0,
+    "unserved_demand": 271878.80000000005,
+    "coverage": 1.6524,
+    "total_runtime": 162.3
+  },
+  "iteration_audit": [
+    {
+      "iteration": 0,
+      "weights_used": {
+        "profit_weight": 0.6,
+        "coverage_weight": 0.25,
+        "cost_weight": 0.15
+      },
+      "profit": 0.0,
+      "coverage": 0.0,
+      "global_coverage": 0.0,
+      "convergence_score": 0.333,
+      "coverage_gap": 70.0,
+      "conflict_severity": 0,
+      "needs_rerun": true,
+      "rerun_reason": "coverage 0.0% is 70.0pp below 70.0% target",
+      "resolution_log": [],
+      "selected_as_final": false
+    },
+    {
+      "iteration": 1,
+      "weights_used": {
+        "profit_weight": 0.5723,
+        "coverage_weight": 0.3217,
+        "cost_weight": 0.106
+      },
+      "profit": 147946.75,
+      "coverage": 1.2133892892134042,
+      "global_coverage": 1.6524,
+      "convergence_score": 0.672,
+      "coverage_gap": 68.79,
+      "conflict_severity": 0,
+      "needs_rerun": true,
+      "rerun_reason": "coverage 1.2% is 68.8pp below 70.0% target",
+      "resolution_log": [],
+      "selected_as_final": true
+    },
+    {
+      "iteration": 2,
+      "weights_used": {
+        "profit_weight": 0.5719,
+        "coverage_weight": 0.3221,
+        "cost_weight": 0.106
+      },
+      "profit": 0.0,
+      "coverage": 0.0,
+      "global_coverage": 0.0,
+      "convergence_score": 0.333,
+      "coverage_gap": 70.0,
+      "conflict_severity": 0,
+      "needs_rerun": false,
+      "rerun_reason": "coverage 0.0% is 70.0pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+      "resolution_log": [],
+      "selected_as_final": false
+    }
+  ],
+  "iterations_run": 3,
+  "selected_services": [
+    {
+      "id": "americas_svc_683",
+      "ports": [
+        "DEBRV",
+        "NLRTM",
+        "MYTPP"
+      ],
+      "load": 4568.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1715000.0,
+      "fuel_cost": 2561367.25,
+      "port_cost": 786906.0,
+      "revenue": 5211220.0,
+      "cost": 5063273.25,
+      "weekly_profit": 147946.75,
+      "margin_pct": 2.84,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 7,
+      "cycle_time_days": 47
+    }
+  ],
+  "all_selected_services": [
+    {
+      "id": "americas_svc_683",
+      "ports": [
+        "DEBRV",
+        "NLRTM",
+        "MYTPP"
+      ],
+      "load": 4568.0,
+      "capacity": 4200.0,
+      "vessel_class": "Post_panamax",
+      "vessel_cost": 1715000.0,
+      "fuel_cost": 2561367.25,
+      "port_cost": 786906.0,
+      "revenue": 5211220.0,
+      "cost": 5063273.25,
+      "weekly_profit": 147946.75,
+      "margin_pct": 2.84,
+      "region": "Americas",
+      "frequency_per_week": 1,
+      "vessels": 7,
+      "cycle_time_days": 47
+    }
+  ],
+  "iteration_results": [
+    {
+      "iteration": 0,
+      "status": "completed",
+      "metrics": {
+        "total_services": 0,
+        "total_profit": 0.0,
+        "annual_profit": 0.0,
+        "average_regional_coverage": 0.0,
+        "global_demand_weighted_coverage": 0.0,
+        "average_coverage": 0.0,
+        "min_coverage": 0.0,
+        "max_coverage": 0.0,
+        "coverage_variance": 0.0,
+        "revenue": 0.0,
+        "total_cost": 0.0,
+        "vessel_hire_cost": 0.0,
+        "profit_margin_pct": null,
+        "accounting_status": "verified",
+        "accounting_verified": true,
+        "accounting_basis": "network_ledger",
+        "accounting_issues": [],
+        "total_satisfied_demand": 0.0,
+        "total_unserved_demand": 276446.80000000005,
+        "weekly_profit": 0.0,
+        "operating_cost": 0.0,
+        "satisfied_demand": 0.0,
+        "unserved_demand": 276446.80000000005,
+        "services_deployed": 0,
+        "negative_profit_regions": 3,
+        "convergence_score": 0.333,
+        "conflict_count": 0,
+        "constraint_violations": 0
+      },
+      "regional_results": [
+        {
+          "agent": "regional_asia",
+          "region": "Asia",
+          "status": "Feasible",
+          "services_generated": 812,
+          "services_filtered": 508,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 147838.5,
+          "total_demand": 147838.5,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 147838.5,
+          "hub_ports": [
+            "CNSHA",
+            "MYTPP",
+            "CNYTN",
+            "HKHKG",
+            "CNTAO"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN",
+              "HKHKG",
+              "CNTAO"
+            ],
+            "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "corridor_focus": [
+              [
+                "CNYTN",
+                "USLAX"
+              ]
+            ],
+            "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model balances the 7.2% top-3 share concentration against the long-tail demand distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (147,838 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 47.7,
+          "llm_actuation": {
+            "component": "regional_Asia",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 47.7097,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0289
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2104,
+            "time_limit_sec": 75,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_europe",
+          "region": "Europe",
+          "status": "Feasible",
+          "services_generated": 623,
+          "services_filtered": 405,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 48509.7,
+          "total_demand": 48509.7,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 48509.7,
+          "hub_ports": [
+            "USCHS",
+            "BRSSZ",
+            "USLAX",
+            "PAMIT",
+            "USEWR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "JPYOK"
+            ],
+            "notes": "The hybrid archetype is confirmed by the low median demand of 48.0 TEU against a total network volume of 48,510 TEU, necessitating a mix of direct and hub services. With a top-3 share of only 9.0%, approximately 15-20% of the ~800 candidate lanes are expected to retain General Availability (GA) as direct services, while the remaining 80-85% will be consolidated into hub-and-spoke loops."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "corridor_focus": [
+              [
+                "BRSSZ",
+                "DEBRV"
+              ]
+            ],
+            "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, where a top-3 share of only 9.0% confirms that hub-and-spoke alone is insufficient, requiring a hybrid model to balance the 48,510 TEU/wk total demand across the 5 designated hubs.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (48,510 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 33.3,
+          "llm_actuation": {
+            "component": "regional_Europe",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 1,
+            "failures": 0,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.6019,
+            "total_latency_sec": 33.341,
+            "decision_source": "llm",
+            "decision_consumed": true,
+            "ai_generated": true,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -0.16923564131419658,
+            "runtime_seconds": 0.0126
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 1891,
+            "time_limit_sec": 67,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_americas",
+          "region": "Americas",
+          "status": "Feasible",
+          "services_generated": 803,
+          "services_filtered": 499,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 80098.6,
+          "total_demand": 80098.6,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 80098.6,
+          "hub_ports": [
+            "DEBRV",
+            "NLRTM",
+            "AEJEA",
+            "ITGIT",
+            "ZADUR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "NLRTM",
+              "DEBRV",
+              "ZADUR"
+            ],
+            "notes": "The hybrid archetype is confirmed by the low median demand of 38.0 TEU against a total network volume of 80,099 TEU, necessitating a mix of direct top-corridor services and hub consolidation. With 97.4% of demand concentrated in the top-500 lanes, approximately 780 of the 800 candidate lanes are expected to retain General Availability via this structure."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "corridor_focus": [
+              [
+                "NLRTM",
+                "HKHKG"
+              ]
+            ],
+            "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, creating a complex topology where a hybrid model balances the 5.0% top-3 share concentration against the need for broad coverage across the 769 connections.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (80,099 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 86.6,
+          "llm_actuation": {
+            "component": "regional_Americas",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 86.6296,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0546
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2269,
+            "time_limit_sec": 64,
+            "status": "Optimal"
+          }
+        }
+      ],
+      "weights_used": {
+        "profit_weight": 0.6,
+        "coverage_weight": 0.25,
+        "cost_weight": 0.15
+      },
+      "consensus_result": {
+        "final_weight_adjustments": {
+          "profit_weight": 0.5723,
+          "coverage_weight": 0.3217,
+          "cost_weight": 0.106
+        },
+        "final_archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.5117,
+            "hub_loop_ratio": 0.1668,
+            "feeder_ratio": 0.2515,
+            "trunk_ratio": 0.07
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [
+            "CNSHA",
+            "CNYTN",
+            "MYTPP"
+          ],
+          "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates. | reconciled vote distribution: balanced=0.60; small=0.40"
+        },
+        "confidence_score": 0.9,
+        "conflicts_resolved": [
+          {
+            "type": "hub_conflict",
+            "detail": "Partial hub overlap: common=['CNSHA', 'CNYTN', 'MYTPP'], svc-exclusive=['CNTAO', 'HKHKG'], regional-exclusive=['AEJEA', 'BRSSZ', 'DEBRV', 'NLRTM', 'USCHS', 'USLAX']",
+            "service_hubs": [
+              "CNSHA",
+              "CNTAO",
+              "CNYTN",
+              "HKHKG",
+              "MYTPP"
+            ],
+            "regional_hubs": [
+              "AEJEA",
+              "BRSSZ",
+              "CNSHA",
+              "CNYTN",
+              "DEBRV",
+              "MYTPP",
+              "NLRTM",
+              "USCHS",
+              "USLAX"
+            ],
+            "intersection": [
+              "CNSHA",
+              "CNYTN",
+              "MYTPP"
+            ],
+            "resolved": true,
+            "resolution": "Weighted hub support produced final hubs=['CNSHA', 'CNYTN', 'MYTPP']"
+          }
+        ],
+        "conflicts_remaining": [],
+        "notes": "confidence=0.9000; conflicts_detected=1; conflicts_remaining=0; all_conflicts_resolved"
+      },
+      "feedback": {
+        "needs_rerun": true,
+        "rerun_reason": "coverage 0.0% is 70.0pp below 70.0% target",
+        "coverage_gap": 70.0,
+        "profit_gap": 0.0,
+        "conflict_severity": 0,
+        "weight_adjustments": {
+          "profit_weight": 0.25,
+          "coverage_weight": 0.65,
+          "cost_weight": 0.1
+        },
+        "convergence_score": 0.333,
+        "iteration": 0,
+        "at_iteration_cap": false,
+        "average_regional_coverage": 0.0,
+        "global_demand_weighted_coverage": 0.0,
+        "conflict_count": 0,
+        "low_coverage": true,
+        "low_profit": false
+      },
+      "decision_output": {
+        "agent": "coordinator",
+        "iteration": 0,
+        "status": "evaluated",
+        "global_metrics": {
+          "total_services": 0,
+          "total_profit": 0.0,
+          "annual_profit": 0.0,
+          "average_regional_coverage": 0.0,
+          "global_demand_weighted_coverage": 0.0,
+          "average_coverage": 0.0,
+          "min_coverage": 0.0,
+          "max_coverage": 0.0,
+          "coverage_variance": 0.0,
+          "revenue": 0.0,
+          "total_cost": 0.0,
+          "vessel_hire_cost": 0.0,
+          "profit_margin_pct": null,
+          "accounting_status": "verified",
+          "accounting_verified": true,
+          "accounting_basis": "network_ledger",
+          "accounting_issues": [],
+          "total_satisfied_demand": 0.0,
+          "total_unserved_demand": 276446.80000000005
+        },
+        "evaluation": {
+          "score": 2,
+          "max": 5,
+          "status": "poor",
+          "reasons": [
+            "regional avg coverage 0.0% < target 70.0%",
+            "profit $0 <= floor $0",
+            "profit margin unavailable (accounting verified)"
+          ],
+          "accounting_verified": true
+        },
+        "conflicts": [],
+        "resolution_log": [],
+        "decisions": {
+          "actions": [
+            {
+              "region": "Asia",
+              "action": "Deploy 2 Panamax vessels",
+              "expected_gain": "Coverage 0.0% -> 75.0%"
+            },
+            {
+              "region": "Europe",
+              "action": "Deploy 2 Panamax vessels",
+              "expected_gain": "Coverage 0.0% -> 75.0%"
+            },
+            {
+              "region": "Americas",
+              "action": "Deploy 2 Panamax vessels",
+              "expected_gain": "Coverage 0.0% -> 75.0%"
+            }
+          ],
+          "priorities": [
+            "Establish baseline network coverage in all regions",
+            "Generate initial revenue to offset fixed costs"
+          ],
+          "weight_adjustments": {
+            "profit_weight": 0.3,
+            "coverage_weight": 0.6,
+            "cost_weight": 0.1
+          },
+          "notes": "Current profit is $0/week and coverage is 0.0% in all regions, requiring immediate deployment of 6 vessels to reach 75.0% coverage."
+        },
+        "feedback": {
+          "needs_rerun": true,
+          "rerun_reason": "coverage 0.0% is 70.0pp below 70.0% target",
+          "coverage_gap": 70.0,
+          "profit_gap": 0.0,
+          "conflict_severity": 0,
+          "weight_adjustments": {
+            "profit_weight": 0.25,
+            "coverage_weight": 0.65,
+            "cost_weight": 0.1
+          },
+          "convergence_score": 0.333,
+          "iteration": 0,
+          "at_iteration_cap": false,
+          "average_regional_coverage": 0.0,
+          "global_demand_weighted_coverage": 0.0,
+          "conflict_count": 0,
+          "low_coverage": true,
+          "low_profit": false
+        },
+        "llm_runtime_metrics": {
+          "llm_calls": 1,
+          "llm_success": 0,
+          "json_parse_success": 1,
+          "validator_executed": 1,
+          "fallback_count": 0
+        },
+        "llm_actuation": {
+          "component": "coordinator_iter_0",
+          "provider": "groq",
+          "model": "qwen/qwen3.8-27b",
+          "role": "coordinator",
+          "attempts": 1,
+          "successes": 1,
+          "failures": 0,
+          "fallback_uses": 0,
+          "cache_hits": 0,
+          "error_429": 0,
+          "error_timeout": 0,
+          "error_connection": 0,
+          "error_auth": 0,
+          "error_invalid_model": 0,
+          "error_invalid_json": 0,
+          "error_unknown": 1,
+          "latency_sec": 11.176,
+          "total_latency_sec": 11.7723,
+          "decision_source": "llm",
+          "decision_consumed": true,
+          "ai_generated": true,
+          "notes": ""
+        }
+      },
+      "shared_context": {
+        "global_objectives": {
+          "profit_weight": 0.5723,
+          "coverage_weight": 0.3217,
+          "cost_weight": 0.106,
+          "iteration": 0,
+          "coverage_target": 70.0,
+          "profit_floor": 0.0,
+          "max_iterations": 3,
+          "current_coverage": 0.0,
+          "current_profit": 0.0,
+          "convergence_score": 0.333
+        },
+        "regional_priorities": {
+          "asia": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          },
+          "europe": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          },
+          "americas": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          }
+        },
+        "service_archetype_plan": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05,
+          "vessel_bias": "balanced"
+        },
+        "hub_strategy": {
+          "primary_hubs": [],
+          "recommended_hubs": {
+            "asia": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "europe": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "americas": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ]
+          },
+          "overlap_hubs": []
+        }
+      },
+      "selected_services": [],
+      "candidate_quality": {
+        "services_deployed": 0,
+        "satisfied_demand": 0.0,
+        "unserved_demand": 276446.80000000005,
+        "negative_profit_regions": 3,
+        "constraint_violations": 0,
+        "conflict_count": 0
+      },
+      "network_ledger": {
+        "verified": true,
+        "status": "feasible",
+        "iteration": 0,
+        "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+        "weekly_usd": {
+          "revenue": 0.0,
+          "vessel_cost": 0.0,
+          "fuel_cost": 0.0,
+          "port_call_fixed_cost": 0.0,
+          "handling_cost": 0.0,
+          "transshipment_cost": 0.0,
+          "port_variable_cost": 0.0,
+          "total_operating_cost": 0.0,
+          "operating_profit": 0.0,
+          "profit_margin_on_revenue": null
+        },
+        "demand_teu_per_week": {
+          "total": 276446.80000000005,
+          "served": 0.0,
+          "unserved": 276446.80000000005,
+          "coverage_pct": 0.0
+        },
+        "fleet_by_class": {
+          "Feeder_450": {
+            "used": 0,
+            "available": 24
+          },
+          "Feeder_800": {
+            "used": 0,
+            "available": 29
+          },
+          "Panamax_1200": {
+            "used": 0,
+            "available": 68
+          },
+          "Panamax_2400": {
+            "used": 0,
+            "available": 74
+          },
+          "Post_panamax": {
+            "used": 0,
+            "available": 58
+          },
+          "Super_panamax": {
+            "used": 0,
+            "available": 10
+          }
+        },
+        "services": {
+          "candidates_offered": 1095,
+          "candidates_modelled": 1095,
+          "candidates_rejected": 0,
+          "operated": 0
+        },
+        "reconciliation": {
+          "milp_profit_before_penalty": 0.0,
+          "ledger_operating_profit": 0.0,
+          "difference": 0.0,
+          "relative_difference": 0.0,
+          "reconciled": true,
+          "relaxation_upper_bound": 34962720.895968325,
+          "services_in_relaxation": 1095,
+          "services_in_integer_problem": 366,
+          "unserved_penalty_per_teu": 0.0,
+          "runtime_sec": 7.432
+        },
+        "plan": {
+          "services": [],
+          "flows": []
+        },
+        "optimality": {
+          "milp_status": "feasible",
+          "relaxation_upper_bound_usd_per_week": 34962720.895968325,
+          "gap_to_bound_usd_per_week": 34962720.895968325,
+          "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+        },
+        "path_model": {
+          "od_total": 1764,
+          "od_with_direct": 1188,
+          "od_transfer_only": 415,
+          "od_without_path": 161,
+          "od_without_path_time_limit": 161,
+          "od_without_path_no_connection": 0,
+          "od_skipped_missing_port_record": 0,
+          "paths_built": 12582,
+          "paths_dropped_by_cap": 53569,
+          "paths_dropped_by_time_limit": 806732,
+          "max_paths_per_od": 10
+        },
+        "violations": [],
+        "assumptions": {
+          "port_stay_hours": 24.0,
+          "transshipment_min_hours": 48.0,
+          "transfer_wait_days": 3.5,
+          "bunker_price_usd_per_t": 895.5,
+          "fuel_pricing": {
+            "mode": "regional_snapshot",
+            "snapshot_id": "shipandbunker_vlsfo_2026-10-09",
+            "sha256": "fa39a8f206b3f41569cdece795017107482934f6b6c6a6dd79b017cfe5636f73",
+            "fuel_grade": "VLSFO",
+            "currency": "USD",
+            "unit": "USD_per_metric_tonne",
+            "as_of": "2026-10-09",
+            "max_age_days": 14,
+            "valuation_date": "2026-10-09",
+            "location_rule": "cheapest_observed_port_on_rotation",
+            "fallback": "reference",
+            "location_assumption": "all fuel of a service is bought at the cheapest OBSERVED bunkering port on its rotation (optimistic bound); a rotation without an observed port is priced at the snapshot's global reference",
+            "observations": [
+              {
+                "hub": "SGSIN",
+                "price_usd_per_t": 889.5,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Singapore VLSFO, latest row 'F Oct 9' (high 916.00, low 860.00)",
+                "source_url": "https://shipandbunker.com/prices/apac/sea/sg-sin-singapore",
+                "note": "Retrieved 2026-10-11. Corroborated by a secondary report quoting Ship & Bunker's 6 Oct snapshot at 890.00 (https://www.shipuniverse.com/?p=22139)."
+              },
+              {
+                "hub": "NLRTM",
+                "price_usd_per_t": 715.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Rotterdam VLSFO, latest row 'F Oct 9' (high 727.00, low 690.00)",
+                "source_url": "https://shipandbunker.com/prices/emea/nwe/nl-rtm-rotterdam",
+                "note": "Retrieved 2026-10-11. The same secondary report quotes 682.50 for 6 Oct."
+              },
+              {
+                "hub": "HKHKG",
+                "price_usd_per_t": 949.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Hong Kong VLSFO, latest row 'F Oct 9' (high 962.50, low 935.00)",
+                "source_url": "https://shipandbunker.com/prices/apac/ea/cn-hok-hong-kong",
+                "note": "Retrieved 2026-10-11."
+              },
+              {
+                "hub": "USLAX",
+                "price_usd_per_t": 1044.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, LA / Long Beach VLSFO, latest row 'F Oct 9' (high 1091.00, low 1000.00)",
+                "source_url": "https://shipandbunker.com/prices/am/nampac/us-lax-la-long-beach",
+                "note": "Retrieved 2026-10-11. The source market is 'LA / Long Beach'; it is applied to WorldSmall port USLAX (Los Angeles). The market quoted 1,055.00 for 6 Oct in the same secondary report."
+              },
+              {
+                "hub": "BRSSZ",
+                "price_usd_per_t": 850.5,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Santos VLSFO, latest row 'F Oct 9' (high 879.00, low 822.00)",
+                "source_url": "https://shipandbunker.com/prices/am/samatl/br-ssz-santos",
+                "note": "Retrieved 2026-10-11. The source repeated the same 850.50 quote for 6, 7, 8 and 9 Oct: treat as indicative."
+              }
+            ],
+            "reference": {
+              "hub": "GLOBAL",
+              "price_usd_per_t": 895.5,
+              "observed_on": "2026-10-09",
+              "provenance": "observed",
+              "source": "Ship & Bunker, Global 20 Ports Average, VLSFO, latest row 'F Oct 9'",
+              "source_url": "https://shipandbunker.com/prices/av/global/av-g20-global-20-ports-average",
+              "note": "A published index (average of 20 bunkering ports), not a port price. Retrieved 2026-10-11."
+            },
+            "description": "VLSFO spot indications for the five WorldSmall ports that Ship & Bunker publishes on its free price pages, plus the Global 20 Ports Average as the reference price. Latest row of each page on 2026-10-11 (page label 'F Oct 9'). The pages show weekday and month-day only; the year 2026 is inferred from the weekday (Friday 9 October is 2026) and the retrieval date. Only 5 of the 47 WorldSmall ports have an observation; every other rotation is priced at the reference (basis 'global_reference').",
+            "licence_note": "Read from public Ship & Bunker price pages (full markets and downloads require login/subscription; no reuse licence is stated on the pages; https://shipandbunker.com/terms was not reviewed). Six individual dated figures are recorded here for audit and benchmark pinning; this is not a redistributable dataset. Check the provider's terms before sharing the file outside the project."
+          },
+          "speed_factor": 1.0,
+          "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+          "sailing_speed": "class designSpeed (only speed with a source consumption)",
+          "max_transfers_per_od": 1,
+          "capacity_unit": {
+            "status": "provisional",
+            "internal_unit": "TEU",
+            "source_column": "Capacity FFE",
+            "capacity_feasibility_is_conditional": true
+          },
+          "transit_time_unit": "TransitTime column read as days (unverified unit)"
+        },
+        "runtime_sec": 7.45
+      }
+    },
+    {
+      "iteration": 1,
+      "status": "completed",
+      "metrics": {
+        "total_services": 1,
+        "total_profit": 147946.75,
+        "annual_profit": 7693231.0,
+        "average_regional_coverage": 1.2134,
+        "global_demand_weighted_coverage": 1.6524,
+        "average_coverage": 1.2134,
+        "min_coverage": 0.0,
+        "max_coverage": 2.4391481244736655,
+        "coverage_variance": 2.4391481244736655,
+        "revenue": 5211220.0,
+        "total_cost": 5063273.25,
+        "vessel_hire_cost": 1715000.0,
+        "profit_margin_pct": 2.839004110361873,
+        "accounting_status": "verified",
+        "accounting_verified": true,
+        "accounting_basis": "network_ledger",
+        "accounting_issues": [],
+        "total_satisfied_demand": 4568.0,
+        "total_unserved_demand": 271878.80000000005,
+        "weekly_profit": 147946.75,
+        "operating_cost": 1715000.0,
+        "satisfied_demand": 4568.0,
+        "unserved_demand": 271878.80000000005,
+        "services_deployed": 1,
+        "negative_profit_regions": 2,
+        "convergence_score": 0.672,
+        "conflict_count": 0,
+        "constraint_violations": 0
+      },
+      "regional_results": [
+        {
+          "agent": "regional_asia",
+          "region": "Asia",
+          "status": "Feasible",
+          "services_generated": 812,
+          "services_filtered": 508,
+          "services_selected": 0,
+          "weekly_profit": 4211121.0,
+          "annual_profit": 218978292.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 595269.0,
+          "total_cost": 595269.0,
+          "coverage_percent": 2.4391481244736655,
+          "satisfied_demand": 3606.0,
+          "unserved_demand": 144232.5,
+          "total_demand": 147838.5,
+          "profit_margin_pct": 87.6,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 144232.5,
+          "hub_ports": [
+            "CNSHA",
+            "MYTPP",
+            "CNYTN",
+            "HKHKG",
+            "CNTAO"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN",
+              "HKHKG",
+              "CNTAO"
+            ],
+            "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "corridor_focus": [
+              [
+                "CNYTN",
+                "USLAX"
+              ]
+            ],
+            "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model balances the 7.2% top-3 share concentration against the long-tail demand distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+          "explanation": "Verdict: Good\n  Profit margin 87.6% with coverage 2.4%.\n\nStrengths:\n- Weekly profit $4,211,121 (0 services) -> $0/service/week.\n- Satisfied 3,606 TEU/wk at 2.4% coverage.\n\nWeaknesses:\n- 97.6% unserved (144,232 TEU/wk).\n- Transshipment $0 + port $595,269/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 1.2,
+          "llm_actuation": {
+            "component": "regional_Asia",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.2355,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.068
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2104,
+            "time_limit_sec": 75,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_europe",
+          "region": "Europe",
+          "status": "Feasible",
+          "services_generated": 623,
+          "services_filtered": 405,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 48509.7,
+          "total_demand": 48509.7,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 48509.7,
+          "hub_ports": [
+            "USCHS",
+            "BRSSZ",
+            "USLAX",
+            "PAMIT",
+            "USEWR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "JPYOK"
+            ],
+            "notes": "The hybrid archetype is confirmed by the low median demand of 48.0 TEU against a total network volume of 48,510 TEU, necessitating a mix of direct and hub services. With a top-3 share of only 9.0%, approximately 15-20% of the ~800 candidate lanes are expected to retain General Availability (GA) as direct services, while the remaining 80-85% will be consolidated into hub-and-spoke loops."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "corridor_focus": [
+              [
+                "BRSSZ",
+                "DEBRV"
+              ]
+            ],
+            "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, where a top-3 share of only 9.0% confirms that hub-and-spoke alone is insufficient, requiring a hybrid model to balance the 48,510 TEU/wk total demand across the 5 designated hubs.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (48,510 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 1.5,
+          "llm_actuation": {
+            "component": "regional_Europe",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.5338,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -0.16923564131419658,
+            "runtime_seconds": 0.0992
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 1891,
+            "time_limit_sec": 67,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_americas",
+          "region": "Americas",
+          "status": "Feasible",
+          "services_generated": 803,
+          "services_filtered": 499,
+          "services_selected": 1,
+          "weekly_profit": -4063174.25,
+          "annual_profit": -211285061.0,
+          "operating_cost": 1715000.0,
+          "fuel_cost": 2561367.25,
+          "transship_cost": 0.0,
+          "port_cost": 191637.0,
+          "total_cost": 4468004.25,
+          "coverage_percent": 1.201019743166547,
+          "satisfied_demand": 962.0,
+          "unserved_demand": 79136.6,
+          "total_demand": 80098.6,
+          "profit_margin_pct": -1003.7,
+          "profit_per_service": -4063174.0,
+          "cost_per_service": 4468004.0,
+          "uncovered_teu": 79136.6,
+          "hub_ports": [
+            "DEBRV",
+            "NLRTM",
+            "AEJEA",
+            "ITGIT",
+            "ZADUR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "NLRTM",
+              "DEBRV",
+              "ZADUR"
+            ],
+            "notes": "The hybrid archetype is confirmed by the low median demand of 38.0 TEU against a total network volume of 80,099 TEU, necessitating a mix of direct top-corridor services and hub consolidation. With 97.4% of demand concentrated in the top-500 lanes, approximately 780 of the 800 candidate lanes are expected to retain General Availability via this structure."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "corridor_focus": [
+              [
+                "NLRTM",
+                "HKHKG"
+              ]
+            ],
+            "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, creating a complex topology where a hybrid model balances the 5.0% top-3 share concentration against the need for broad coverage across the 769 connections.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+          "explanation": "Verdict: Poor\n  Profit margin -1003.7% with coverage 1.2%.\n\nStrengths:\n- Weekly profit $-4,063,174 (1 services) -> $-4,063,174/service/week.\n- Satisfied 962 TEU/wk at 1.2% coverage.\n\nWeaknesses:\n- 98.8% unserved (79,137 TEU/wk).\n- Transshipment $0 + port $191,637/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [
+            {
+              "id": "americas_svc_683",
+              "ports": [
+                "DEBRV",
+                "NLRTM",
+                "MYTPP"
+              ],
+              "load": 4568.0,
+              "capacity": 4200.0,
+              "vessel_class": "Post_panamax",
+              "vessel_cost": 1715000.0,
+              "fuel_cost": 2561367.25,
+              "port_cost": 786906.0,
+              "revenue": 5211220.0,
+              "cost": 5063273.25,
+              "weekly_profit": 147946.75,
+              "margin_pct": 2.84,
+              "region": "Americas",
+              "frequency_per_week": 1,
+              "vessels": 7,
+              "cycle_time_days": 47
+            }
+          ],
+          "elapsed_sec": 1.3,
+          "llm_actuation": {
+            "component": "regional_Americas",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.3109,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.039
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2269,
+            "time_limit_sec": 64,
+            "status": "Optimal"
+          }
+        }
+      ],
+      "weights_used": {
+        "profit_weight": 0.5723,
+        "coverage_weight": 0.3217,
+        "cost_weight": 0.106
+      },
+      "consensus_result": {
+        "final_weight_adjustments": {
+          "profit_weight": 0.5719,
+          "coverage_weight": 0.3221,
+          "cost_weight": 0.106
+        },
+        "final_archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.5117,
+            "hub_loop_ratio": 0.1668,
+            "feeder_ratio": 0.2515,
+            "trunk_ratio": 0.07
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [
+            "CNSHA",
+            "CNYTN",
+            "MYTPP"
+          ],
+          "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates. | reconciled vote distribution: balanced=0.64; small=0.36"
+        },
+        "confidence_score": 0.9,
+        "conflicts_resolved": [
+          {
+            "type": "hub_conflict",
+            "detail": "Partial hub overlap: common=['CNSHA', 'CNYTN', 'MYTPP'], svc-exclusive=['CNTAO', 'HKHKG'], regional-exclusive=['AEJEA', 'BRSSZ', 'DEBRV', 'NLRTM', 'USCHS', 'USLAX']",
+            "service_hubs": [
+              "CNSHA",
+              "CNTAO",
+              "CNYTN",
+              "HKHKG",
+              "MYTPP"
+            ],
+            "regional_hubs": [
+              "AEJEA",
+              "BRSSZ",
+              "CNSHA",
+              "CNYTN",
+              "DEBRV",
+              "MYTPP",
+              "NLRTM",
+              "USCHS",
+              "USLAX"
+            ],
+            "intersection": [
+              "CNSHA",
+              "CNYTN",
+              "MYTPP"
+            ],
+            "resolved": true,
+            "resolution": "Weighted hub support produced final hubs=['CNSHA', 'CNYTN', 'MYTPP']"
+          }
+        ],
+        "conflicts_remaining": [],
+        "notes": "confidence=0.9000; conflicts_detected=1; conflicts_remaining=0; all_conflicts_resolved"
+      },
+      "feedback": {
+        "needs_rerun": true,
+        "rerun_reason": "coverage 1.2% is 68.8pp below 70.0% target",
+        "coverage_gap": 68.79,
+        "profit_gap": 0.0,
+        "conflict_severity": 0,
+        "weight_adjustments": {
+          "profit_weight": 0.25,
+          "coverage_weight": 0.65,
+          "cost_weight": 0.1
+        },
+        "convergence_score": 0.672,
+        "iteration": 1,
+        "at_iteration_cap": false,
+        "average_regional_coverage": 1.2134,
+        "global_demand_weighted_coverage": 1.6524,
+        "conflict_count": 0,
+        "low_coverage": true,
+        "low_profit": false
+      },
+      "decision_output": {
+        "agent": "coordinator",
+        "iteration": 1,
+        "status": "evaluated",
+        "global_metrics": {
+          "total_services": 1,
+          "total_profit": 147946.75,
+          "annual_profit": 7693231.0,
+          "average_regional_coverage": 1.2134,
+          "global_demand_weighted_coverage": 1.6524,
+          "average_coverage": 1.2134,
+          "min_coverage": 0.0,
+          "max_coverage": 2.4391481244736655,
+          "coverage_variance": 2.4391481244736655,
+          "revenue": 5211220.0,
+          "total_cost": 5063273.25,
+          "vessel_hire_cost": 1715000.0,
+          "profit_margin_pct": 2.839004110361873,
+          "accounting_status": "verified",
+          "accounting_verified": true,
+          "accounting_basis": "network_ledger",
+          "accounting_issues": [],
+          "total_satisfied_demand": 4568.0,
+          "total_unserved_demand": 271878.80000000005
+        },
+        "evaluation": {
+          "score": 3,
+          "max": 5,
+          "status": "good",
+          "reasons": [
+            "regional avg coverage 1.2% < target 70.0%",
+            "profit margin 2.8% < target 15.0%"
+          ],
+          "accounting_verified": true
+        },
+        "conflicts": [],
+        "resolution_log": [],
+        "decisions": {
+          "actions": [
+            {
+              "region": "Europe",
+              "action": "Deploy 2 additional feeder vessels to establish baseline service",
+              "expected_gain": "Increase Europe coverage from 0.0% to 15.0%"
+            },
+            {
+              "region": "Asia",
+              "action": "Add 1 large container ship to high-density lanes",
+              "expected_gain": "Increase Asia coverage from 2.4% to 10.0%"
+            },
+            {
+              "region": "Americas",
+              "action": "Optimize transshipment hubs to reduce cost per TEU",
+              "expected_gain": "Reduce total cost by $150,000/week"
+            }
+          ],
+          "priorities": [
+            "Establish minimum viable coverage in Europe (0.0% -> 15.0%)",
+            "Improve global demand-weighted coverage from 1.7% to 5.0%"
+          ],
+          "weight_adjustments": {
+            "profit_weight": 0.3,
+            "coverage_weight": 0.6,
+            "cost_weight": 0.1
+          },
+          "notes": "Current profit margin of 2.8% is insufficient to justify ignoring 0.0% Europe coverage; shifting weight to coverage (0.6) addresses the critical gap in the weakest region."
+        },
+        "feedback": {
+          "needs_rerun": true,
+          "rerun_reason": "coverage 1.2% is 68.8pp below 70.0% target",
+          "coverage_gap": 68.79,
+          "profit_gap": 0.0,
+          "conflict_severity": 0,
+          "weight_adjustments": {
+            "profit_weight": 0.25,
+            "coverage_weight": 0.65,
+            "cost_weight": 0.1
+          },
+          "convergence_score": 0.672,
+          "iteration": 1,
+          "at_iteration_cap": false,
+          "average_regional_coverage": 1.2134,
+          "global_demand_weighted_coverage": 1.6524,
+          "conflict_count": 0,
+          "low_coverage": true,
+          "low_profit": false
+        },
+        "llm_runtime_metrics": {
+          "llm_calls": 2,
+          "llm_success": 0,
+          "json_parse_success": 2,
+          "validator_executed": 2,
+          "fallback_count": 0
+        },
+        "llm_actuation": {
+          "component": "coordinator_iter_1",
+          "provider": "groq",
+          "model": "qwen/qwen3.8-27b",
+          "role": "coordinator",
+          "attempts": 1,
+          "successes": 1,
+          "failures": 0,
+          "fallback_uses": 0,
+          "cache_hits": 0,
+          "error_429": 0,
+          "error_timeout": 0,
+          "error_connection": 0,
+          "error_auth": 0,
+          "error_invalid_model": 0,
+          "error_invalid_json": 0,
+          "error_unknown": 1,
+          "latency_sec": 0.942,
+          "total_latency_sec": 1.4913,
+          "decision_source": "llm",
+          "decision_consumed": true,
+          "ai_generated": true,
+          "notes": ""
+        }
+      },
+      "shared_context": {
+        "global_objectives": {
+          "profit_weight": 0.5719,
+          "coverage_weight": 0.3221,
+          "cost_weight": 0.106,
+          "iteration": 1,
+          "coverage_target": 70.0,
+          "profit_floor": 0.0,
+          "max_iterations": 3,
+          "current_coverage": 1.2133892892134042,
+          "current_profit": 147946.75,
+          "convergence_score": 0.672
+        },
+        "regional_priorities": {
+          "asia": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9756085187552633,
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "min_service_margin": 0.8759999999999999,
+            "vessel_bias": "balanced",
+            "current_coverage": 2.4391481244736655,
+            "current_profit": 4211121.0
+          },
+          "europe": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          },
+          "americas": {
+            "coverage_priority": 0.1,
+            "profit_priority": 0.9879898025683346,
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 1.201019743166547,
+            "current_profit": -4063174.25
+          }
+        },
+        "service_archetype_plan": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05,
+          "vessel_bias": "balanced"
+        },
+        "hub_strategy": {
+          "primary_hubs": [],
+          "recommended_hubs": {
+            "asia": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "europe": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "americas": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ]
+          },
+          "overlap_hubs": []
+        }
+      },
+      "selected_services": [
+        {
+          "id": "americas_svc_683",
+          "ports": [
+            "DEBRV",
+            "NLRTM",
+            "MYTPP"
+          ],
+          "load": 4568.0,
+          "capacity": 4200.0,
+          "vessel_class": "Post_panamax",
+          "vessel_cost": 1715000.0,
+          "fuel_cost": 2561367.25,
+          "port_cost": 786906.0,
+          "revenue": 5211220.0,
+          "cost": 5063273.25,
+          "weekly_profit": 147946.75,
+          "margin_pct": 2.84,
+          "region": "Americas",
+          "frequency_per_week": 1,
+          "vessels": 7,
+          "cycle_time_days": 47
+        }
+      ],
+      "candidate_quality": {
+        "services_deployed": 1,
+        "satisfied_demand": 4568.0,
+        "unserved_demand": 271878.80000000005,
+        "negative_profit_regions": 2,
+        "constraint_violations": 0,
+        "conflict_count": 0
+      },
+      "network_ledger": {
+        "verified": true,
+        "status": "feasible",
+        "iteration": 1,
+        "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+        "weekly_usd": {
+          "revenue": 5211220.0,
+          "vessel_cost": 1715000.0,
+          "fuel_cost": 2561367.25,
+          "port_call_fixed_cost": 32974.0,
+          "handling_cost": 713032.0,
+          "transshipment_cost": 0.0,
+          "port_variable_cost": 40900.0,
+          "total_operating_cost": 5063273.25,
+          "operating_profit": 147946.75,
+          "profit_margin_on_revenue": 0.02839004110361873
+        },
+        "demand_teu_per_week": {
+          "total": 276446.80000000005,
+          "served": 4568.0,
+          "unserved": 271878.80000000005,
+          "coverage_pct": 1.6523974956483487
+        },
+        "fleet_by_class": {
+          "Feeder_450": {
+            "used": 0,
+            "available": 24
+          },
+          "Feeder_800": {
+            "used": 0,
+            "available": 29
+          },
+          "Panamax_1200": {
+            "used": 0,
+            "available": 68
+          },
+          "Panamax_2400": {
+            "used": 0,
+            "available": 74
+          },
+          "Post_panamax": {
+            "used": 7,
+            "available": 58
+          },
+          "Super_panamax": {
+            "used": 0,
+            "available": 10
+          }
+        },
+        "services": {
+          "candidates_offered": 1089,
+          "candidates_modelled": 1089,
+          "candidates_rejected": 0,
+          "operated": 1
+        },
+        "reconciliation": {
+          "milp_profit_before_penalty": 147946.75,
+          "ledger_operating_profit": 147946.75,
+          "difference": 0.0,
+          "relative_difference": 0.0,
+          "reconciled": true,
+          "relaxation_upper_bound": 34729669.608982034,
+          "services_in_relaxation": 1087,
+          "services_in_integer_problem": 392,
+          "unserved_penalty_per_teu": 0.0,
+          "runtime_sec": 8.485
+        },
+        "plan": {
+          "services": [
+            {
+              "id": "americas_svc_683",
+              "ports": [
+                "DEBRV",
+                "NLRTM",
+                "MYTPP"
+              ],
+              "vessel_class": "Post_panamax",
+              "frequency_per_week": 1,
+              "fuel_price_usd_per_t": 715.0,
+              "fuel_price_basis": "observed_port",
+              "bunkering_port": "NLRTM",
+              "price_observed_on": "2026-10-09"
+            }
+          ],
+          "flows": [
+            {
+              "origin": "MYTPP",
+              "destination": "DEBRV",
+              "teu": 2082.0,
+              "kind": "direct",
+              "segments": [
+                [
+                  "americas_svc_683",
+                  "MYTPP",
+                  "DEBRV"
+                ]
+              ]
+            },
+            {
+              "origin": "DEBRV",
+              "destination": "MYTPP",
+              "teu": 414.0,
+              "kind": "direct",
+              "segments": [
+                [
+                  "americas_svc_683",
+                  "DEBRV",
+                  "MYTPP"
+                ]
+              ]
+            },
+            {
+              "origin": "NLRTM",
+              "destination": "MYTPP",
+              "teu": 548.0,
+              "kind": "direct",
+              "segments": [
+                [
+                  "americas_svc_683",
+                  "NLRTM",
+                  "MYTPP"
+                ]
+              ]
+            },
+            {
+              "origin": "MYTPP",
+              "destination": "NLRTM",
+              "teu": 1524.0,
+              "kind": "direct",
+              "segments": [
+                [
+                  "americas_svc_683",
+                  "MYTPP",
+                  "NLRTM"
+                ]
+              ]
+            }
+          ]
+        },
+        "optimality": {
+          "milp_status": "feasible",
+          "relaxation_upper_bound_usd_per_week": 34729669.608982034,
+          "gap_to_bound_usd_per_week": 34581722.858982034,
+          "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+        },
+        "path_model": {
+          "od_total": 1764,
+          "od_with_direct": 1175,
+          "od_transfer_only": 396,
+          "od_without_path": 193,
+          "od_without_path_time_limit": 193,
+          "od_without_path_no_connection": 0,
+          "od_skipped_missing_port_record": 0,
+          "paths_built": 12428,
+          "paths_dropped_by_cap": 53503,
+          "paths_dropped_by_time_limit": 804390,
+          "max_paths_per_od": 10
+        },
+        "violations": [],
+        "assumptions": {
+          "port_stay_hours": 24.0,
+          "transshipment_min_hours": 48.0,
+          "transfer_wait_days": 3.5,
+          "bunker_price_usd_per_t": 895.5,
+          "fuel_pricing": {
+            "mode": "regional_snapshot",
+            "snapshot_id": "shipandbunker_vlsfo_2026-10-09",
+            "sha256": "fa39a8f206b3f41569cdece795017107482934f6b6c6a6dd79b017cfe5636f73",
+            "fuel_grade": "VLSFO",
+            "currency": "USD",
+            "unit": "USD_per_metric_tonne",
+            "as_of": "2026-10-09",
+            "max_age_days": 14,
+            "valuation_date": "2026-10-09",
+            "location_rule": "cheapest_observed_port_on_rotation",
+            "fallback": "reference",
+            "location_assumption": "all fuel of a service is bought at the cheapest OBSERVED bunkering port on its rotation (optimistic bound); a rotation without an observed port is priced at the snapshot's global reference",
+            "observations": [
+              {
+                "hub": "SGSIN",
+                "price_usd_per_t": 889.5,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Singapore VLSFO, latest row 'F Oct 9' (high 916.00, low 860.00)",
+                "source_url": "https://shipandbunker.com/prices/apac/sea/sg-sin-singapore",
+                "note": "Retrieved 2026-10-11. Corroborated by a secondary report quoting Ship & Bunker's 6 Oct snapshot at 890.00 (https://www.shipuniverse.com/?p=22139)."
+              },
+              {
+                "hub": "NLRTM",
+                "price_usd_per_t": 715.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Rotterdam VLSFO, latest row 'F Oct 9' (high 727.00, low 690.00)",
+                "source_url": "https://shipandbunker.com/prices/emea/nwe/nl-rtm-rotterdam",
+                "note": "Retrieved 2026-10-11. The same secondary report quotes 682.50 for 6 Oct."
+              },
+              {
+                "hub": "HKHKG",
+                "price_usd_per_t": 949.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Hong Kong VLSFO, latest row 'F Oct 9' (high 962.50, low 935.00)",
+                "source_url": "https://shipandbunker.com/prices/apac/ea/cn-hok-hong-kong",
+                "note": "Retrieved 2026-10-11."
+              },
+              {
+                "hub": "USLAX",
+                "price_usd_per_t": 1044.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, LA / Long Beach VLSFO, latest row 'F Oct 9' (high 1091.00, low 1000.00)",
+                "source_url": "https://shipandbunker.com/prices/am/nampac/us-lax-la-long-beach",
+                "note": "Retrieved 2026-10-11. The source market is 'LA / Long Beach'; it is applied to WorldSmall port USLAX (Los Angeles). The market quoted 1,055.00 for 6 Oct in the same secondary report."
+              },
+              {
+                "hub": "BRSSZ",
+                "price_usd_per_t": 850.5,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Santos VLSFO, latest row 'F Oct 9' (high 879.00, low 822.00)",
+                "source_url": "https://shipandbunker.com/prices/am/samatl/br-ssz-santos",
+                "note": "Retrieved 2026-10-11. The source repeated the same 850.50 quote for 6, 7, 8 and 9 Oct: treat as indicative."
+              }
+            ],
+            "reference": {
+              "hub": "GLOBAL",
+              "price_usd_per_t": 895.5,
+              "observed_on": "2026-10-09",
+              "provenance": "observed",
+              "source": "Ship & Bunker, Global 20 Ports Average, VLSFO, latest row 'F Oct 9'",
+              "source_url": "https://shipandbunker.com/prices/av/global/av-g20-global-20-ports-average",
+              "note": "A published index (average of 20 bunkering ports), not a port price. Retrieved 2026-10-11."
+            },
+            "description": "VLSFO spot indications for the five WorldSmall ports that Ship & Bunker publishes on its free price pages, plus the Global 20 Ports Average as the reference price. Latest row of each page on 2026-10-11 (page label 'F Oct 9'). The pages show weekday and month-day only; the year 2026 is inferred from the weekday (Friday 9 October is 2026) and the retrieval date. Only 5 of the 47 WorldSmall ports have an observation; every other rotation is priced at the reference (basis 'global_reference').",
+            "licence_note": "Read from public Ship & Bunker price pages (full markets and downloads require login/subscription; no reuse licence is stated on the pages; https://shipandbunker.com/terms was not reviewed). Six individual dated figures are recorded here for audit and benchmark pinning; this is not a redistributable dataset. Check the provider's terms before sharing the file outside the project."
+          },
+          "speed_factor": 1.0,
+          "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+          "sailing_speed": "class designSpeed (only speed with a source consumption)",
+          "max_transfers_per_od": 1,
+          "capacity_unit": {
+            "status": "provisional",
+            "internal_unit": "TEU",
+            "source_column": "Capacity FFE",
+            "capacity_feasibility_is_conditional": true
+          },
+          "transit_time_unit": "TransitTime column read as days (unverified unit)"
+        },
+        "runtime_sec": 8.51
+      }
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "metrics": {
+        "total_services": 0,
+        "total_profit": 0.0,
+        "annual_profit": 0.0,
+        "average_regional_coverage": 0.0,
+        "global_demand_weighted_coverage": 0.0,
+        "average_coverage": 0.0,
+        "min_coverage": 0.0,
+        "max_coverage": 0.0,
+        "coverage_variance": 0.0,
+        "revenue": 0.0,
+        "total_cost": 0.0,
+        "vessel_hire_cost": 0.0,
+        "profit_margin_pct": null,
+        "accounting_status": "verified",
+        "accounting_verified": true,
+        "accounting_basis": "network_ledger",
+        "accounting_issues": [],
+        "total_satisfied_demand": 0.0,
+        "total_unserved_demand": 276446.80000000005,
+        "weekly_profit": 0.0,
+        "operating_cost": 0.0,
+        "satisfied_demand": 0.0,
+        "unserved_demand": 276446.80000000005,
+        "services_deployed": 0,
+        "negative_profit_regions": 3,
+        "convergence_score": 0.333,
+        "conflict_count": 0,
+        "constraint_violations": 0
+      },
+      "regional_results": [
+        {
+          "agent": "regional_asia",
+          "region": "Asia",
+          "status": "Feasible",
+          "services_generated": 812,
+          "services_filtered": 508,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 147838.5,
+          "total_demand": 147838.5,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 147838.5,
+          "hub_ports": [
+            "CNSHA",
+            "MYTPP",
+            "CNYTN",
+            "HKHKG",
+            "CNTAO"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN",
+              "HKHKG",
+              "CNTAO"
+            ],
+            "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "corridor_focus": [
+              [
+                "CNYTN",
+                "USLAX"
+              ]
+            ],
+            "notes": "Region Asia: dens=very_dense, top3=7.2%. Total demand 147,838 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model balances the 7.2% top-3 share concentration against the long-tail demand distribution.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (147,838 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 1.2,
+          "llm_actuation": {
+            "component": "regional_Asia",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.2303,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0633
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2104,
+            "time_limit_sec": 75,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_europe",
+          "region": "Europe",
+          "status": "Feasible",
+          "services_generated": 623,
+          "services_filtered": 405,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 48509.7,
+          "total_demand": 48509.7,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 48509.7,
+          "hub_ports": [
+            "USCHS",
+            "BRSSZ",
+            "USLAX",
+            "PAMIT",
+            "USEWR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "JPYOK"
+            ],
+            "notes": "The hybrid archetype is confirmed by the low median demand of 48.0 TEU against a total network volume of 48,510 TEU, necessitating a mix of direct and hub services. With a top-3 share of only 9.0%, approximately 15-20% of the ~800 candidate lanes are expected to retain General Availability (GA) as direct services, while the remaining 80-85% will be consolidated into hub-and-spoke loops."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "corridor_focus": [
+              [
+                "BRSSZ",
+                "DEBRV"
+              ]
+            ],
+            "notes": "Region Europe: dens=very_dense, top3=9.0%. Total demand 48,510 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, where a top-3 share of only 9.0% confirms that hub-and-spoke alone is insufficient, requiring a hybrid model to balance the 48,510 TEU/wk total demand across the 5 designated hubs.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (48,510 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 1.5,
+          "llm_actuation": {
+            "component": "regional_Europe",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.4814,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -0.16923564131419658,
+            "runtime_seconds": 0.1195
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 1891,
+            "time_limit_sec": 67,
+            "status": "Optimal"
+          }
+        },
+        {
+          "agent": "regional_americas",
+          "region": "Americas",
+          "status": "Feasible",
+          "services_generated": 803,
+          "services_filtered": 499,
+          "services_selected": 0,
+          "weekly_profit": 0.0,
+          "annual_profit": 0.0,
+          "operating_cost": 0.0,
+          "fuel_cost": 0.0,
+          "transship_cost": 0.0,
+          "port_cost": 0.0,
+          "total_cost": 0.0,
+          "coverage_percent": 0.0,
+          "satisfied_demand": 0.0,
+          "unserved_demand": 80098.6,
+          "total_demand": 80098.6,
+          "profit_margin_pct": 0,
+          "profit_per_service": 0,
+          "cost_per_service": 0,
+          "uncovered_teu": 80098.6,
+          "hub_ports": [
+            "DEBRV",
+            "NLRTM",
+            "AEJEA",
+            "ITGIT",
+            "ZADUR"
+          ],
+          "archetype_params": {
+            "archetype_mix": {
+              "direct_ratio": 0.6,
+              "hub_loop_ratio": 0.15,
+              "feeder_ratio": 0.2,
+              "trunk_ratio": 0.05
+            },
+            "vessel_bias": "balanced",
+            "hub_focus": [
+              "NLRTM",
+              "DEBRV",
+              "ZADUR"
+            ],
+            "notes": "The hybrid archetype is confirmed by the low median demand of 38.0 TEU against a total network volume of 80,099 TEU, necessitating a mix of direct top-corridor services and hub consolidation. With 97.4% of demand concentrated in the top-500 lanes, approximately 780 of the 800 candidate lanes are expected to retain General Availability via this structure."
+          },
+          "regional_policy": {
+            "coverage_priority": 0.35,
+            "profit_priority": 0.65,
+            "min_service_margin": 0.08,
+            "vessel_bias": "large",
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "corridor_focus": [
+              [
+                "NLRTM",
+                "HKHKG"
+              ]
+            ],
+            "notes": "Region Americas: dens=very_dense, top3=5.0%. Total demand 80,099 TEU/wk."
+          },
+          "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 21 ports and 769 lanes, creating a complex topology where a hybrid model balances the 5.0% top-3 share concentration against the need for broad coverage across the 769 connections.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+          "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 0.0%.\n\nStrengths:\n- Weekly profit $0 (0 services) -> $0/service/week.\n- Satisfied 0 TEU/wk at 0.0% coverage.\n\nWeaknesses:\n- 100.0% unserved (80,099 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target.",
+          "selected_services": [],
+          "elapsed_sec": 1.4,
+          "llm_actuation": {
+            "component": "regional_Americas",
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "role": "regional",
+            "attempts": 1,
+            "successes": 0,
+            "failures": 1,
+            "fallback_uses": 0,
+            "cache_hits": 0,
+            "error_429": 0,
+            "error_timeout": 0,
+            "error_connection": 0,
+            "error_auth": 0,
+            "error_invalid_model": 0,
+            "error_invalid_json": 0,
+            "error_unknown": 1,
+            "latency_sec": 0.0,
+            "total_latency_sec": 1.3508,
+            "decision_source": "rule-based",
+            "decision_consumed": true,
+            "ai_generated": false,
+            "notes": ""
+          },
+          "ga_telemetry": {
+            "algorithm": "ServiceGA",
+            "actual_generations_executed": 11,
+            "max_generations": 120,
+            "stagnation_limit": 11,
+            "early_stop_reason": "stagnation",
+            "best_fitness": -1000000000000.0,
+            "runtime_seconds": 0.0658
+          },
+          "milp_telemetry": {
+            "transfer_pair_budget": 2269,
+            "time_limit_sec": 64,
+            "status": "Optimal"
+          }
+        }
+      ],
+      "weights_used": {
+        "profit_weight": 0.5719,
+        "coverage_weight": 0.3221,
+        "cost_weight": 0.106
+      },
+      "consensus_result": {
+        "final_weight_adjustments": {
+          "profit_weight": 0.5362,
+          "coverage_weight": 0.3578,
+          "cost_weight": 0.106
+        },
+        "final_archetype_params": {
+          "archetype_mix": {
+            "direct_ratio": 0.4724,
+            "hub_loop_ratio": 0.1751,
+            "feeder_ratio": 0.2808,
+            "trunk_ratio": 0.0718
+          },
+          "vessel_bias": "balanced",
+          "hub_focus": [
+            "CNSHA",
+            "CNYTN",
+            "MYTPP"
+          ],
+          "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates. | reconciled vote distribution: balanced=0.64; small=0.36"
+        },
+        "confidence_score": 0.9,
+        "conflicts_resolved": [
+          {
+            "type": "hub_conflict",
+            "detail": "Partial hub overlap: common=['CNSHA', 'CNYTN', 'MYTPP'], svc-exclusive=['CNTAO', 'HKHKG'], regional-exclusive=['AEJEA', 'BRSSZ', 'DEBRV', 'NLRTM', 'USCHS', 'USLAX']",
+            "service_hubs": [
+              "CNSHA",
+              "CNTAO",
+              "CNYTN",
+              "HKHKG",
+              "MYTPP"
+            ],
+            "regional_hubs": [
+              "AEJEA",
+              "BRSSZ",
+              "CNSHA",
+              "CNYTN",
+              "DEBRV",
+              "MYTPP",
+              "NLRTM",
+              "USCHS",
+              "USLAX"
+            ],
+            "intersection": [
+              "CNSHA",
+              "CNYTN",
+              "MYTPP"
+            ],
+            "resolved": true,
+            "resolution": "Weighted hub support produced final hubs=['CNSHA', 'CNYTN', 'MYTPP']"
+          }
+        ],
+        "conflicts_remaining": [],
+        "notes": "confidence=0.9000; conflicts_detected=1; conflicts_remaining=0; all_conflicts_resolved"
+      },
+      "feedback": {
+        "needs_rerun": false,
+        "rerun_reason": "coverage 0.0% is 70.0pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "coverage_gap": 70.0,
+        "profit_gap": 0.0,
+        "conflict_severity": 0,
+        "weight_adjustments": {
+          "profit_weight": 0.25,
+          "coverage_weight": 0.65,
+          "cost_weight": 0.1
+        },
+        "convergence_score": 0.333,
+        "iteration": 2,
+        "at_iteration_cap": true,
+        "average_regional_coverage": 0.0,
+        "global_demand_weighted_coverage": 0.0,
+        "conflict_count": 0,
+        "low_coverage": true,
+        "low_profit": false
+      },
+      "decision_output": {
+        "agent": "coordinator",
+        "iteration": 2,
+        "status": "evaluated",
+        "global_metrics": {
+          "total_services": 0,
+          "total_profit": 0.0,
+          "annual_profit": 0.0,
+          "average_regional_coverage": 0.0,
+          "global_demand_weighted_coverage": 0.0,
+          "average_coverage": 0.0,
+          "min_coverage": 0.0,
+          "max_coverage": 0.0,
+          "coverage_variance": 0.0,
+          "revenue": 0.0,
+          "total_cost": 0.0,
+          "vessel_hire_cost": 0.0,
+          "profit_margin_pct": null,
+          "accounting_status": "verified",
+          "accounting_verified": true,
+          "accounting_basis": "network_ledger",
+          "accounting_issues": [],
+          "total_satisfied_demand": 0.0,
+          "total_unserved_demand": 276446.80000000005
+        },
+        "evaluation": {
+          "score": 2,
+          "max": 5,
+          "status": "poor",
+          "reasons": [
+            "regional avg coverage 0.0% < target 70.0%",
+            "profit $0 <= floor $0",
+            "profit margin unavailable (accounting verified)"
+          ],
+          "accounting_verified": true
+        },
+        "conflicts": [],
+        "resolution_log": [],
+        "decisions": {
+          "actions": [
+            {
+              "region": "Asia",
+              "action": "Deploy 2 Panamax vessels on intra-Asia loop",
+              "expected_gain": "Increase Asia coverage from 0.0% to 45.0%"
+            },
+            {
+              "region": "Europe",
+              "action": "Deploy 2 Panamax vessels on Europe-Asia transpacific loop",
+              "expected_gain": "Increase Europe coverage from 0.0% to 40.0%"
+            },
+            {
+              "region": "Americas",
+              "action": "Deploy 2 Panamax vessels on Americas-Asia transpacific loop",
+              "expected_gain": "Increase Americas coverage from 0.0% to 40.0%"
+            }
+          ],
+          "priorities": [
+            "Establish baseline network connectivity in all three major regions",
+            "Achieve minimum 40% coverage in Asia, Europe, and Americas"
+          ],
+          "weight_adjustments": {
+            "profit_weight": 0.2,
+            "coverage_weight": 0.7,
+            "cost_weight": 0.1
+          },
+          "notes": "Current network has 0.0% coverage in all regions with $0 revenue, requiring immediate deployment of 6 vessels to establish baseline service."
+        },
+        "feedback": {
+          "needs_rerun": false,
+          "rerun_reason": "coverage 0.0% is 70.0pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+          "coverage_gap": 70.0,
+          "profit_gap": 0.0,
+          "conflict_severity": 0,
+          "weight_adjustments": {
+            "profit_weight": 0.25,
+            "coverage_weight": 0.65,
+            "cost_weight": 0.1
+          },
+          "convergence_score": 0.333,
+          "iteration": 2,
+          "at_iteration_cap": true,
+          "average_regional_coverage": 0.0,
+          "global_demand_weighted_coverage": 0.0,
+          "conflict_count": 0,
+          "low_coverage": true,
+          "low_profit": false
+        },
+        "llm_runtime_metrics": {
+          "llm_calls": 3,
+          "llm_success": 0,
+          "json_parse_success": 3,
+          "validator_executed": 3,
+          "fallback_count": 0
+        },
+        "llm_actuation": {
+          "component": "coordinator_iter_2",
+          "provider": "groq",
+          "model": "qwen/qwen3.8-27b",
+          "role": "coordinator",
+          "attempts": 1,
+          "successes": 1,
+          "failures": 0,
+          "fallback_uses": 0,
+          "cache_hits": 0,
+          "error_429": 0,
+          "error_timeout": 0,
+          "error_connection": 0,
+          "error_auth": 0,
+          "error_invalid_model": 0,
+          "error_invalid_json": 0,
+          "error_unknown": 1,
+          "latency_sec": 1.0097,
+          "total_latency_sec": 2.0469,
+          "decision_source": "llm",
+          "decision_consumed": true,
+          "ai_generated": true,
+          "notes": ""
+        }
+      },
+      "shared_context": {
+        "global_objectives": {
+          "profit_weight": 0.5362,
+          "coverage_weight": 0.3578,
+          "cost_weight": 0.106,
+          "iteration": 2,
+          "coverage_target": 70.0,
+          "profit_floor": 0.0,
+          "max_iterations": 3,
+          "current_coverage": 0.0,
+          "current_profit": 0.0,
+          "convergence_score": 0.333
+        },
+        "regional_priorities": {
+          "asia": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          },
+          "europe": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          },
+          "americas": {
+            "coverage_priority": 0.1,
+            "profit_priority": 1.0,
+            "hub_focus": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ],
+            "min_service_margin": 0.01,
+            "vessel_bias": "balanced",
+            "current_coverage": 0.0,
+            "current_profit": 0.0
+          }
+        },
+        "service_archetype_plan": {
+          "direct_ratio": 0.6,
+          "hub_loop_ratio": 0.15,
+          "feeder_ratio": 0.2,
+          "trunk_ratio": 0.05,
+          "vessel_bias": "balanced"
+        },
+        "hub_strategy": {
+          "primary_hubs": [],
+          "recommended_hubs": {
+            "asia": [
+              "CNSHA",
+              "MYTPP",
+              "CNYTN"
+            ],
+            "europe": [
+              "USCHS",
+              "BRSSZ",
+              "USLAX"
+            ],
+            "americas": [
+              "DEBRV",
+              "NLRTM",
+              "AEJEA"
+            ]
+          },
+          "overlap_hubs": []
+        }
+      },
+      "selected_services": [],
+      "candidate_quality": {
+        "services_deployed": 0,
+        "satisfied_demand": 0.0,
+        "unserved_demand": 276446.80000000005,
+        "negative_profit_regions": 3,
+        "constraint_violations": 0,
+        "conflict_count": 0
+      },
+      "network_ledger": {
+        "verified": true,
+        "status": "feasible",
+        "iteration": 2,
+        "method": "global path-based network MILP (integer weekly departures and vessels, per-leg capacity, per-class fleet inventory, transit-time-feasible paths) followed by an independent ledger recomputation",
+        "weekly_usd": {
+          "revenue": 0.0,
+          "vessel_cost": 0.0,
+          "fuel_cost": 0.0,
+          "port_call_fixed_cost": 0.0,
+          "handling_cost": 0.0,
+          "transshipment_cost": 0.0,
+          "port_variable_cost": 0.0,
+          "total_operating_cost": 0.0,
+          "operating_profit": 0.0,
+          "profit_margin_on_revenue": null
+        },
+        "demand_teu_per_week": {
+          "total": 276446.80000000005,
+          "served": 0.0,
+          "unserved": 276446.80000000005,
+          "coverage_pct": 0.0
+        },
+        "fleet_by_class": {
+          "Feeder_450": {
+            "used": 0,
+            "available": 24
+          },
+          "Feeder_800": {
+            "used": 0,
+            "available": 29
+          },
+          "Panamax_1200": {
+            "used": 0,
+            "available": 68
+          },
+          "Panamax_2400": {
+            "used": 0,
+            "available": 74
+          },
+          "Post_panamax": {
+            "used": 0,
+            "available": 58
+          },
+          "Super_panamax": {
+            "used": 0,
+            "available": 10
+          }
+        },
+        "services": {
+          "candidates_offered": 1091,
+          "candidates_modelled": 1091,
+          "candidates_rejected": 0,
+          "operated": 0
+        },
+        "reconciliation": {
+          "milp_profit_before_penalty": 0.0,
+          "ledger_operating_profit": 0.0,
+          "difference": 0.0,
+          "relative_difference": 0.0,
+          "reconciled": true,
+          "relaxation_upper_bound": 34450201.22626779,
+          "services_in_relaxation": 1091,
+          "services_in_integer_problem": 389,
+          "unserved_penalty_per_teu": 0.0,
+          "runtime_sec": 9.8
+        },
+        "plan": {
+          "services": [],
+          "flows": []
+        },
+        "optimality": {
+          "milp_status": "feasible",
+          "relaxation_upper_bound_usd_per_week": 34450201.22626779,
+          "gap_to_bound_usd_per_week": 34450201.22626779,
+          "note": "a feasible plan with a stated upper bound; not a proof of optimality unless status is 'optimal'"
+        },
+        "path_model": {
+          "od_total": 1764,
+          "od_with_direct": 1182,
+          "od_transfer_only": 392,
+          "od_without_path": 190,
+          "od_without_path_time_limit": 190,
+          "od_without_path_no_connection": 0,
+          "od_skipped_missing_port_record": 0,
+          "paths_built": 12453,
+          "paths_dropped_by_cap": 52447,
+          "paths_dropped_by_time_limit": 793154,
+          "max_paths_per_od": 10
+        },
+        "violations": [],
+        "assumptions": {
+          "port_stay_hours": 24.0,
+          "transshipment_min_hours": 48.0,
+          "transfer_wait_days": 3.5,
+          "bunker_price_usd_per_t": 895.5,
+          "fuel_pricing": {
+            "mode": "regional_snapshot",
+            "snapshot_id": "shipandbunker_vlsfo_2026-10-09",
+            "sha256": "fa39a8f206b3f41569cdece795017107482934f6b6c6a6dd79b017cfe5636f73",
+            "fuel_grade": "VLSFO",
+            "currency": "USD",
+            "unit": "USD_per_metric_tonne",
+            "as_of": "2026-10-09",
+            "max_age_days": 14,
+            "valuation_date": "2026-10-09",
+            "location_rule": "cheapest_observed_port_on_rotation",
+            "fallback": "reference",
+            "location_assumption": "all fuel of a service is bought at the cheapest OBSERVED bunkering port on its rotation (optimistic bound); a rotation without an observed port is priced at the snapshot's global reference",
+            "observations": [
+              {
+                "hub": "SGSIN",
+                "price_usd_per_t": 889.5,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Singapore VLSFO, latest row 'F Oct 9' (high 916.00, low 860.00)",
+                "source_url": "https://shipandbunker.com/prices/apac/sea/sg-sin-singapore",
+                "note": "Retrieved 2026-10-11. Corroborated by a secondary report quoting Ship & Bunker's 6 Oct snapshot at 890.00 (https://www.shipuniverse.com/?p=22139)."
+              },
+              {
+                "hub": "NLRTM",
+                "price_usd_per_t": 715.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Rotterdam VLSFO, latest row 'F Oct 9' (high 727.00, low 690.00)",
+                "source_url": "https://shipandbunker.com/prices/emea/nwe/nl-rtm-rotterdam",
+                "note": "Retrieved 2026-10-11. The same secondary report quotes 682.50 for 6 Oct."
+              },
+              {
+                "hub": "HKHKG",
+                "price_usd_per_t": 949.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Hong Kong VLSFO, latest row 'F Oct 9' (high 962.50, low 935.00)",
+                "source_url": "https://shipandbunker.com/prices/apac/ea/cn-hok-hong-kong",
+                "note": "Retrieved 2026-10-11."
+              },
+              {
+                "hub": "USLAX",
+                "price_usd_per_t": 1044.0,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, LA / Long Beach VLSFO, latest row 'F Oct 9' (high 1091.00, low 1000.00)",
+                "source_url": "https://shipandbunker.com/prices/am/nampac/us-lax-la-long-beach",
+                "note": "Retrieved 2026-10-11. The source market is 'LA / Long Beach'; it is applied to WorldSmall port USLAX (Los Angeles). The market quoted 1,055.00 for 6 Oct in the same secondary report."
+              },
+              {
+                "hub": "BRSSZ",
+                "price_usd_per_t": 850.5,
+                "observed_on": "2026-10-09",
+                "provenance": "observed",
+                "source": "Ship & Bunker, Santos VLSFO, latest row 'F Oct 9' (high 879.00, low 822.00)",
+                "source_url": "https://shipandbunker.com/prices/am/samatl/br-ssz-santos",
+                "note": "Retrieved 2026-10-11. The source repeated the same 850.50 quote for 6, 7, 8 and 9 Oct: treat as indicative."
+              }
+            ],
+            "reference": {
+              "hub": "GLOBAL",
+              "price_usd_per_t": 895.5,
+              "observed_on": "2026-10-09",
+              "provenance": "observed",
+              "source": "Ship & Bunker, Global 20 Ports Average, VLSFO, latest row 'F Oct 9'",
+              "source_url": "https://shipandbunker.com/prices/av/global/av-g20-global-20-ports-average",
+              "note": "A published index (average of 20 bunkering ports), not a port price. Retrieved 2026-10-11."
+            },
+            "description": "VLSFO spot indications for the five WorldSmall ports that Ship & Bunker publishes on its free price pages, plus the Global 20 Ports Average as the reference price. Latest row of each page on 2026-10-11 (page label 'F Oct 9'). The pages show weekday and month-day only; the year 2026 is inferred from the weekday (Friday 9 October is 2026) and the retrieval date. Only 5 of the 47 WorldSmall ports have an observation; every other rotation is priced at the reference (basis 'global_reference').",
+            "licence_note": "Read from public Ship & Bunker price pages (full markets and downloads require login/subscription; no reuse licence is stated on the pages; https://shipandbunker.com/terms was not reviewed). Six individual dated figures are recorded here for audit and benchmark pinning; this is not a redistributable dataset. Check the provider's terms before sharing the file outside the project."
+          },
+          "speed_factor": 1.0,
+          "basis": "assumed (not in the canonical WorldSmall files): LINERLIB benchmark documentation gives a minimum port stay of 24 h, a minimum transshipment time of 48 h and a bunker cost of 600 USD/t. transfer_wait_days is the expected wait for a connecting weekly departure (half a week).",
+          "sailing_speed": "class designSpeed (only speed with a source consumption)",
+          "max_transfers_per_od": 1,
+          "capacity_unit": {
+            "status": "provisional",
+            "internal_unit": "TEU",
+            "source_column": "Capacity FFE",
+            "capacity_feasibility_is_conditional": true
+          },
+          "transit_time_unit": "TransitTime column read as days (unverified unit)"
+        },
+        "runtime_sec": 9.81
+      }
+    }
+  ],
+  "iteration_selection": {
+    "candidate_iterations": [
+      1
+    ],
+    "pareto_optimal_iterations": [
+      1
+    ],
+    "selected_iteration": 1,
+    "selection_method": "deterministic_multi_objective",
+    "confidence": 1.0,
+    "reasoning": "Iteration 1 is the only candidate available for selection. It achieves a positive weekly profit of $147,947 and is Pareto-optimal with 0 constraint violations. Despite low coverage (1.7% demand-weighted) and significant unserved demand (271,879 TEU/wk), it is the sole valid option.",
+    "fallback_used": false,
+    "llm_selection": {
+      "selected_iteration": 1,
+      "confidence": 1.0,
+      "reasoning": "Iteration 1 is the only candidate available for selection. It achieves a positive weekly profit of $147,947 and is Pareto-optimal with 0 constraint violations. Despite low coverage (1.7% demand-weighted) and significant unserved demand (271,879 TEU/wk), it is the sole valid option.",
+      "tradeoffs": [
+        "High unserved demand (271,879 TEU/wk) indicates significant market opportunity left on the table.",
+        "Negative profit in Americas region (-$4,063,174) is offset by high profit in Asia ($4,211,121), creating regional imbalance.",
+        "Low service count (1) limits network resilience and flexibility."
+      ],
+      "objective_assessment": {
+        "profit": "Positive weekly profit of $147,947, driven by Asia region performance.",
+        "coverage": "Low global demand-weighted coverage of 1.7% with 271,879 TEU/wk unserved.",
+        "total_cost": "Total cost of $5,063,273, with vessel hire at $1,715,000.",
+        "profit_margin": "2.8% profit margin on revenue, verified as accounting accurate.",
+        "regional_balance": "Imbalanced; Asia is highly profitable while Americas is significantly loss-making."
+      }
+    },
+    "scorecards": [
+      {
+        "iteration": 0,
+        "status": "completed",
+        "selection_status": "invalid",
+        "invalid_reason": "",
+        "accounting_verified": true,
+        "weekly_profit": 0.0,
+        "annual_profit": 0.0,
+        "operating_cost": 0.0,
+        "total_cost": 0.0,
+        "profit_margin_pct": 0.0,
+        "average_regional_coverage": 0.0,
+        "global_demand_weighted_coverage": 0.0,
+        "satisfied_demand": 0.0,
+        "unserved_demand": 276446.80000000005,
+        "services_deployed": 0,
+        "convergence_score": 0.333,
+        "negative_profit_regions": 3,
+        "coverage_variance": 0.0,
+        "constraint_violations": 0,
+        "conflict_count": 0,
+        "weights_used": {
+          "profit_weight": 0.6,
+          "coverage_weight": 0.25,
+          "cost_weight": 0.15
+        },
+        "profit_rank": null,
+        "coverage_rank": null,
+        "cost_rank": null,
+        "margin_rank": null,
+        "pareto_optimal": false,
+        "dominated_by": [],
+        "overall_candidate_score": 0.0
+      },
+      {
+        "iteration": 1,
+        "status": "completed",
+        "selection_status": "candidate",
+        "invalid_reason": "",
+        "accounting_verified": true,
+        "weekly_profit": 147946.75,
+        "annual_profit": 7693231.0,
+        "operating_cost": 1715000.0,
+        "total_cost": 5063273.25,
+        "profit_margin_pct": 2.839004110361873,
+        "average_regional_coverage": 1.2134,
+        "global_demand_weighted_coverage": 1.6524,
+        "satisfied_demand": 4568.0,
+        "unserved_demand": 271878.80000000005,
+        "services_deployed": 1,
+        "convergence_score": 0.672,
+        "negative_profit_regions": 2,
+        "coverage_variance": 2.4391481244736655,
+        "constraint_violations": 0,
+        "conflict_count": 0,
+        "weights_used": {
+          "profit_weight": 0.5723,
+          "coverage_weight": 0.3217,
+          "cost_weight": 0.106
+        },
+        "profit_rank": 1,
+        "coverage_rank": 1,
+        "cost_rank": 1,
+        "margin_rank": 1,
+        "pareto_optimal": true,
+        "dominated_by": [],
+        "overall_candidate_score": 1.0
+      },
+      {
+        "iteration": 2,
+        "status": "completed",
+        "selection_status": "invalid",
+        "invalid_reason": "",
+        "accounting_verified": true,
+        "weekly_profit": 0.0,
+        "annual_profit": 0.0,
+        "operating_cost": 0.0,
+        "total_cost": 0.0,
+        "profit_margin_pct": 0.0,
+        "average_regional_coverage": 0.0,
+        "global_demand_weighted_coverage": 0.0,
+        "satisfied_demand": 0.0,
+        "unserved_demand": 276446.80000000005,
+        "services_deployed": 0,
+        "convergence_score": 0.333,
+        "negative_profit_regions": 3,
+        "coverage_variance": 0.0,
+        "constraint_violations": 0,
+        "conflict_count": 0,
+        "weights_used": {
+          "profit_weight": 0.5719,
+          "coverage_weight": 0.3221,
+          "cost_weight": 0.106
+        },
+        "profit_rank": null,
+        "coverage_rank": null,
+        "cost_rank": null,
+        "margin_rank": null,
+        "pareto_optimal": false,
+        "dominated_by": [],
+        "overall_candidate_score": 0.0
+      }
+    ],
+    "llm_actuation": {
+      "component": "iteration_selector",
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "role": "iteration_selector",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "fallback_uses": 0,
+      "cache_hits": 0,
+      "error_429": 0,
+      "error_timeout": 0,
+      "error_connection": 0,
+      "error_auth": 0,
+      "error_invalid_model": 0,
+      "error_invalid_json": 0,
+      "error_unknown": 1,
+      "latency_sec": 28.3453,
+      "total_latency_sec": 0.0,
+      "decision_source": "rule-based",
+      "decision_consumed": true,
+      "ai_generated": false,
+      "notes": ""
+    }
+  },
+  "best_iteration": 1,
+  "final_selected_iteration": 1,
+  "health_status": {
+    "status": "completed",
+    "runtime_seconds": 162.31,
+    "iterations": 2,
+    "current_region": null,
+    "regions_completed": [
+      "regional_asia",
+      "regional_europe",
+      "regional_americas",
+      "regional_asia",
+      "regional_europe",
+      "regional_americas",
+      "regional_asia",
+      "regional_europe",
+      "regional_americas"
+    ],
+    "regions_failed": [],
+    "last_failure": null,
+    "success_rate": 1.0
+  },
+  "consensus_result": {
+    "final_weight_adjustments": {
+      "profit_weight": 0.5362,
+      "coverage_weight": 0.3578,
+      "cost_weight": 0.106
+    },
+    "final_archetype_params": {
+      "archetype_mix": {
+        "direct_ratio": 0.4724,
+        "hub_loop_ratio": 0.1751,
+        "feeder_ratio": 0.2808,
+        "trunk_ratio": 0.0718
+      },
+      "vessel_bias": "balanced",
+      "hub_focus": [
+        "CNSHA",
+        "CNYTN",
+        "MYTPP"
+      ],
+      "notes": "Median demand of 98.0 TEU and total volume of 147,838 TEU support a hybrid model where direct services cover high-volume lanes while hub loops handle the remaining 99.5% of corridors, retaining approximately 120 of 800 candidates. | reconciled vote distribution: balanced=0.64; small=0.36"
+    },
+    "confidence_score": 0.9,
+    "conflicts_resolved": [
+      {
+        "type": "hub_conflict",
+        "detail": "Partial hub overlap: common=['CNSHA', 'CNYTN', 'MYTPP'], svc-exclusive=['CNTAO', 'HKHKG'], regional-exclusive=['AEJEA', 'BRSSZ', 'DEBRV', 'NLRTM', 'USCHS', 'USLAX']",
+        "service_hubs": [
+          "CNSHA",
+          "CNTAO",
+          "CNYTN",
+          "HKHKG",
+          "MYTPP"
+        ],
+        "regional_hubs": [
+          "AEJEA",
+          "BRSSZ",
+          "CNSHA",
+          "CNYTN",
+          "DEBRV",
+          "MYTPP",
+          "NLRTM",
+          "USCHS",
+          "USLAX"
+        ],
+        "intersection": [
+          "CNSHA",
+          "CNYTN",
+          "MYTPP"
+        ],
+        "resolved": true,
+        "resolution": "Weighted hub support produced final hubs=['CNSHA', 'CNYTN', 'MYTPP']"
+      }
+    ],
+    "conflicts_remaining": [],
+    "notes": "confidence=0.9000; conflicts_detected=1; conflicts_remaining=0; all_conflicts_resolved"
+  },
+  "shared_context": {
+    "global_objectives": {
+      "profit_weight": 0.5362,
+      "coverage_weight": 0.3578,
+      "cost_weight": 0.106,
+      "iteration": 2,
+      "coverage_target": 70.0,
+      "profit_floor": 0.0,
+      "max_iterations": 3,
+      "current_coverage": 0.0,
+      "current_profit": 0.0,
+      "convergence_score": 0.333
+    },
+    "regional_priorities": {
+      "asia": {
+        "coverage_priority": 0.1,
+        "profit_priority": 1.0,
+        "hub_focus": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN"
+        ],
+        "min_service_margin": 0.01,
+        "vessel_bias": "balanced",
+        "current_coverage": 0.0,
+        "current_profit": 0.0
+      },
+      "europe": {
+        "coverage_priority": 0.1,
+        "profit_priority": 1.0,
+        "hub_focus": [
+          "USCHS",
+          "BRSSZ",
+          "USLAX"
+        ],
+        "min_service_margin": 0.01,
+        "vessel_bias": "balanced",
+        "current_coverage": 0.0,
+        "current_profit": 0.0
+      },
+      "americas": {
+        "coverage_priority": 0.1,
+        "profit_priority": 1.0,
+        "hub_focus": [
+          "DEBRV",
+          "NLRTM",
+          "AEJEA"
+        ],
+        "min_service_margin": 0.01,
+        "vessel_bias": "balanced",
+        "current_coverage": 0.0,
+        "current_profit": 0.0
+      }
+    },
+    "service_archetype_plan": {
+      "direct_ratio": 0.6,
+      "hub_loop_ratio": 0.15,
+      "feeder_ratio": 0.2,
+      "trunk_ratio": 0.05,
+      "vessel_bias": "balanced"
+    },
+    "hub_strategy": {
+      "primary_hubs": [],
+      "recommended_hubs": {
+        "asia": [
+          "CNSHA",
+          "MYTPP",
+          "CNYTN"
+        ],
+        "europe": [
+          "USCHS",
+          "BRSSZ",
+          "USLAX"
+        ],
+        "americas": [
+          "DEBRV",
+          "NLRTM",
+          "AEJEA"
+        ]
+      },
+      "overlap_hubs": []
+    }
+  },
+  "maritime_intelligence": null,
+  "llm_runtime_metrics": {
+    "llm_calls": 5,
+    "coordinator_llm_calls": 2,
+    "coordinator_json_parse_success": 2,
+    "coordinator_validator_executed": 2,
+    "coordinator_fallback_count": 0,
+    "coordinator_ai_generated": true,
+    "servicegen_regions": 3,
+    "servicegen_ai_count": 0,
+    "servicegen_fallback_count": 3
+  },
+  "llm_runtime_aggregate": {
+    "providers_used": {
+      "groq": 22
+    },
+    "models_used": {
+      "qwen/qwen3.8-27b": 22
+    },
+    "coordinator": {
+      "coordinator_provider": "groq",
+      "coordinator_model": "qwen/qwen3.8-27b",
+      "coordinator_llm_attempts": 3,
+      "coordinator_llm_successes": 3,
+      "coordinator_llm_failures": 0,
+      "coordinator_429_count": 0,
+      "coordinator_fallback": false,
+      "coordinator_fallback_reason": "",
+      "coordinator_llm_latency_sec": 13.1277,
+      "coordinator_total_latency_sec": 13.1277,
+      "coordinator_decision_source": "llm",
+      "coordinator_decision_consumed": true
+    },
+    "iteration_selector": {
+      "iteration_selector_provider": "groq",
+      "iteration_selector_model": "qwen/qwen3.8-27b",
+      "iteration_selector_llm_attempts": 1,
+      "iteration_selector_llm_latency_sec": 28.3453,
+      "iteration_selector_fallback": true,
+      "iteration_selector_fallback_reason": "llm_invalid_or_unavailable",
+      "iteration_selected": 1,
+      "selection_source": "deterministic_multi_objective"
+    },
+    "service_generator": {
+      "service_generator_provider": "groq",
+      "service_generator_model": "qwen/qwen3.8-27b",
+      "service_generator_ai_attempts": 9,
+      "service_generator_ai_successes": 3,
+      "service_generator_fallbacks": 0,
+      "service_generator_decision_source": "llm",
+      "service_generator_decision_consumed": true
+    },
+    "provider_telemetry": {
+      "attempts": 18,
+      "successes": 17,
+      "failures": 1,
+      "fallback_uses": 1,
+      "cache_hits": 32,
+      "provider_switches": 0,
+      "circuit_breaker_events": 0,
+      "error_type_counts": {
+        "http_429": 1
+      },
+      "provider_call_counts": {
+        "groq": 18
+      },
+      "model_call_counts": {
+        "qwen/qwen3.8-27b": 18
+      },
+      "provider_order": [
+        "groq"
+      ],
+      "cache_size": 17,
+      "breakers": {
+        "groq/qwen/qwen3.8-27b": {
+          "state": "closed",
+          "failure_count": 0,
+          "success_count": 17,
+          "cooldown_until": 0.0,
+          "last_error_type": "http_429"
+        }
+      }
+    },
+    "actuation_ledger": {
+      "service_generator_svc_gen": {
+        "component": "service_generator_svc_gen",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "service_generator",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 0.3512,
+        "decision_source": "llm",
+        "decision_consumed": true,
+        "ai_generated": true,
+        "notes": ""
+      },
+      "regional_Europe": {
+        "component": "regional_Europe",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 1.4814,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "regional_Asia": {
+        "component": "regional_Asia",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 1.2303,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "regional_Americas": {
+        "component": "regional_Americas",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "regional",
+        "attempts": 1,
+        "successes": 0,
+        "failures": 1,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.0,
+        "total_latency_sec": 1.3508,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      },
+      "coordinator_iter_0": {
+        "component": "coordinator_iter_0",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "coordinator",
+        "attempts": 1,
+        "successes": 1,
+        "failures": 0,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 11.176,
+        "total_latency_sec": 11.7723,
+        "decision_source": "llm",
+        "decision_consumed": true,
+        "ai_generated": true,
+        "notes": ""
+      },
+      "coordinator_iter_1": {
+        "component": "coordinator_iter_1",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "coordinator",
+        "attempts": 1,
+        "successes": 1,
+        "failures": 0,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 0.942,
+        "total_latency_sec": 1.4913,
+        "decision_source": "llm",
+        "decision_consumed": true,
+        "ai_generated": true,
+        "notes": ""
+      },
+      "coordinator_iter_2": {
+        "component": "coordinator_iter_2",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "coordinator",
+        "attempts": 1,
+        "successes": 1,
+        "failures": 0,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 1.0097,
+        "total_latency_sec": 2.0469,
+        "decision_source": "llm",
+        "decision_consumed": true,
+        "ai_generated": true,
+        "notes": ""
+      },
+      "iteration_selector": {
+        "component": "iteration_selector",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "role": "iteration_selector",
+        "attempts": 1,
+        "successes": 1,
+        "failures": 0,
+        "fallback_uses": 0,
+        "cache_hits": 0,
+        "error_429": 0,
+        "error_timeout": 0,
+        "error_connection": 0,
+        "error_auth": 0,
+        "error_invalid_model": 0,
+        "error_invalid_json": 0,
+        "error_unknown": 1,
+        "latency_sec": 28.3453,
+        "total_latency_sec": 0.0,
+        "decision_source": "rule-based",
+        "decision_consumed": true,
+        "ai_generated": false,
+        "notes": ""
+      }
+    }
+  },
+  "test_scorecard": {
+    "assertions_passed": 337,
+    "assertions_failed": 2,
+    "assertions_total": 339,
+    "warnings": 12,
+    "score": 99.4
+  }
+}

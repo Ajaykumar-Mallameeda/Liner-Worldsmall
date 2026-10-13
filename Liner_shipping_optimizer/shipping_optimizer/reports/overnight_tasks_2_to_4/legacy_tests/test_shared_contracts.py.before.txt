@@ -1,0 +1,293 @@
+"""Shared data / unit / economic contract tests (Task 2).
+
+Part A -- contracts that are ENFORCED today (fuel-cost guards and known values).
+Part B -- DOCUMENTED DEFECTS. Each test asserts the correct contract and is
+          marked ``xfail(strict=True, raises=...)``: it fails today for the stated
+          reason, and as soon as the defect is fixed it XPASSes, which strict mode
+          turns into a failure so the marker is removed deliberately. These are the
+          executable acceptance criteria for the next optimisation stage; none of
+          them is weakened to make a run green.
+
+Defect ids refer to reports/task2_shared_contracts/TASK2_SHARED_CONTRACT_REPORT.md.
+No LLM or network access; data comes from data/raw/WorldSmall or tiny hand-built
+instances whose expected numbers are worked out in the test.
+"""
+import math
+import random
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.data.network_loader import NetworkLoader
+from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem, Service
+from src.utils import fuel_cost as fc
+from src.utils.fuel_cost import (
+    MissingDistanceError,
+    UnknownVesselClassError,
+    calculate_voyage_fuel_cost,
+    calculate_weekly_fuel_cost,
+)
+
+# Hand calculation used throughout: Feeder_450 = 15 t/day at 16 kn, USD 600/t,
+# sailing 90% of the time -> 1000 nm = 1000 / (16 * 24 * 0.9) days * 15 t * 600.
+FEEDER_1000NM = 1000.0 / (16 * 24 * 0.9) * 15 * 600.0     # 26,041.666...
+
+
+# ===========================================================================
+# Part A -- fuel cost contract
+# ===========================================================================
+class TestFuelCostContract:
+    def test_voyage_known_value(self):
+        assert calculate_voyage_fuel_cost(1000.0, "Feeder_450") == pytest.approx(FEEDER_1000NM, rel=1e-12)
+
+    def test_voyage_is_linear_in_distance_and_price(self):
+        base = calculate_voyage_fuel_cost(1000.0, "Post_panamax")
+        assert calculate_voyage_fuel_cost(2500.0, "Post_panamax") == pytest.approx(2.5 * base)
+        assert calculate_voyage_fuel_cost(1000.0, "Post_panamax", bunker_price_per_ton=300.0) == \
+            pytest.approx(base / 2.0)
+
+    def test_weekly_cost_is_cycle_cost_times_cycles_per_week(self):
+        dm = {"A": {"B": 1000.0}}
+        # one open leg, 14-day cycle -> half a cycle per week
+        assert calculate_weekly_fuel_cost(["A", "B"], dm, "Feeder_450", 14) == \
+            pytest.approx(FEEDER_1000NM * 7.0 / 14.0)
+        assert calculate_weekly_fuel_cost(["A", "B"], dm, "Feeder_450", 7) == \
+            pytest.approx(FEEDER_1000NM)
+
+    def test_weekly_cost_sums_every_consecutive_leg(self):
+        dm = {"A": {"B": 1000.0}, "B": {"C": 2000.0}}
+        assert calculate_weekly_fuel_cost(["A", "B", "C"], dm, "Feeder_450", 7) == \
+            pytest.approx(calculate_voyage_fuel_cost(3000.0, "Feeder_450"))
+
+    def test_same_port_consecutive_legs_are_zero_distance(self):
+        dm = {"A": {"B": 1000.0}}
+        assert calculate_weekly_fuel_cost(["A", "A", "B"], dm, "Feeder_450", 7) == \
+            pytest.approx(calculate_weekly_fuel_cost(["A", "B"], dm, "Feeder_450", 7))
+
+    def test_missing_distance_between_distinct_ports_raises_and_invents_nothing(self):
+        dm = {"A": {"B": 1000.0}}
+        with pytest.raises(MissingDistanceError, match="A -> Z"):
+            calculate_weekly_fuel_cost(["A", "Z"], dm, "Feeder_450", 7)
+        with pytest.raises(MissingDistanceError, match="B -> A"):      # directed: B->A not given
+            calculate_weekly_fuel_cost(["A", "B", "A"], dm, "Feeder_450", 14)
+
+    def test_unknown_vessel_class_raises_instead_of_pricing_as_post_panamax(self):
+        dm = {"A": {"B": 1000.0}}
+        with pytest.raises(UnknownVesselClassError, match="Nope"):
+            calculate_voyage_fuel_cost(1000.0, "Nope")
+        with pytest.raises(UnknownVesselClassError):
+            calculate_weekly_fuel_cost(["A", "B"], dm, "Nope", 7)
+        with pytest.raises(UnknownVesselClassError):
+            fc.get_vessel_consumption_rate("Nope")
+        with pytest.raises(UnknownVesselClassError):
+            fc.get_vessel_speed("Nope")
+
+    @pytest.mark.parametrize("cycle", [0, -7, float("nan")])
+    def test_non_positive_cycle_time_raises(self, cycle):
+        with pytest.raises(ValueError, match="cycle_time_days"):
+            calculate_weekly_fuel_cost(["A", "B"], {"A": {"B": 1.0}}, "Feeder_450", cycle)
+
+    @pytest.mark.parametrize("dist", [-1.0, float("nan"), float("inf")])
+    def test_invalid_distance_raises(self, dist):
+        with pytest.raises(ValueError, match="distance_nm"):
+            calculate_voyage_fuel_cost(dist, "Feeder_450")
+
+    def test_route_with_fewer_than_two_ports_has_no_legs_and_costs_nothing(self):
+        assert calculate_weekly_fuel_cost(["A"], {}, "Feeder_450", 7) == 0.0
+        assert calculate_weekly_fuel_cost([], {}, "Feeder_450", 7) == 0.0
+
+    def test_every_class_in_the_worldsmall_fleet_is_priced_by_the_table(self):
+        fleet = NetworkLoader().load_fleet()
+        for c in fleet.classes:
+            assert c.vessel_class in fc.VESSEL_FUEL_CONSUMPTION, c.vessel_class
+            assert calculate_voyage_fuel_cost(1000.0, c.vessel_class) > 0.0
+
+    def test_candidate_pool_contains_only_service_objects(self):
+        """generate_services is declared List[Service]; it must not leak plain dicts."""
+        from src.agents.service_generator_agent import ServiceGeneratorAgent
+
+        loader = NetworkLoader()
+        net = loader.load_network()
+        problem = Problem(ports=net["ports"], services=[], demands=net["demands"],
+                          distance_matrix=net["distance_matrix"], fleet=loader.load_fleet())
+        random.seed(2024)
+        np.random.seed(2024)
+        pool = ServiceGeneratorAgent(name="contract", model="none").generate_services(problem)
+        assert pool and all(isinstance(s, Service) for s in pool)
+        assert len({s.id for s in pool}) == len(pool)          # ids are unique
+        assert all(isinstance(s.ports, list) and len(s.ports) >= 2 for s in pool)
+        assert all(s.vessel_class in fc.VESSEL_FUEL_CONSUMPTION for s in pool)
+
+    def test_full_worldsmall_matrix_never_needs_a_fallback_distance(self):
+        net = NetworkLoader().load_network()
+        dm = net["distance_matrix"]
+        ids = [p.id for p in net["ports"]]
+        # every directed pair of distinct ports is present, so no route over WorldSmall
+        # ports can hit MissingDistanceError
+        assert all(b in dm[a] for a in ids for b in ids if a != b)
+
+
+# ===========================================================================
+# Part B -- documented defects (strict xfail = executable acceptance criteria)
+# ===========================================================================
+@pytest.fixture(scope="module")
+def ws_problem_and_candidates():
+    """WorldSmall problem plus the production candidate pool (deterministic seed)."""
+    from src.agents.service_generator_agent import ServiceGeneratorAgent
+    from src.utils.fuel_cost import map_capacity_to_vessel_class
+
+    loader = NetworkLoader()
+    net = loader.load_network()
+    fleet = loader.load_fleet()
+    problem = Problem(ports=net["ports"], services=[], demands=net["demands"],
+                      distance_matrix=net["distance_matrix"], fleet=fleet)
+    random.seed(12345)
+    np.random.seed(12345)
+    raw = ServiceGeneratorAgent(name="contract_audit", model="none").generate_services(problem)
+    services = []
+    for i, s in enumerate(raw):                     # normalise exactly as RegionalAgent does
+        if isinstance(s, Service):
+            services.append(s)
+        else:
+            cap = s.get("capacity", 5000)
+            services.append(Service(
+                id=i, ports=s["ports"], capacity=cap,
+                weekly_cost=s.get("weekly_cost", 150_000), cycle_time=s.get("cycle_time", 14),
+                vessel_class=s.get("vessel_class", map_capacity_to_vessel_class(cap)),
+            ))
+    return problem, services
+
+
+class TestDocumentedDefects:
+    # --- D-FUEL-TABLE -------------------------------------------------------
+    @pytest.mark.xfail(strict=True, raises=AssertionError,
+                       reason="D-FUEL-TABLE: hard-coded fuel table disagrees with fleet_data.csv "
+                              "(capacity, t/day at design speed, speed) -- two sources of truth")
+    def test_fuel_table_matches_the_fleet_specification(self):
+        fleet = NetworkLoader().load_fleet()
+        for c in fleet.classes:
+            t = fc.VESSEL_FUEL_CONSUMPTION[c.vessel_class]
+            assert t["capacity"] == c.capacity_teu, c.vessel_class
+            assert t["consumption_tons_per_day"] == pytest.approx(c.bunker_consumption_tons_per_day), c.vessel_class
+            assert t["speed_knots"] == pytest.approx(c.design_speed), c.vessel_class
+
+    # --- D-SVC-CAP (RESOLVED in Task 3: now an enforced contract) -----------
+    def test_candidate_capacity_never_exceeds_the_largest_fleet_vessel(self, ws_problem_and_candidates):
+        problem, services = ws_problem_and_candidates
+        biggest = max(c.capacity_teu for c in problem.fleet.classes)
+        assert max(s.capacity for s in services) <= biggest
+
+    def test_candidate_capacity_equals_its_vessel_class_capacity(self, ws_problem_and_candidates):
+        problem, services = ws_problem_and_candidates
+        cap = {c.vessel_class: c.capacity_teu for c in problem.fleet.classes}
+        assert all(s.capacity == cap[s.vessel_class] for s in services)
+
+    # --- D-SVC-CYCLE (RESOLVED in Task 3: now an enforced contract) ---------
+    def test_cycle_time_covers_the_sailing_time_of_the_rotation(self, ws_problem_and_candidates):
+        problem, services = ws_problem_and_candidates
+        spec = {c.vessel_class: c for c in problem.fleet.classes}
+        dm = problem.distance_matrix
+        for s in services:
+            legs = list(zip(s.ports, s.ports[1:]))
+            if s.ports[0] != s.ports[-1]:
+                legs.append((s.ports[-1], s.ports[0]))           # a rotation returns to its start
+            nm = sum(dm[a][b] for a, b in legs if a != b)
+            assert nm / (spec[s.vessel_class].max_speed * 24.0) <= s.cycle_time, s.id
+
+    # --- D-CAP-FREQ ---------------------------------------------------------
+    @pytest.mark.xfail(strict=True, raises=AssertionError,
+                       reason="D-CAP-FREQ: HubMILP/FrequencyGA multiply weekly capacity by 7/cycle_time "
+                              "while the fleet check treats frequency as sailings/week")
+    def test_weekly_capacity_is_capacity_times_sailings_per_week(self):
+        from src.optimization.hub_milp import HubMILP
+
+        # 1,000 TEU of demand; one vessel type of 1,000 TEU; a 14-day rotation sailed
+        # once a week (needs 2 vessels). Weekly capacity must be 1,000 x 1 = 1,000.
+        problem = _tiny_problem(
+            services=[Service(id="s", ports=["A", "B"], capacity=1000.0, weekly_cost=1.0,
+                              cycle_time=14, vessel_class="Feeder_450")],
+            demands=[Demand("A", "B", 1000.0, 1000.0)],
+        )
+        res = HubMILP(problem, {"services": [1], "frequencies": [1]}, time_limit=30).solve()
+        assert res["status"] == "Optimal"
+        assert res["satisfied_demand"] == pytest.approx(1000.0, rel=1e-6)
+
+    # --- D-ACCT-PROFIT ------------------------------------------------------
+    @pytest.mark.xfail(strict=True, raises=AssertionError,
+                       reason="D-ACCT-PROFIT: HubMILP 'profit' is the augmented solver objective "
+                              "(unserved penalty + coverage reward), not revenue - total_cost")
+    def test_reported_profit_is_revenue_minus_total_cost(self):
+        from src.optimization.hub_milp import HubMILP
+
+        # Capacity 40 TEU vs 100 TEU demand at USD 1000/TEU, cycle 7 days, 1 sailing/wk:
+        #   revenue 40,000; vessel 10,000; fuel 26,041.67; handling 10/TEU at both ports = 800
+        #   accounting profit = 40,000 - 36,841.67 = 3,158.33
+        ports = [Port("A", "A", 0, 0, handling_cost=10.0), Port("B", "B", 0, 0, handling_cost=10.0)]
+        problem = _tiny_problem(
+            ports=ports,
+            services=[Service(id="s", ports=["A", "B"], capacity=40.0, weekly_cost=10_000.0,
+                              cycle_time=7, vessel_class="Feeder_450")],
+            demands=[Demand("A", "B", 100.0, 1000.0)],
+            dist={"A": {"B": 1000.0}, "B": {"A": 1000.0}},
+        )
+        res = HubMILP(problem, {"services": [1], "frequencies": [1]}, time_limit=30).solve()
+        assert res["status"] == "Optimal"
+        assert res["total_cost"] == pytest.approx(10_000.0 + FEEDER_1000NM + 800.0, rel=1e-9)
+        assert res["profit"] == pytest.approx(40_000.0 - res["total_cost"], rel=1e-9)
+
+    # --- D-ACCT-TRANSSHIP ---------------------------------------------------
+    @pytest.mark.xfail(strict=True, raises=AssertionError,
+                       reason="D-ACCT-TRANSSHIP: reported transship_cost uses the flat default "
+                              "(80/TEU) while the objective prices port-specific rates")
+    def test_reported_transshipment_cost_uses_the_rate_the_objective_used(self):
+        from src.optimization.hub_milp import HubMILP
+
+        ports = [Port(p, p, 0, 0, transshipment_cost=10.0, handling_cost=1.0) for p in "ABC"]
+        problem = _tiny_problem(
+            ports=ports,
+            services=[
+                Service(id="s1", ports=["A", "B"], capacity=1000.0, weekly_cost=1000.0,
+                        cycle_time=7, vessel_class="Feeder_450"),
+                Service(id="s2", ports=["B", "C"], capacity=1000.0, weekly_cost=1000.0,
+                        cycle_time=7, vessel_class="Feeder_450"),
+            ],
+            demands=[Demand("A", "C", 100.0, 1000.0)],
+            dist={"A": {"B": 100.0, "C": 200.0}, "B": {"A": 100.0, "C": 100.0},
+                  "C": {"A": 200.0, "B": 100.0}},
+        )
+        res = HubMILP(problem, {"services": [1, 1], "frequencies": [1, 1]}, time_limit=30).solve()
+        assert res["status"] == "Optimal"
+        assert res["transship_demand"] == pytest.approx(100.0)
+        assert res["transship_cost"] == pytest.approx(100.0 * 10.0)
+
+    # --- D-MILP-FLEET -------------------------------------------------------
+    @pytest.mark.xfail(strict=True, raises=TypeError,
+                       reason="D-MILP-FLEET: a chromosome that needs more vessels than the fleet "
+                              "crashes the MILP (PuLP: 'A False object cannot be passed as a "
+                              "constraint') instead of returning an explicit infeasible status")
+    def test_fleet_infeasible_chromosome_returns_an_explicit_status(self):
+        from src.optimization.hub_milp import HubMILP
+
+        problem = _tiny_problem(
+            services=[Service(id="s", ports=["A", "B"], capacity=1000.0, weekly_cost=1.0,
+                              cycle_time=28, vessel_class="Feeder_450")],
+            demands=[Demand("A", "B", 10.0, 1000.0)],
+        )
+        # 28-day rotation at 3 sailings/week needs 12 vessels; the fleet has 5.
+        milp = HubMILP(problem, {"services": [1], "frequencies": [3]}, fleet_size=5, time_limit=30)
+        res = milp.solve()                                   # raises TypeError today
+        assert res["status"] != "Optimal"
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+def _tiny_problem(services, demands, ports=None, dist=None):
+    ports = ports or [Port("A", "A", 0, 0), Port("B", "B", 0, 0)]
+    dist = dist or {"A": {"B": 100.0}, "B": {"A": 100.0}}
+    fleet = Fleet(classes=[FleetClass(vessel_class="Feeder_450", quantity=300, capacity_teu=1000.0)])
+    return Problem(ports=ports, services=services, demands=demands, distance_matrix=dist, fleet=fleet)

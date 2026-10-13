@@ -1,0 +1,328 @@
+diff --git a/src/network/network_milp.py b/src/network/network_milp.py
+--- a/src/network/network_milp.py
++++ b/src/network/network_milp.py
+@@ -29,6 +29,18 @@
+     The restriction can exclude better integer solutions, so the result is a
+     feasible plan with a stated bound, not a proof of optimality: ``status`` is
+     ``"optimal"`` only if the restricted MILP closed AND no service was dropped.
++
++Backend (``NETWORK_MILP_BACKEND``, default ``cbc``)
++    ``cbc``    the bundled CBC through PuLP, as above (the production default).
++    ``highs``  OPT-IN.  The unrestricted integer problem (no LP restriction) is solved by
++               HiGHS through ``scipy.optimize.milp`` (``scipy`` is already a pinned
++               requirement; no package is added).  It applies to free-frequency solves
++               only - solves with ``fixed_frequencies`` always use CBC.  HiGHS has no warm
++               start in this interface, so ``initial_frequencies`` is not used.  ``status``
++               is ``"optimal"`` only when HiGHS reports optimality (relative MIP gap <= 1e-4,
++               reported as ``mip_gap``); otherwise the incumbent is ``"feasible"`` and the MIP
++               dual bound is reported as ``relaxation_bound``.  An unsupported value is a
++               ``solver_error``, never a silent fallback to another solver.
+ """
+ 
+ from __future__ import annotations
+@@ -73,6 +85,8 @@
+     # independent ledger charges); the amount removed is reported here.
+     vessel_slack_removed: int = 0
+     vessel_slack_cost_usd: float = 0.0
++    solver_backend: str = "cbc"
++    mip_gap: Optional[float] = None              # relative gap reported by the backend (HiGHS)
+ 
+     @property
+     def usable(self) -> bool:
+@@ -103,6 +117,80 @@
+         sol.objective_value += slack_cost
+ 
+ 
++#: relative MIP gap at which HiGHS's own optimality status is accepted as "optimal" (its
++#: default ``mip_rel_gap``); the gap actually reached is always reported in ``mip_gap``
++HIGHS_OPTIMAL_GAP = 1e-4
++
++
++def _backend_name() -> str:
++    return (os.environ.get("NETWORK_MILP_BACKEND") or "cbc").strip().lower()
++
++
++def _solve_highs(res, deadline: float) -> dict:
++    """Solve the PuLP model held in ``res`` (built, not solved) with HiGHS through
++    ``scipy.optimize.milp`` and write the values back onto the PuLP variables, so the
++    caller's extraction code is the same as for CBC.  ``deadline`` is a
++    ``time.perf_counter()`` instant: matrix construction counts against the budget.
++    Returns ``{"mip_gap", "dual_bound", "error", "message"}``; never raises."""
++    info = {"mip_gap": None, "dual_bound": None, "error": None, "message": ""}
++    prob = res["prob"]
++    if not res["q"]:
++        return info
++    try:
++        import numpy as np
++        from scipy.optimize import Bounds, LinearConstraint, milp
++        from scipy.sparse import coo_matrix
++
++        vars_ = prob.variables()
++        idx = {v.name: i for i, v in enumerate(vars_)}
++        nvar = len(vars_)
++        c = np.zeros(nvar)
++        for v, coef in prob.objective.items():
++            c[idx[v.name]] = -float(coef)                    # maximise -> minimise
++        lo = np.array([-np.inf if v.lowBound is None else float(v.lowBound) for v in vars_])
++        hi = np.array([np.inf if v.upBound is None else float(v.upBound) for v in vars_])
++        integrality = np.array([1 if v.cat == pulp.LpInteger else 0 for v in vars_])
++        rows, cols, vals = [], [], []
++        lb = np.full(len(prob.constraints), -np.inf)
++        ub = np.full(len(prob.constraints), np.inf)
++        for r, con in enumerate(prob.constraints.values()):
++            for v, coef in con.items():
++                rows.append(r)
++                cols.append(idx[v.name])
++                vals.append(float(coef))
++            rhs = -float(con.constant)
++            if con.sense == pulp.LpConstraintLE:
++                ub[r] = rhs
++            elif con.sense == pulp.LpConstraintGE:
++                lb[r] = rhs
++            else:
++                lb[r] = ub[r] = rhs
++        A = coo_matrix((vals, (rows, cols)), shape=(len(prob.constraints), nvar)).tocsr()
++        r = milp(c, constraints=LinearConstraint(A, lb, ub), integrality=integrality,
++                 bounds=Bounds(lo, hi),
++                 options={"time_limit": max(1.0, deadline - time.perf_counter()),
++                          "disp": False})
++    except Exception as exc:                                   # noqa: BLE001
++        info["error"] = f"{type(exc).__name__}: {exc}"
++        return info
++    info["message"] = str(getattr(r, "message", ""))
++    gap = getattr(r, "mip_gap", None)
++    bound = getattr(r, "mip_dual_bound", None)
++    info["mip_gap"] = float(gap) if gap is not None and math.isfinite(float(gap)) else None
++    if bound is not None and math.isfinite(float(bound)):
++        info["dual_bound"] = -float(bound)                     # back to a profit upper bound
++    if getattr(r, "x", None) is None:
++        # no incumbent: infeasible (status 2) or limit reached without a solution
++        prob.status = pulp.LpStatusInfeasible if r.status == 2 else pulp.LpStatusNotSolved
++        return info
++    for v in vars_:
++        v.varValue = float(r.x[idx[v.name]])
++    prob.status = pulp.LpStatusOptimal
++    proven = (r.status == 0) and (info["mip_gap"] is None or info["mip_gap"] <= HIGHS_OPTIMAL_GAP)
++    prob.sol_status = pulp.LpSolutionOptimal if proven else pulp.LpSolutionIntegerFeasible
++    return info
++
++
+ def _solver(time_limit_sec: float, threads: Optional[int], warm: bool):
+     # threads is opt-in: the bundled parallel CBC stalled (idle, ignoring its time
+     # limit) on a 5k-row model, so the default is the single-threaded solver.
+@@ -121,8 +209,10 @@
+     total_vessel_limit: Optional[int] = None,
+     port_capacity: Optional[Dict[str, float]] = None,
+     min_served_fraction: Optional[float] = None,
++    solve: bool = True,
+ ):
+-    """Build the model over ``services`` (indices) and solve it. Returns a dict with
++    """Build the model over ``services`` (indices) and solve it (``solve=False``: build
++    only, the caller solves with another backend). Returns a dict with
+     the PuLP problem, variables and statuses; raises nothing for solver outcomes."""
+     keep = set(services)
+     # only paths whose every segment service is kept
+@@ -219,7 +309,7 @@
+     out = dict(prob=prob, f=f, n=n, q=q, u=u, active=active, terms=dict(
+         revenue=revenue, per_teu_port=per_teu_port, vessel_cost=vessel_cost,
+         fuel_cost=fuel_cost, port_fixed=port_fixed, pen=pen), status=None, error=None)
+-    if not q:
++    if not q or not solve:
+         return out
+     try:
+         prob.solve(_solver(time_limit_sec, threads, bool(integer and initial)))
+@@ -268,6 +358,17 @@
+         sol.runtime_sec = time.perf_counter() - t0
+         return sol
+ 
++    backend = _backend_name()
++    if backend not in ("cbc", "highs"):
++        sol.status, sol.solver_status = "solver_error", "invalid_backend"
++        sol.message = (f"NETWORK_MILP_BACKEND={backend!r} is not supported (use 'cbc' or "
++                       f"'highs'); no other solver was substituted")
++        sol.runtime_sec = time.perf_counter() - t0
++        return sol
++    use_highs = backend == "highs" and fixed_frequencies is None
++    sol.solver_backend = "highs" if use_highs else "cbc"
++    if use_highs:
++        lp_guided = False             # HiGHS takes the unrestricted integer problem
+     if lp_guided is None:
+         lp_guided = fixed_frequencies is None
+     services = referenced
+@@ -314,7 +415,17 @@
+                            max_departures_cap=max_departures_cap, time_limit_sec=budget,
+                            threads=threads, total_vessel_limit=total_vessel_limit,
+                            port_capacity=port_capacity,
+-                           min_served_fraction=min_served_fraction)
++                           min_served_fraction=min_served_fraction,
++                           solve=not use_highs)
++    highs_msg = ""
++    if use_highs:
++        info = _solve_highs(res, t0 + max(1.0, time_limit_sec))
++        sol.mip_gap = info["mip_gap"]
++        if info["dual_bound"] is not None:
++            sol.relaxation_bound = info["dual_bound"]
++        if info["error"] and not res["error"]:
++            res["error"] = info["error"]
++        highs_msg = info["message"]
+     prob = res["prob"]
+     sol.n_variables = len(res["f"]) + len(res["n"]) + len(res["q"]) + len(res["u"])
+     sol.n_constraints = len(prob.constraints)
+@@ -330,7 +441,8 @@
+         return sol
+     if prob.status != pulp.LpStatusOptimal:
+         sol.status = "not_solved"
+-        sol.message = f"solver status {sol.solver_status}"
++        sol.message = f"solver status {sol.solver_status}" + (
++            f" ({highs_msg})" if highs_msg else "")
+         return sol
+     f, n, q, u = res["f"], res["n"], res["q"], res["u"]
+     if any(v.varValue is None for v in list(f.values()) + list(q.values())):
+diff --git a/src/network/reconcile.py b/src/network/reconcile.py
+--- a/src/network/reconcile.py
++++ b/src/network/reconcile.py
+@@ -388,6 +388,8 @@
+             "relaxation_upper_bound_usd_per_week": sol.relaxation_bound,
+             "gap_to_bound_usd_per_week": (sol.relaxation_bound - sol.objective_value)
+             if sol.relaxation_bound is not None else None,
++            "solver_backend": sol.solver_backend,
++            "mip_gap_reported_by_backend": sol.mip_gap,
+             "note": ("a feasible plan with a stated upper bound; not a proof of optimality "
+                      "unless status is 'optimal'"),
+         },
+diff --git a/tests/test_milp_backend.py b/tests/test_milp_backend.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_milp_backend.py
+@@ -0,0 +1,131 @@
++"""Task 15 - the opt-in HiGHS backend of the global network MILP.
++
++``NETWORK_MILP_BACKEND`` unset / ``cbc`` is the production path and must be untouched;
++``highs`` solves the UNRESTRICTED integer problem through ``scipy.optimize.milp`` (scipy is a
++pinned requirement already) for free-frequency solves only.  It must never be a silent
++substitution: an unsupported value is a ``solver_error`` and a fixed-frequency solve stays on
++CBC.  Statuses are honest: ``optimal`` only when HiGHS proved it, otherwise ``feasible`` with
++the MIP dual bound reported.
++"""
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import src.network.network_milp as nm
++from src.network.plan import Candidate, NetworkPlanner
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++DM = {"A": {"B": 1000.0, "C": 1600.0}, "B": {"A": 1200.0, "C": 600.0},
++      "C": {"A": 1600.0, "B": 600.0}}
++
++
++def _problem():
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=1000.0,
++                  transshipment_cost=0.0, variable_port_call_cost=0.0) for p in "ABC"]
++    v = FleetClass(vessel_class="V", quantity=5, capacity_teu=1000.0, tc_rate_daily=8000.0,
++                   min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                   bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)
++    demands = [Demand("A", "B", 1500.0, 1000.0), Demand("B", "A", 1200.0, 1000.0),
++               Demand("B", "C", 800.0, 900.0)]
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM,
++                   fleet=Fleet(classes=[v]))
++
++
++CANDS = [Candidate("ab", ("A", "B"), "V"), Candidate("abc", ("A", "B", "C"), "V"),
++         Candidate("bc", ("B", "C"), "V")]
++
++
++def _plan(**kw):
++    pr = _problem()
++    return NetworkPlanner(pr).plan(CANDS, demands=pr.demands, **kw)
++
++
++class TestBackendSelection:
++    def test_default_is_cbc(self, monkeypatch):
++        monkeypatch.delenv("NETWORK_MILP_BACKEND", raising=False)
++        p = _plan()
++        assert p.solution.solver_backend == "cbc" and p.ok
++
++    def test_highs_matches_cbc_on_a_problem_both_can_close(self, monkeypatch):
++        monkeypatch.delenv("NETWORK_MILP_BACKEND", raising=False)
++        cbc = _plan(lp_guided=False)
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++        hi = _plan()
++        assert cbc.status == "optimal" and hi.status == "optimal"
++        s = hi.solution
++        assert s.solver_backend == "highs"
++        assert s.objective_value == pytest.approx(cbc.solution.objective_value, rel=1e-9)
++        # the independent ledger agrees with the HiGHS plan: verified, reconciled
++        assert hi.ok and hi.reconciliation["reconciled"] is True
++        assert hi.ledger.operating_profit == pytest.approx(s.objective_value, abs=1e-6)
++        assert s.relaxation_bound is not None and s.relaxation_bound >= s.objective_value - 1e-6
++        assert s.n_services_restricted_to == s.n_services_considered      # unrestricted
++
++    def test_unknown_backend_is_an_error_not_a_silent_cbc(self, monkeypatch):
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "gurobi")
++        p = _plan()
++        assert p.status == "solver_error" and not p.ok
++        assert "NETWORK_MILP_BACKEND" in p.solution.message and "gurobi" in p.solution.message
++
++    def test_fixed_frequency_solves_stay_on_cbc(self, monkeypatch):
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++        p = _plan(fixed_frequencies={"ab": 1})
++        assert p.solution.solver_backend == "cbc"
++
++
++class TestHighsStatusMapping:
++    def _fake(self, monkeypatch, overrides):
++        import scipy.optimize as so
++        real = so.milp
++
++        def fake(c, **kw):
++            r = real(c, **kw)
++            data = dict(x=r.x, status=r.status, message=str(r.message),
++                        mip_gap=getattr(r, "mip_gap", None),
++                        mip_dual_bound=getattr(r, "mip_dual_bound", None), fun=r.fun)
++            data.update(overrides(data) if callable(overrides) else overrides)
++            return SimpleNamespace(**data)
++        monkeypatch.setattr(so, "milp", fake)
++
++    def test_time_limit_incumbent_is_feasible_with_the_dual_bound(self, monkeypatch):
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++        self._fake(monkeypatch, lambda d: dict(status=1, message="Time limit reached",
++                                               mip_gap=0.05, mip_dual_bound=d["fun"] - 1234.0))
++        p = _plan()
++        s = p.solution
++        assert s.status == "feasible"                       # not proven optimal
++        assert s.mip_gap == pytest.approx(0.05)
++        assert s.relaxation_bound == pytest.approx(s.objective_value + 1234.0, abs=1e-6)
++        assert p.ok                                          # the incumbent is kept and verified
++
++    def test_optimal_with_a_loose_gap_is_not_called_optimal(self, monkeypatch):
++        # HiGHS's own tolerance is 1e-4; a reported gap above it is only a feasible incumbent
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++        self._fake(monkeypatch, dict(status=0, mip_gap=1e-3))
++        assert _plan().solution.status == "feasible"
++
++    def test_no_incumbent_is_not_solved_with_the_backend_message(self, monkeypatch):
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++        self._fake(monkeypatch, dict(x=None, status=1, message="Time limit reached"))
++        p = _plan()
++        assert p.status == "not_solved" and not p.ok
++        assert "Time limit reached" in p.solution.message
++
++    def test_infeasible(self, monkeypatch):
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++        self._fake(monkeypatch, dict(x=None, status=2, message="infeasible"))
++        assert _plan().status == "infeasible"
++
++    def test_exception_is_a_solver_error(self, monkeypatch):
++        import scipy.optimize as so
++        monkeypatch.setenv("NETWORK_MILP_BACKEND", "highs")
++
++        def boom(*a, **k):
++            raise RuntimeError("highs unavailable")
++        monkeypatch.setattr(so, "milp", boom)
++        p = _plan()
++        assert p.status == "solver_error" and "highs unavailable" in p.solution.message

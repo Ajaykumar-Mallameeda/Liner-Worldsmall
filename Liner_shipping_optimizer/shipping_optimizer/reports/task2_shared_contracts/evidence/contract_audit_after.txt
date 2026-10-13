@@ -1,0 +1,53 @@
+﻿
+=== M1  loader facts (canonical WorldSmall) ===============================
+ports                : 47
+demand rows          : 1764
+directed dist pairs  : 2162
+raw FFE/week         : 138247.0
+converted TEU/week   : 276446.8
+raw gross USD/week   : 264870100.0
+conv gross USD/week  : 264870100.0
+demand_scale         : 1
+fleet classes/total  : 6 263
+lanes with non-2.0 factor: 6 [('AEJEA', 'DEHAM', 2.1), ('CNSHA', 'DEHAM', 2.1), ('AEJEA', 'NLRTM', 2.1), ('CNSHA', 'NLRTM', 2.1), ('BRSSZ', 'USLAX', 1.9), ('CNSHA', 'USLAX', 1.85)]
+fleet fees  (panama,suez): {'Feeder_450': (64800.0, 175769.0), 'Feeder_800': (115200.0, 218445.0), 'Panamax_1200': (172800.0, 267217.0), 'Panamax_2400': (345600.0, 413533.0), 'Post_panamax': (None, 633007.0), 'Super_panamax': (None, 1035376.0)}
+IsPanama=1 pairs: 340  IsSuez=1 pairs: 586  non-blank Draft: 340
+
+=== M2  hard-coded fuel table vs fleet_data.csv ===========================
+class          cap(fleet) cap(table)  t/day(fleet@design) t/day(table) design kn  table kn
+Feeder_450            450        450                 18.8         15.0      12.0      16.0
+Feeder_800            800        800                 23.7         25.0      14.0      17.0
+Panamax_1200         1200       1200                 52.5         35.0      18.0      18.0
+Panamax_2400         2400       2400                 57.4         55.0      16.0      19.0
+Post_panamax         4200       5000                 82.2         80.0      16.5      22.0
+Super_panamax        7500       8000                126.9        100.0      17.0      23.0
+fuel table speeds exceed fleet maxSpeed for: ['Feeder_450', 'Super_panamax']
+
+=== M3  candidate service contract vs fleet (deterministic seed) ==========
++ Configuration validated
+  Provider order: groq
+candidates generated: 1046  of which plain dict (un-normalised): 0
+fleet max single-vessel capacity (TEU): 7500.0
+services whose capacity exceeds every fleet vessel: 85 of 1046
+capacity distribution: {500: 19, 1000: 702, 2000: 28, 4500: 3, 5000: 209, 8000: 5, 10000: 15, 12000: 45, 14000: 20}
+services whose capacity != fleet capacity of their vessel_class: 1046 of 1046
+cycle_time distribution (days): {7: 54, 14: 952, 21: 40}
+services whose closed-route sailing time at the class MAX speed exceeds cycle_time: 901 of 1046
+cycle_time / min sailing days  (min, median, max): 0.107 0.461 772.8
+consecutive identical-port legs (distance 0 / missing from matrix): 3
+sum of ceil(cycle_time/7) over ALL candidates (1 weekly sailing each): 2078  fleet: 263
+
+=== M7  fuel_cost known values and fallbacks ==============================
+1000 nm, Feeder_450 (16 kn, 15 t/d, $600/t): 26041.67  hand: 26041.67
+weekly, route A-B, cycle 7: 26041.67
+weekly, route A-B-A, cycle 14: 26041.67
+weekly, route A-A-B (same-port leg), cycle 7  -> 26041.67
+weekly, route A-Z (Z unknown), cycle 7        -> RAISES MissingDistanceError: no distance for leg A -> Z; no synthetic distance is substituted (route ['A', 'Z'])
+voyage, unknown class 'Nope'                  -> RAISES UnknownVesselClassError: unknown vessel class 'Nope'; known classes: ['Feeder_450', 'Feeder_800', 'Panamax_1200', '
+weekly, cycle_time 0                          -> RAISES FuelCostError: cycle_time_days must be a finite number > 0, got 0
+
+=== M9  port-cost unit basis sensitivity (raw per-FFE-named columns) ======
+mean raw CostPerFULL = 242.11  PortCallCostPerFFE = 10.83
+loader x2.0  -> handling per TEU mean = 484.21
+dimensional  /2 -> handling per TEU mean = 121.05   (ratio loader/dimensional = 4.0)
+weighted mean revenue per TEU = 958.12

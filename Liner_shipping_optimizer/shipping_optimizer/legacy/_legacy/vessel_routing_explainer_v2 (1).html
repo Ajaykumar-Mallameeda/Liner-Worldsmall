@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Vessel Routing — Production Architecture v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F5F0E8;
+  --bg2: #EDE8DF;
+  --bg3: #E6E0D5;
+  --bg4: #DDD7CC;
+  --blue: #4B8EFF;
+  --blue-dim: rgba(75,142,255,0.12);
+  --blue-glow: rgba(75,142,255,0.25);
+  --orange: #FF9A45;
+  --orange-dim: rgba(255,154,69,0.12);
+  --green: #34D882;
+  --green-dim: rgba(52,216,130,0.12);
+  --red: #FF5B5B;
+  --red-dim: rgba(255,91,91,0.12);
+  --purple: #A978FF;
+  --purple-dim: rgba(169,120,255,0.12);
+  --cyan: #00C8E0;
+  --cyan-dim: rgba(0,200,224,0.12);
+  --gold: #F0B429;
+  --gold-dim: rgba(240,180,41,0.12);
+  --t1: #000000;
+  --t2: #1A1A1A;
+  --t3: #444444;
+  --bd: rgba(0,0,0,0.12);
+  --bd2: rgba(0,0,0,0.22);
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'DM Sans', system-ui, sans-serif;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--t1); font-family: var(--sans); }
+
+/* TOPBAR */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 52px;
+  background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+  border-bottom: 2px solid var(--bd); z-index: 1000;
+  display: flex; align-items: center; padding: 0 20px; gap: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+.tb-logo { display: flex; align-items: center; gap: 8px; }
+.tb-ship { font-size: 18px; }
+.tb-title { font-size: 13px; font-weight: 600; letter-spacing: -0.2px; color: var(--t1); }
+.tb-sep { flex: 1; }
+.tb-stat {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 3px;
+}
+.tb-online { background: rgba(52,216,130,0.1); color: var(--green); border: 1px solid rgba(52,216,130,0.25); }
+.tb-info { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue-glow); }
+.tb-v2 { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(240,180,41,0.3); }
+.tb-btn {
+  background: transparent; border: 2px solid var(--bd); color: var(--t2);
+  font-family: var(--sans); font-size: 11px; font-weight: 700; padding: 5px 12px;
+  border-radius: 5px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+.tb-btn:hover { border-color: var(--t3); color: var(--t1); background: rgba(0,0,0,0.03); }
+.tb-btn.active { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); border-width: 2px; }
+.scene-counter {
+  font-size: 11px; color: var(--t3); font-weight: 500; font-family: var(--mono);
+  padding: 4px 10px; border: 1px solid var(--bd); border-radius: 3px;
+}
+
+/* CANVAS */
+#canvas {
+  position: fixed; top: 52px; left: 0; right: 380px; bottom: 0;
+  overflow: hidden; cursor: grab;
+}
+#canvas.grabbing { cursor: grabbing; }
+#stage { position: absolute; transform-origin: 0 0; will-change: transform; }
+#svgl { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+
+/* INFO PANEL */
+#panel {
+  position: fixed; top: 52px; right: 0; bottom: 0; width: 380px;
+  background: #FFFFFF; border-left: 2px solid var(--bd);
+  display: flex; flex-direction: column; z-index: 500;
+  box-shadow: -4px 0 15px rgba(0,0,0,0.03);
+}
+#scene-head { padding: 20px 20px 16px; border-bottom: 1px solid var(--bd); flex-shrink: 0; }
+.sh-num { font-size: 10px; font-family: var(--mono); color: var(--t3); font-weight: 500; letter-spacing: 1px; margin-bottom: 6px; }
+.sh-title { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.25; color: var(--t1); margin-bottom: 8px; }
+.sh-desc { font-size: 12.5px; color: var(--t2); line-height: 1.65; font-weight: 400; }
+#scene-dots { padding: 14px 20px 0; display: flex; flex-wrap: wrap; gap: 5px; flex-shrink: 0; }
+.sd { width: 22px; height: 6px; border-radius: 3px; background: #DDD7CC; cursor: pointer; transition: all 0.2s; border: none; }
+.sd.done { background: #4B8EFF; opacity: 0.5; }
+.sd.active { background: var(--blue); width: 34px; opacity: 1; }
+#node-detail { flex: 1; overflow-y: auto; padding: 16px 20px; }
+#node-detail::-webkit-scrollbar { width: 3px; }
+#node-detail::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 2px; }
+.nd-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--t3); text-align: center; gap: 10px; }
+.nd-placeholder-icon { font-size: 32px; opacity: 0.4; }
+.nd-placeholder-text { font-size: 12px; font-weight: 500; letter-spacing: 0.3px; }
+.nd-section { margin-bottom: 18px; }
+.nd-section-title { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--bd); }
+.nd-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.nd-list li { font-size: 11.5px; color: var(--t2); padding: 5px 9px 5px 22px; position: relative; line-height: 1.55; background: rgba(255,255,255,0.02); border-radius: 3px; border: 1px solid var(--bd); }
+.nd-list li::before { content: '›'; position: absolute; left: 8px; color: var(--t3); font-size: 12px; top: 4px; }
+.nd-metric { display: flex; justify-content: space-between; align-items: center; padding: 6px 9px; background: rgba(255,255,255,0.025); border: 1px solid var(--bd); border-radius: 3px; margin-bottom: 4px; }
+.nd-metric .k { font-size: 10px; color: var(--t3); font-weight: 500; }
+.nd-metric .v { font-size: 11px; color: var(--t1); font-weight: 600; font-family: var(--mono); }
+.nd-formula { background: var(--bg); border: 1px solid var(--bd); border-radius: 4px; padding: 12px; font-family: var(--mono); font-size: 10px; color: var(--orange); line-height: 1.9; white-space: pre; overflow-x: auto; }
+#nav-bar { padding: 14px 20px; border-top: 1px solid var(--bd); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.nav-btn {
+  background: transparent; border: 2px solid var(--bd); color: var(--t2);
+  font-family: var(--sans); font-size: 11px; font-weight: 700; padding: 6px 14px;
+  border-radius: 5px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.nav-btn:hover { border-color: var(--t3); color: var(--t1); background: rgba(0,0,0,0.03); }
+.nav-btn:disabled { opacity: 0.3; cursor: not-allowed; border-width: 1px; }
+.nav-play { background: var(--blue-dim); border-color: var(--blue-glow); color: var(--blue); flex: 1; text-align: center; }
+.nav-play:hover { background: rgba(75,142,255,0.2); }
+.nav-play.playing { background: var(--red-dim); border-color: rgba(255,91,91,0.25); color: var(--red); }
+
+/* LAYER BANDS */
+.lband { position: absolute; border-radius: 6px; pointer-events: none; border: 1px dashed; }
+.llabel {
+  position: absolute; font-size: 9px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  pointer-events: none; color: var(--t1);
+  background: #FFFFFF; padding: 3px 10px;
+  border-radius: 4px; border: 2px solid var(--bd); z-index: 5;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+/* NODES */
+.node { position: absolute; border-radius: 5px; cursor: pointer; transition: transform 0.15s; z-index: 10; }
+.node:hover { transform: translateY(-1px) scale(1.015); z-index: 50; }
+.ni {
+  padding: 13px 15px 12px;
+  border-radius: 6px;
+  border: 2px solid var(--bd);
+  background: #FFFFFF;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.06);
+}
+.node:hover .ni { border-color: var(--t3); background: #FFFFFF; box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+.nlbl { font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin-bottom: 4px; }
+.ntit { font-size: 13.5px; font-weight: 800; line-height: 1.2; margin-bottom: 5px; color: var(--t1); }
+.ndesc { font-size: 10.5px; font-weight: 500; line-height: 1.55; color: var(--t2); }
+.npills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+.np { font-size: 9px; padding: 2px 7px; border-radius: 3px; background: #F0F0F0; color: #111; border: 1px solid var(--bd); font-weight: 700; }
+.t-orch .ni { border-left: 4px solid var(--blue); }
+.t-orch .nlbl { color: #0056D2; }
+.t-coord .ni { border-left: 4px solid var(--red); }
+.t-coord .nlbl { color: #C81010; }
+.t-out .ni { border-left: 4px solid var(--green); }
+.t-out .nlbl { color: #008542; }
+.t-data .ni { border-left: 4px solid var(--t3); }
+.t-ga .ni { border-left: 4px solid var(--orange); }
+.t-ga .nlbl { color: #B35900; }
+.t-milp .ni { border-left: 4px solid var(--green); }
+.t-milp .nlbl { color: #008542; }
+.t-infra .ni { border-left: 4px solid var(--cyan); }
+.t-infra .nlbl { color: #0099AA; }
+.t-valid .ni { border-left: 4px solid var(--gold); }
+.t-valid .nlbl { color: #B07800; }
+.t-resilience .ni { border-left: 4px solid var(--purple); }
+.t-resilience .nlbl { color: #7050C0; }
+.t-etl .ni { border-left: 4px solid #A0A0FF; }
+.t-etl .nlbl { color: #5050D0; }
+
+/* REGIONAL NODES */
+.rnode { position: absolute; border-radius: 5px; cursor: pointer; z-index: 10; transition: transform 0.15s; }
+.rnode:hover { transform: translateY(-1px); z-index: 50; }
+.rout {
+  border-radius: 6px;
+  border: 2px solid #B0C4DE;
+  border-left: 5px solid #0056D2;
+  background: #F0F4F8;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+.rnode:hover .rout { border-color: #0056D2; box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+.rhdr { padding: 10px 14px 8px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.rhl { font-size: 9px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #667788; margin-bottom: 3px; }
+.rht { font-size: 13px; font-weight: 800; color: #111111; }
+.rpipe { display: flex; flex-direction: row; align-items: center; gap: 4px; padding: 10px 14px; background: rgba(255,255,255,0.3); }
+.rstg { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+.rsbox {
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  border: 1.5px solid var(--box-bc) !important;
+  white-space: nowrap;
+  line-height: 1.4;
+  transition: all 0.25s ease;
+  background: var(--box-bg) !important;
+  color: var(--box-col) !important;
+  width: 100%;
+}
+.rsbox.lit {
+  opacity: 1 !important;
+  background: var(--box-col) !important;
+  color: #FFFFFF !important;
+  border-color: rgba(0,0,0,0.1) !important;
+  box-shadow: 0 0 15px var(--box-col);
+  transform: scale(1.05);
+  z-index: 2;
+}
+.rarr { color: var(--t3); font-size: 9px; flex: 0 0 auto; margin-top: 0; padding: 0 3px; }
+.rftr { padding: 4px 12px 6px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--bd); }
+.rftr-l { font-size: 10px; color: #556677; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.rftr-v { font-size: 11px; color: #00A852; font-weight: 900; font-family: var(--mono); letter-spacing: 1px; }
+
+/* HIGHLIGHTS */
+.scene-hi .ni, .scene-hi .rout {
+  border-color: var(--blue) !important;
+  border-width: 2px 2px 2px 6px !important;
+  background: rgba(75,142,255,0.12) !important;
+  box-shadow: 0 0 35px rgba(75,142,255,0.4), inset 0 0 20px rgba(75,142,255,0.05) !important;
+}
+.scene-hi.t-coord .ni {
+  border-color: var(--red) !important;
+  background: rgba(255,91,91,0.12) !important;
+  box-shadow: 0 0 35px rgba(255,91,91,0.4) !important;
+}
+.scene-hi.t-out .ni {
+  border-color: var(--green) !important;
+  background: rgba(52,216,130,0.12) !important;
+  box-shadow: 0 0 35px rgba(52,216,130,0.4) !important;
+}
+.scene-hi.t-ga .ni {
+  border-color: var(--orange) !important;
+  background: rgba(255,154,69,0.12) !important;
+  box-shadow: 0 0 35px rgba(255,154,69,0.4) !important;
+}
+.scene-hi.t-infra .ni {
+  border-color: var(--cyan) !important;
+  background: rgba(0,200,224,0.12) !important;
+  box-shadow: 0 0 35px rgba(0,200,224,0.4) !important;
+}
+.scene-hi.t-valid .ni {
+  border-color: var(--gold) !important;
+  background: rgba(240,180,41,0.12) !important;
+  box-shadow: 0 0 35px rgba(240,180,41,0.4) !important;
+}
+.scene-hi.t-resilience .ni {
+  border-color: var(--purple) !important;
+  background: rgba(169,120,255,0.12) !important;
+  box-shadow: 0 0 35px rgba(169,120,255,0.4) !important;
+}
+.scene-hi .rout {
+  border-color: var(--blue) !important;
+  background: rgba(75,142,255,0.08) !important;
+  box-shadow: 0 0 40px rgba(75,142,255,0.45) !important;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(75,142,255,0.6); }
+  70% { box-shadow: 0 0 0 15px rgba(75,142,255,0); }
+  100% { box-shadow: 0 0 0 0 rgba(75,142,255,0); }
+}
+.pulse .ni { animation: pulse-ring 1.2s ease-out infinite; border-width: 3px 3px 3px 8px !important; }
+
+/* ANIMATED EDGES */
+@keyframes dash-fwd { to { stroke-dashoffset: -28; } }
+@keyframes dash-rev { to { stroke-dashoffset: 28; } }
+@keyframes dash-ga  { to { stroke-dashoffset: -24; } }
+@keyframes dash-milp { to { stroke-dashoffset: -20; } }
+.a-fwd { animation: dash-fwd 1.2s linear infinite; }
+.a-rev { animation: dash-rev 1.4s linear infinite; }
+.a-ga  { animation: dash-ga  1.6s linear infinite; }
+.a-milp { animation: dash-milp 0.9s linear infinite; }
+
+/* ITERATION PANEL */
+#itp {
+  position: fixed;
+  left: 14px;
+  top: 64px;
+  background: #FFFFFF;
+  border: 2px solid var(--bd);
+  border-radius: 8px;
+  padding: 12px 15px;
+  z-index: 200;
+  min-width: 190px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+.it-t { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: var(--t3); margin-bottom: 8px; text-transform: uppercase; }
+.it-dots { display: flex; gap: 5px; margin-bottom: 7px; }
+.it-d {
+  width: 50px; height: 30px; border-radius: 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; border: 2px solid var(--bd); color: var(--t3);
+  transition: all 0.3s; gap: 1px; background: #F9F7F2; font-family: var(--mono);
+}
+.it-d span { font-size: 8px; opacity: 0.5; letter-spacing: 0.3px; font-family: var(--sans); }
+.it-d.done { border-color: rgba(52,216,130,0.4); color: var(--green); background: rgba(52,216,130,0.06); }
+.it-d.run { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.it-step { font-size: 9.5px; color: var(--t2); padding: 4px 7px; background: rgba(255,255,255,0.03); border-radius: 2px; border: 1px solid var(--bd); font-weight: 500; }
+.it-prog { height: 2px; background: rgba(0,0,0,0.06); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.it-bar { height: 100%; background: var(--blue); border-radius: 2px; width: 0%; transition: width 0.7s; }
+.it-weights { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.it-w-row { display: flex; align-items: center; gap: 6px; }
+.it-w-lbl { font-size: 10px; font-weight: 600; font-family: var(--mono); color: var(--t2); width: 16px; }
+.it-w-bar { flex: 1; height: 3px; background: rgba(0,0,0,0.06); border-radius: 2px; overflow: hidden; }
+.it-w-fill { height: 100%; border-radius: 2px; transition: width 0.6s; }
+.it-w-val { font-size: 9px; color: var(--t1); font-weight: 600; width: 28px; text-align: right; font-family: var(--mono); }
+
+/* LEGEND */
+#legend {
+  position: fixed; left: 14px; bottom: 14px;
+  background: #FFFFFF; border: 2px solid var(--bd);
+  border-radius: 8px; padding: 10px 14px; z-index: 200;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+.lg-t { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--t3); margin-bottom: 7px; text-transform: uppercase; }
+.lg-item { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.lg-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.lg-lbl { font-size: 10px; color: var(--t2); font-weight: 500; }
+
+/* TOOLTIP */
+#tip {
+  position: fixed; background: rgba(0,0,0,0.85); color: #fff;
+  font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 4px;
+  pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 2000;
+  letter-spacing: 0.2px; white-space: nowrap;
+}
+#tip.show { opacity: 1; }
+
+/* DATA TYPES OVERLAY */
+#dto { position: fixed; left: 220px; top: 64px; background: #FFFFFF; border: 2px solid var(--bd); border-radius: 8px; padding: 14px 16px; z-index: 300; min-width: 200px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); display: none; }
+#dto.show { display: block; }
+.dto-t { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--t3); margin-bottom: 8px; text-transform: uppercase; }
+.dto-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--bd); }
+.dto-row:last-child { border-bottom: none; }
+.dto-ic { font-size: 14px; }
+.dto-info { display: flex; flex-direction: column; }
+.dto-name { font-size: 11px; font-weight: 600; color: var(--t1); }
+.dto-val { font-size: 10px; color: var(--t3); font-family: var(--mono); }
+
+/* LAYER LEGEND PILL */
+.layer-pill {
+  position: absolute; font-size: 8px; font-weight: 800;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  pointer-events: none; padding: 2px 8px;
+  border-radius: 3px; border: 1px solid; z-index: 5;
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="tb-logo">
+    <span class="tb-ship">🚢</span>
+    <span class="tb-title">AI Vessel Routing System</span>
+  </div>
+  <span class="tb-stat tb-v2">PRODUCTION ARCHITECTURE v2</span>
+  <span class="tb-stat tb-info">435 PORTS · 9,622 LANES · 5 REGIONS · 8 LAYERS</span>
+  <span class="tb-stat tb-online">● PRODUCTION READY</span>
+  <span class="tb-sep"></span>
+  <span class="scene-counter"><span id="sc-cur">1</span>/<span id="sc-tot">16</span></span>
+  <button class="tb-btn" id="btn-dtype" onclick="toggleDtype()">📊 Data Types</button>
+  <button class="tb-btn" id="btn-anim" onclick="toggleAnim()">⏸ Pause</button>
+  <button class="tb-btn" onclick="resetView()">⊙ Reset View</button>
+</div>
+
+<!-- DATA TYPES PANEL -->
+<div id="dto">
+  <div class="dto-t">Data Flows</div>
+  <div class="dto-row"><span class="dto-ic">📦</span><div class="dto-info"><span class="dto-name">Raw Maritime Data</span><span class="dto-val">ports.csv · demand.csv · fleet.csv</span></div></div>
+  <div class="dto-row"><span class="dto-ic">🔵</span><div class="dto-info"><span class="dto-name">Orchestration Flow</span><span class="dto-val">control signals · weight vectors</span></div></div>
+  <div class="dto-row"><span class="dto-ic">🟠</span><div class="dto-info"><span class="dto-name">GA Output</span><span class="dto-val">service selections · frequencies</span></div></div>
+  <div class="dto-row"><span class="dto-ic">🟢</span><div class="dto-info"><span class="dto-name">MILP / Solution</span><span class="dto-val">cargo flows · profit breakdown</span></div></div>
+  <div class="dto-row"><span class="dto-ic">🔴</span><div class="dto-info"><span class="dto-name">Feedback Loop</span><span class="dto-val">coverage_gap · conflict signals</span></div></div>
+  <div class="dto-row"><span class="dto-ic">🔷</span><div class="dto-info"><span class="dto-name">Infra / Monitoring</span><span class="dto-val">metrics · health · traces</span></div></div>
+  <div class="dto-row"><span class="dto-ic">🟡</span><div class="dto-info"><span class="dto-name">Benchmark Signals</span><span class="dto-val">KPIs · validation scores</span></div></div>
+</div>
+
+<!-- CANVAS -->
+<div id="canvas">
+  <div id="stage">
+    <svg id="svgl"></svg>
+  </div>
+</div>
+
+<!-- ITERATION PANEL -->
+<div id="itp">
+  <div class="it-t">Feedback Loop</div>
+  <div class="it-dots">
+    <div class="it-d" id="it1">IT1<span>iter</span></div>
+    <div class="it-d" id="it2">IT2<span>iter</span></div>
+    <div class="it-d" id="it3">IT3<span>iter</span></div>
+  </div>
+  <div class="it-step" id="it-step">IDLE</div>
+  <div class="it-prog"><div class="it-bar" id="it-bar"></div></div>
+  <div class="it-weights">
+    <div class="it-w-row"><div class="it-w-lbl">α</div><div class="it-w-bar"><div class="it-w-fill" id="w-alpha" style="width:50%;background:#4B8EFF"></div></div><div class="it-w-val" id="wv-alpha">0.50</div></div>
+    <div class="it-w-row"><div class="it-w-lbl">β</div><div class="it-w-bar"><div class="it-w-fill" id="w-beta" style="width:40%;background:#34D882"></div></div><div class="it-w-val" id="wv-beta">0.40</div></div>
+    <div class="it-w-row"><div class="it-w-lbl">γ</div><div class="it-w-bar"><div class="it-w-fill" id="w-gamma" style="width:10%;background:#FF9A45"></div></div><div class="it-w-val" id="wv-gamma">0.10</div></div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div id="legend">
+  <div class="lg-t">Layer Legend</div>
+  <div class="lg-item"><div class="lg-dot" style="background:#888"></div><span class="lg-lbl">Data Layer</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#A0A0FF"></div><span class="lg-lbl">ETL / Processing</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#4B8EFF"></div><span class="lg-lbl">Optimization / Control</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#FF5B5B"></div><span class="lg-lbl">Coordination / Resolution</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#F0B429"></div><span class="lg-lbl">Validation / Benchmark</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#00C8E0"></div><span class="lg-lbl">Infrastructure / Observability</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#A978FF"></div><span class="lg-lbl">Resilience / Fault Tolerance</span></div>
+  <div class="lg-item"><div class="lg-dot" style="background:#34D882"></div><span class="lg-lbl">Output / Dashboard</span></div>
+</div>
+
+<!-- INFO PANEL -->
+<div id="panel">
+  <div id="scene-head">
+    <div class="sh-num" id="sh-num">SCENE 01</div>
+    <div class="sh-title" id="sh-title">Loading…</div>
+    <div class="sh-desc" id="sh-desc"></div>
+  </div>
+  <div id="scene-dots"></div>
+  <div id="node-detail">
+    <div class="nd-placeholder">
+      <div class="nd-placeholder-icon">◎</div>
+      <div class="nd-placeholder-text">Click any node to explore</div>
+    </div>
+  </div>
+  <div id="nav-bar">
+    <button class="nav-btn" id="btn-prev" onclick="prevScene()">← Prev</button>
+    <button class="nav-btn nav-play" id="btn-play" onclick="togglePlay()">▶ Play All</button>
+    <button class="nav-btn" id="btn-next" onclick="nextScene()">Next →</button>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+/* ─── LAYOUT CONSTANTS ─── */
+// Full production canvas — expanded significantly
+const LY = { W: 3200, H: 1100 };
+
+// Column X positions
+const COL = {
+  DATA:    30,    // Raw data sources
+  ETL:     250,   // ETL / processing
+  ORCH:    490,   // Orchestrator
+  SPLIT:   730,   // Regional splitter
+  REG:     940,   // Regional agents
+  RES:     1620,  // Aggregation + Coordinator
+  VALID:   1860,  // Validation + Benchmark
+  FINAL:   2100,  // Final optimizer
+  INFRA:   2340,  // Infrastructure layer
+  RESIL:   2580,  // Resilience layer
+  OUT:     2820,  // Output layer
+};
+
+const NW = { SM: 170, STD: 195, ORCH: 210, REG: 640, OUT: 200, FIN: 195, INFRA: 200, VALID: 195 };
+
+const REG_TOP  = 90;
+const REG_H    = 100;
+const REG_GAP  = 14;
+
+const REGIONS = [
+  {id:'asia',    name:'ASIA',        hubs:'SGSIN · CNSHA · KRPUS'},
+  {id:'europe',  name:'EUROPE',      hubs:'NLRTM · DEHAM · BEANR'},
+  {id:'americas',name:'AMERICAS',    hubs:'USLAX · BRSSZ · COBUN'},
+  {id:'africa',  name:'AFRICA',      hubs:'ZADUR · NGAPP · TZDAR'},
+  {id:'mideast', name:'MIDDLE EAST', hubs:'AEJEA · OMMCT · KWSWK'},
+];
+
+const STAGES = [
+  {id:'sg', lbl:'SVC GEN',   col:'#0056D2', bg:'rgba(0,86,210,0.08)',  bc:'rgba(0,86,210,0.2)'},
+  {id:'sf', lbl:'FILTER',    col:'#666666', bg:'rgba(100,100,100,0.06)', bc:'rgba(100,100,100,0.15)'},
+  {id:'ga', lbl:'GA L1+L2', col:'#B35900', bg:'rgba(179,89,0,0.08)',   bc:'rgba(179,89,0,0.25)'},
+  {id:'ml', lbl:'MILP FLOW', col:'#008542', bg:'rgba(0,133,66,0.08)',   bc:'rgba(0,133,66,0.25)'},
+  {id:'pr', lbl:'PROFIT',    col:'#666666', bg:'rgba(100,100,100,0.06)', bc:'rgba(100,100,100,0.15)'},
+];
+
+const totalRegH = REGIONS.length * (REG_H + REG_GAP) - REG_GAP;
+
+/* ─── SCENE DEFINITIONS (16 scenes) ─── */
+const SCENES = [
+  { id:1,  title:'Raw Data Ingestion',              num:'01 — DATA LAYER',
+    desc:'All raw maritime data sources are loaded: 435 ports, 9,622 demand OD lanes (FFE/week), fleet specs, distance matrix (62,002 pairs), cost model data, historical routes, and external maritime API signals.',
+    highlight:['data_ports','data_demand','data_fleet','data_dist','data_cost','data_hist','data_ext'], iter:0, step:'LOADING DATA' },
+  { id:2,  title:'ETL Pipeline & Validation',       num:'02 — ETL PROCESSING',
+    desc:'The ETL pipeline ingests raw data, runs schema normalization, input validation (Pydantic), unit conversion (FFE→TEU ×2), geographic clustering (K-means), demand filtering, and candidate route generation.',
+    highlight:['etl'], iter:0, step:'PROCESSING' },
+  { id:3,  title:'Orchestrator Initializes',        num:'03 — MASTER CONTROL',
+    desc:'The LLM-powered Orchestrator Agent analyzes network complexity, classifies problem scale, and initializes the adaptive weight vector α=0.50 (profit), β=0.40 (coverage), γ=0.10 (cost). API gateway queues the job.',
+    highlight:['orch'], iter:0, step:'ANALYZING' },
+  { id:4,  title:'Geographic Decomposition',        num:'04 — REGIONAL SPLIT',
+    desc:'K-means clustering decomposes all 435 ports into 5 geographic regions. Each region receives its filtered port list, demand subset (origin-only ownership, no duplication), and 800–2,000 candidate service routes.',
+    highlight:['orch','split'], iter:0, step:'DECOMPOSING' },
+  { id:5,  title:'Regional Agents Launch (Parallel)', num:'05 — PARALLEL EXECUTION',
+    desc:'Five independent regional agents launch simultaneously via async job queue (Redis Streams). Each runs its own complete optimization pipeline: service generation → filtering → genetic algorithms → MILP → profit computation.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'ITER 1: OPTIMIZING' },
+  { id:6,  title:'GA Level 1 — Service Selection', num:'06 — GA L1',
+    desc:'ServiceGA (pop 80, gen 120) selects optimal service subsets. Fitness = α×NormProfit + β×Coverage − γ×Cost. Compatible_services() port-ordering truthiness fixed. Early stopping if no improvement for N generations.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'RUNNING GA L1' },
+  { id:7,  title:'GA Level 2 — Frequency Optimization', num:'07 — GA L2',
+    desc:'FrequencyGA determines sailing frequencies (1–3/week). Fleet usage = ceil(cycle_time × freq / 7). Frequencies rounded to integers before capacity calc. Post-GA pruning removes inefficient services to satisfy ≤300 fleet cap.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'RUNNING GA L2' },
+  { id:8,  title:'MILP Flow Optimization',          num:'08 — MILP SOLVER',
+    desc:'HubMILP (PuLP/CBC) allocates cargo flows across services and hubs. Fleet constraint actively enforced (≤300). MILP status validated before result extraction. Solver infeasibility returns structured error, not silent garbage.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'SOLVING MILP' },
+  { id:9,  title:'Global Aggregation & Conflict Resolution', num:'09 — AGGREGATION',
+    desc:'All 5 regional results merge. OD demand uniqueness enforced via origin-only ownership (no OR-logic duplication). Global coverage computed from unique served_od_map, not averaged regional figures. Demand conservation assert fires.',
+    highlight:['aggr'], iter:1, step:'AGGREGATING' },
+  { id:10, title:'Coordinator Evaluates & Generates Feedback', num:'10 — COORDINATOR',
+    desc:'LLM Coordinator detects conflicts, computes coverage_gap vs 70% target, and generates adaptive feedback signals. If gap > 5%, increases β and decreases α. Convergence score computed. Triggers rerun if not converged.',
+    highlight:['coord'], iter:1, step:'COORDINATING' },
+  { id:11, title:'Benchmark & Validation Layer',    num:'11 — VALIDATION',
+    desc:'Route Validation Engine checks fleet ≤300, flow conservation, coverage ≥40–70%. Benchmark Comparator evaluates against LINERLIB WorldLarge/Baltic/WorldSmall baselines. KPI Scoring Engine produces academic-grade metrics.',
+    highlight:['valid','bench'], iter:2, step:'VALIDATING' },
+  { id:12, title:'Feedback Loop — Weight Adjustment', num:'12 — ADAPTIVE FEEDBACK',
+    desc:'Updated weights flow back to Orchestrator. α decreases (profit), β increases (coverage). System re-optimizes with adjusted priorities. Loop runs up to 3 iterations with minimum improvement check (< 0.5% stops early).',
+    highlight:['coord','orch','split'], iter:2, step:'ITER 2: REFINING' },
+  { id:13, title:'Infrastructure & Observability',  num:'13 — INFRA LAYER',
+    desc:'Redis Streams queue jobs. PostgreSQL persists solutions. FastAPI/Nginx serves API gateway. Prometheus collects metrics. Grafana dashboards monitor optimization health. Structured logging with correlation IDs and OpenTelemetry traces.',
+    highlight:['infra'], iter:2, step:'MONITORING' },
+  { id:14, title:'Resilience & Fault Tolerance',   num:'14 — RESILIENCE',
+    desc:'Circuit Breakers protect LLM API calls (threshold: 5 failures → 60s cooldown). Retry logic with exponential backoff. MILP timeout fallback to last known good solution. Partial Recovery Engine assembles best available regional results.',
+    highlight:['resil'], iter:2, step:'FAULT MGMT' },
+  { id:15, title:'Final Solution Validation',       num:'15 — FINAL OPTIMIZER',
+    desc:'Hard constraint validation: fleet ≤300, flow conservation, coverage floor, capacity feasibility. FFE/TEU unit consistency verified (1 FFE = 2 TEU enforced at loader). Relative FP tolerance (1e-6) prevents assertion crashes.',
+    highlight:['final'], iter:3, step:'CONVERGED ✓' },
+  { id:16, title:'Optimized Network Output',        num:'16 — FINAL SOLUTION',
+    desc:'Complete maritime network delivered: service configurations, vessel deployment plan, frequency schedules, profit dashboard (Revenue − OpCost per Ronen 1982 cubic fuel law), benchmark comparison, validation report, scenario simulation.',
+    highlight:['output'], iter:3, step:'SOLUTION READY' },
+];
+
+/* ─── STATE ─── */
+let curScene = 0, animEnabled = true, playInterval = null, isPlaying = false;
+const NR = {};
+const stage = document.getElementById('stage');
+const svgl  = document.getElementById('svgl');
+
+/* ─── BUILD LAYER BANDS ─── */
+function band(x, y, w, h, bg, bc, lbl, lx, ly) {
+  const d = document.createElement('div');
+  d.className = 'lband';
+  d.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;background:${bg};border-color:${bc}`;
+  stage.appendChild(d);
+  if (lbl) {
+    const l = document.createElement('div');
+    l.className = 'llabel';
+    l.style.cssText = `left:${lx}px;top:${ly}px`;
+    l.textContent = lbl;
+    stage.appendChild(l);
+  }
+}
+
+const BAND_TOP = REG_TOP - 44;
+const BAND_H   = totalRegH + 44 + 36;
+
+// Data Layer
+band(COL.DATA - 14, BAND_TOP, 185, BAND_H, 'rgba(100,100,100,0.025)', 'rgba(100,100,100,0.18)', 'DATA LAYER', COL.DATA - 12, BAND_TOP - 2);
+// ETL Layer
+band(COL.ETL - 14, BAND_TOP, 195, BAND_H, 'rgba(160,160,255,0.03)', 'rgba(160,160,255,0.18)', 'ETL / PROCESSING', COL.ETL - 12, BAND_TOP - 2);
+// Global Control
+band(COL.ORCH - 14, BAND_TOP, (COL.SPLIT + NW.SM + 14) - COL.ORCH + 28, BAND_H, 'rgba(75,142,255,0.02)', 'rgba(75,142,255,0.12)', 'GLOBAL CONTROL', COL.ORCH - 12, BAND_TOP - 2);
+// Parallel Regional
+band(COL.REG - 14, BAND_TOP, NW.REG + 28, BAND_H, 'rgba(75,142,255,0.015)', 'rgba(75,142,255,0.08)', 'PARALLEL REGIONAL EXECUTION', COL.REG - 12, BAND_TOP - 2);
+// Resolution Layer
+band(COL.RES - 14, BAND_TOP, (COL.RES + NW.STD + 14) - COL.RES + 28, BAND_H, 'rgba(255,91,91,0.012)', 'rgba(255,91,91,0.1)', 'RESOLUTION LAYER', COL.RES - 12, BAND_TOP - 2);
+// Validation + Benchmark
+band(COL.VALID - 14, BAND_TOP, NW.VALID + 28, BAND_H, 'rgba(240,180,41,0.025)', 'rgba(240,180,41,0.18)', 'VALIDATION + BENCHMARK', COL.VALID - 12, BAND_TOP - 2);
+// Final optimizer
+band(COL.FINAL - 14, BAND_TOP, NW.FIN + 28, BAND_H, 'rgba(0,133,66,0.02)', 'rgba(0,133,66,0.12)', 'FINAL OPTIMIZER', COL.FINAL - 12, BAND_TOP - 2);
+// Infrastructure
+band(COL.INFRA - 14, BAND_TOP, NW.INFRA + 28, BAND_H, 'rgba(0,200,224,0.025)', 'rgba(0,200,224,0.18)', 'INFRA / OBS', COL.INFRA - 12, BAND_TOP - 2);
+// Resilience
+band(COL.RESIL - 14, BAND_TOP, NW.INFRA + 28, BAND_H, 'rgba(169,120,255,0.025)', 'rgba(169,120,255,0.18)', 'RESILIENCE', COL.RESIL - 12, BAND_TOP - 2);
+// Output
+band(COL.OUT - 14, BAND_TOP, NW.OUT + 28, BAND_H, 'rgba(52,216,130,0.02)', 'rgba(52,216,130,0.12)', 'OUTPUT', COL.OUT - 12, BAND_TOP - 2);
+
+/* ─── NODE FACTORY ─── */
+function mkNode(cfg) {
+  const el = document.createElement('div');
+  el.className = `node ${cfg.cls}`;
+  el.id = 'n-' + cfg.id;
+  el.style.cssText = `left:${cfg.x}px;top:${cfg.y}px;width:${cfg.w || NW.STD}px`;
+  const pills = (cfg.pills || []).slice(0,3).map(p => `<span class="np">${p}</span>`).join('');
+  el.innerHTML = `<div class="ni"><div class="nlbl">${cfg.lbl||''}</div><div class="ntit">${cfg.tit}</div><div class="ndesc">${(cfg.desc||'').replace(/\n/g,'<br>')}</div><div class="npills">${pills}</div></div>`;
+  el.addEventListener('click', () => showNodeDetail(cfg.detail));
+  el.addEventListener('mouseenter', e => showTip(e, cfg.tit));
+  el.addEventListener('mouseleave', hideTip);
+  stage.appendChild(el);
+  NR[cfg.id] = { el, x: cfg.x, y: cfg.y, w: cfg.w || NW.STD, h: 0 };
+}
+
+/* ─── STACKED NODE GROUP (multiple nodes in a column) ─── */
+function mkStack(cfgs) {
+  cfgs.forEach(cfg => mkNode(cfg));
+}
+
+/* ─── DATA LAYER NODES (stacked vertically) ─── */
+const DATA_NODES = [
+  {id:'data_ports', cls:'t-data', lbl:'Port Database',    tit:'PORTS DB',     desc:'435 global ports\nDraft · cost · coords',  pills:['ports.csv']},
+  {id:'data_demand',cls:'t-data', lbl:'Demand Matrix',    tit:'DEMAND OD',    desc:'9,622 lanes · FFE/wk\nRevenue · transit time', pills:['demand.csv']},
+  {id:'data_fleet', cls:'t-data', lbl:'Fleet Database',   tit:'FLEET DB',     desc:'6 vessel classes\nCapacity · cost specs',   pills:['fleet.csv']},
+  {id:'data_dist',  cls:'t-data', lbl:'Distance Matrix',  tit:'DIST MATRIX',  desc:'62,002 port pairs\nPanama · Suez flags',     pills:['dist_dense']},
+  {id:'data_cost',  cls:'t-data', lbl:'Cost Model',       tit:'COST MODEL',   desc:'Port handling costs\nFuel config · vessel ops', pills:['enrichment']},
+  {id:'data_hist',  cls:'t-data', lbl:'Historical Routes',tit:'HIST ROUTES',  desc:'Past service patterns\nBenchmark baselines',    pills:['LINERLIB']},
+  {id:'data_ext',   cls:'t-data', lbl:'External Signals', tit:'EXT SIGNALS',  desc:'Maritime API feeds\nMarket · weather · AIS',  pills:['API','AIS']},
+];
+
+/* ─── ETL NODE ─── */
+mkNode({id:'etl', cls:'t-etl', x:COL.ETL, y:0, w:NW.SM, lbl:'Layer 2 — ETL Pipeline',
+  tit:'ETL + VALIDATION', desc:'Schema normalization\nFFE→TEU conversion\nGeographic clustering',
+  pills:['Pydantic','K-means','Unit Conv'],
+  detail:{secs:[
+    {t:'ETL Pipeline Steps',i:['Schema validation: all fields typed and present (Pydantic)','FFE→TEU unit conversion: weekly_teu = FFEPerWeek × 2.0 (1 FFE = 2 TEU)','Geographic port clustering by region (K-means, 5 clusters)','Demand filtering: origin-only ownership enforcement','Candidate route generation: direct, hub-loop, trunk, feeder','Sparse distance matrix construction with Panama/Suez flags','Port draft & capacity validation against vessel specs']},
+    {t:'Validation Rules',i:['Fleet capacity ≤ 300 vessels enforced at entry','Positive demand values (no zero or negative TEU)','Port IDs: consistent type (string UNLOCODEs throughout)','Relative FP tolerance 1e-6 for demand conservation assert']},
+  ], mets:[{k:'Unit Conversion',v:'FFE × 2 = TEU'},{k:'Clustering',v:'K-means, 5 regions'},{k:'Validation',v:'Pydantic strict'}]}
+});
+
+/* ─── ORCHESTRATOR ─── */
+mkNode({id:'orch', cls:'t-orch', x:COL.ORCH, y:0, w:NW.ORCH, lbl:'Layer 3 — Master Controller (LLM)',
+  tit:'GLOBAL ORCHESTRATOR', desc:'LLM-powered control · Problem analysis\nIter management · α β γ weights',
+  pills:['GPT-OSS-120B','Iter Control','Adaptive Wts'],
+  detail:{secs:[
+    {t:'Core Responsibilities',i:['Network complexity assessment & scale classification','K-means geographic port clustering into 5 regions','Global fleet constraint enforcement (≤300 vessels)','Iterative feedback loop control (max 3 iterations)','LLM-driven strategy selection and weight adjustment','Final aggregation of all regional results','API job enqueuing via Redis Streams']},
+    {t:'LLM Integration',i:['Model: GPT-OSS-120B via OpenRouter API','Structured JSON output format with numeric grounding','Temperature: 0.1 for consistent deterministic outputs','Circuit breaker: rule-based fallback if API fails ≥5×']},
+  ], mets:[{k:'Max Iterations',v:'3'},{k:'Conv. Threshold',v:'gap < 0.5%'},{k:'LLM Fallback',v:'Rule-based'}]}
+});
+
+/* ─── SPLITTER ─── */
+mkNode({id:'split', cls:'t-orch', x:COL.SPLIT, y:0, w:NW.SM, lbl:'Decomposition Engine',
+  tit:'REGIONAL SPLITTER', desc:'K-means clustering\n5 geographic regions\nOrigin-only OD ownership',
+  pills:['K-means','Origin-only','No Duplication'],
+  detail:{secs:[
+    {t:'Decomposition Strategy',i:['K-means clustering on all 435 port coordinates','Origin-only OD ownership: port assigned to region of demand origin','Eliminates OR-logic double counting (previously 3× inflation)','Demand conservation assert: Σregional TEU == global TEU (delta < 1.0)','Generates 800–2,000 candidate services per regional partition','Hub-centric selection: degree-30+ hub ports prioritized in Phase 1']},
+  ], mets:[{k:'Regions',v:'5'},{k:'OD Rule',v:'Origin-only'},{k:'Candidates/region',v:'800–2,000'}]}
+});
+
+/* ─── AGGREGATION + COORDINATOR ─── */
+mkNode({id:'aggr', cls:'t-coord', x:COL.RES, y:0, w:NW.STD, lbl:'Aggregation Layer',
+  tit:'GLOBAL AGGREGATION', desc:'Merges 5 regional results\nOD uniqueness via served_od_map\nDemand conservation verified',
+  pills:['OD Uniqueness','No Avg Coverage','Conservation'],
+  detail:{secs:[
+    {t:'Aggregation Rules',i:['Global coverage from unique served_od_map (NOT averaged regional figures)','Each OD pair served by exactly one region (max-profit wins)','Demand conservation: Σregional TEU == global TEU','Revenue = min(service_capacity, corridor_demand) — no full-utilization assumption','Coverage capped at 100% via hard min() guard (root cause fixed upstream)']},
+    {t:'Key Metrics Exposed',i:['global_coverage — unique OD coverage %','total_profit — sum of regional EBIT','total_cost — Σ(fixed+dynamic+handling+transship+port)','served_od_map — unique dict of satisfied demand pairs']},
+  ], mets:[{k:'Input sources',v:'5 regions'},{k:'OD Dedup',v:'Max-profit region'},{k:'Coverage Calc',v:'Unique OD map'}]}
+});
+
+mkNode({id:'coord', cls:'t-coord', x:COL.RES, y:0, w:NW.STD, lbl:'Decision Engine (LLM)',
+  tit:'COORDINATOR AGENT', desc:'Conflict resolution\nAdaptive weight tuning α β γ\nFeedback signal generation',
+  pills:['Conflict Detect','α/β/γ Tune','Convergence'],
+  detail:{secs:[
+    {t:'Feedback Signals',i:['coverage_gap — delta below 70% target','profit_gap — vs previous iteration','conflict_severity — overlapping assignments','weight_adjustments — new α, β, γ values','needs_rerun — boolean (+ min 0.5% improvement gate)','convergence_score — stability (0–1)']},
+    {t:'Weight Protocol',i:['α = profit weight (default 0.50)','β = coverage weight (default 0.40)','γ = cost weight (default 0.10)','If coverage_gap > 5%: β ↑, α ↓','Min improvement check: < 0.5% → early stop']},
+  ], mets:[{k:'LLM Model',v:'Llama-3.1-8B'},{k:'Max iterations',v:'3'},{k:'Stop condition',v:'gap < 0.5%'}], weights:true}
+});
+
+/* ─── VALIDATION + BENCHMARK ─── */
+mkNode({id:'valid', cls:'t-valid', x:COL.VALID, y:0, w:NW.VALID, lbl:'Route Validation Engine',
+  tit:'ROUTE VALIDATOR', desc:'Fleet ≤300 · Flow balance\nCapacity feasibility check\nEBIT profit margin verified',
+  pills:['Fleet Cap','Flow Balance','EBIT Check'],
+  detail:{secs:[
+    {t:'Hard Constraint Checks',i:['Fleet cap: total vessels ≤ 300 (MILP constraint active, not commented out)','Flow conservation: flow_in = flow_out at all hub ports','Service capacity: capacity × freq ≥ allocated_flow','MILP status: Optimal required before extracting values (no garbage on Infeasible)','FFE/TEU consistency: all demand in TEU (×2 applied at loader)','Profit margin: EBIT standard = (Revenue − OpCost) / Revenue']},
+    {t:'Economic Realism Gates',i:['Revenue = min(service_capacity, corridor_demand) × rate — no over-utilization','Fuel cost: Ronen (1982) cubic law FuelBurn = k × v³','No unbounded MILP objective multipliers','Coverage > 100% treated as bug, not acceptable approximation']},
+  ], mets:[{k:'Fleet limit',v:'≤300 vessels'},{k:'Fuel model',v:'Ronen cubic v³'},{k:'Profit def',v:'EBIT standard'}]}
+});
+
+mkNode({id:'bench', cls:'t-valid', x:COL.VALID, y:0, w:NW.VALID, lbl:'Benchmark Comparator',
+  tit:'BENCHMARK ENGINE', desc:'LINERLIB comparison\nKPI Scoring Engine\nAcademic validation metrics',
+  pills:['WorldLarge','Baltic','WorldSmall'],
+  detail:{secs:[
+    {t:'Benchmark Instances',i:['WorldLarge: 435 ports, 9,622 OD pairs (primary target)','WorldSmall: subset for faster validation cycles','Baltic: regional benchmark for North European tradelanes','WestAfrica: MEA regional validation instance']},
+    {t:'KPI Scoring Metrics',i:['Coverage % vs benchmark baseline','Weekly profit delta (USD)','Fleet utilization ratio','Port rotation similarity score','Route overlap % with benchmark routes','Sailing frequency alignment','Service pattern entropy (diversity)']},
+  ], mets:[{k:'Benchmark',v:'LINERLIB v2'},{k:'Coverage target',v:'40–70%'},{k:'Profit baseline',v:'vs WorldLarge opt'}]}
+});
+
+/* ─── FINAL OPTIMIZER ─── */
+mkNode({id:'final', cls:'t-milp', x:COL.FINAL, y:0, w:NW.FIN, lbl:'Final Optimizer',
+  tit:'FINAL OPTIMIZER', desc:'Hard constraint pass\nFleet ≤300 · Coverage floor\nFlow balance enforced',
+  pills:['Fleet ≤300','Flow Balance','Rel. FP Tol'],
+  detail:{secs:[
+    {t:'Final Validation Pass',i:['Fleet cap: total vessels ≤ 300 (hard MILP constraint, not a warning)','Demand conservation: rel_diff = |before − after| / max(before,1) < 1e-6','Service frequency: rounded to integers before capacity calculation','MILP infeasibility: returns structured error {status, error} not None values','Zero global demand edge case handled (no ZeroDivisionError)']},
+  ], mets:[{k:'Fleet limit',v:'≤300 vessels'},{k:'FP tolerance',v:'rel 1e-6'},{k:'Profit floor',v:'Weekly ≥ $0'}]}
+});
+
+/* ─── INFRASTRUCTURE ─── */
+mkNode({id:'infra', cls:'t-infra', x:COL.INFRA, y:0, w:NW.INFRA, lbl:'Layer 6 — Infrastructure',
+  tit:'INFRA + OBSERVABILITY', desc:'Redis · PostgreSQL\nFastAPI · Prometheus\nGrafana · OpenTelemetry',
+  pills:['Redis','Prometheus','Grafana'],
+  detail:{secs:[
+    {t:'Infrastructure Components',i:['Redis Streams: async job queue (backlog 1000, retention 24h, consumer ack)','PostgreSQL: persistent solution store with scenario history','FastAPI + Nginx: API gateway (rate limit 100 req/min, versioned /v1/)','Prometheus: metrics collection (optimization time, solver status, coverage)','Grafana: dashboards for fleet utilization, profit trend, coverage % per iteration','OpenTelemetry: distributed tracing with correlation IDs across agents','Structured logging: structlog with region_id, operation, duration_sec']},
+    {t:'Health Checks',i:['/health — basic service liveness','/health/ready — dependency check (Redis, PostgreSQL, LLM API)','/health/live — Kubernetes liveness probe','/metrics — Prometheus scrape endpoint']},
+  ], mets:[{k:'Queue',v:'Redis Streams'},{k:'DB',v:'PostgreSQL'},{k:'Metrics',v:'Prometheus+Grafana'}]}
+});
+
+/* ─── RESILIENCE ─── */
+mkNode({id:'resil', cls:'t-resilience', x:COL.RESIL, y:0, w:NW.INFRA, lbl:'Layer 7 — Resilience',
+  tit:'FAULT TOLERANCE', desc:'Circuit Breakers\nRetry + Exponential backoff\nPartial Recovery Engine',
+  pills:['Circuit Break','Retry Logic','Fallback'],
+  detail:{secs:[
+    {t:'Resilience Patterns',i:['Circuit Breaker: 5 failures → 60s cooldown for LLM API calls','Exponential backoff: retry logic for all external dependencies','MILP timeout: 120s hard cap → fallback to best-known GA solution','Partial Recovery: assemble best available regional results if some fail','Graceful degradation: rule-based fallback when LLM circuit open','Timeout handling: regional agents capped (GA 60s, FreqGA 30s, MILP 120s)']},
+    {t:'Failure Detection',i:['Monitor MILP solver status before extracting variable values','Assert demand conservation before pipeline continues','Fleet overshoot detection with hard stop (not warning)','Zero-demand edge case guard at coverage calculation']},
+  ], mets:[{k:'CB threshold',v:'5 failures'},{k:'CB cooldown',v:'60 seconds'},{k:'MILP timeout',v:'120s hard cap'}]}
+});
+
+/* ─── OUTPUT ─── */
+mkNode({id:'output', cls:'t-out', x:COL.OUT, y:0, w:NW.OUT, lbl:'Layer 8 — Solution Output',
+  tit:'OPTIMIZED NETWORK', desc:'Service config · Vessel plan\nProfit dashboard · Coverage\nBenchmark comparison',
+  pills:['Services Plan','Profit','Coverage %'],
+  detail:{secs:[
+    {t:'Global Metrics',i:['Weekly Profit (USD) — EBIT = Revenue − OpCost','Annual Profit (USD) — weekly × 52','Demand Coverage (%) — served TEU / total TEU (unique OD map)','Services Selected — count and port rotation list','Vessels Deployed — total (hard verified ≤ 300)','Fuel Cost — Ronen cubic law: k × v³ × distance']},
+    {t:'Output Dashboards',i:['Profit Dashboard: component breakdown per region','Benchmark Comparison: delta vs LINERLIB baseline','Validation Report: all constraint checks passed/failed','Scenario Simulation: alternate α/β/γ weight sensitivity']},
+  ], mets:[{k:'Ports served',v:'Up to 435'},{k:'Demand lanes',v:'9,622'},{k:'TEU/week',v:'800K+'},{k:'Iterations',v:'1–3'}]}
+});
+
+/* ─── PLACE DATA NODES VERTICALLY ─── */
+{
+  const yStart = REG_TOP;
+  const gap    = 22;
+  const nodeH  = 88; // slightly more generous height estimate for spacing
+  DATA_NODES.forEach((cfg, i) => {
+    const y = yStart + i * (nodeH + gap);
+    mkNode({ ...cfg, x: COL.DATA, y, w: NW.SM });
+  });
+}
+
+/* ─── REGIONAL PIPELINE NODES ─── */
+REGIONS.forEach((reg, i) => {
+  const y = REG_TOP + i * (REG_H + REG_GAP);
+  const el = document.createElement('div');
+  el.className = 'rnode';
+  el.id = 'n-' + reg.id;
+  el.style.cssText = `left:${COL.REG}px;top:${y}px;width:${NW.REG}px`;
+
+  const stHtml = STAGES.map((s, si) => {
+    const arr = si < STAGES.length - 1 ? `<div class="rarr">→</div>` : '';
+    return `<div class="rstg"><div class="rsbox" id="rs-${reg.id}-${s.id}" style="--box-col:${s.col}; --box-bg:${s.bg}; --box-bc:${s.bc}">${s.lbl}</div></div>${arr}`;
+  }).join('');
+
+  const regDetail = {
+    secs:[
+      {t:'Internal Pipeline',i:[
+        '① Svc Generator — direct (top-500 corridors), hub-loops, trunks, feeders',
+        '② Service Filter — margin threshold, fleet viability, capacity feasibility',
+        '③ ServiceGA Level 1 — pop:80, gen:120, fitness=α×profit+β×cov−γ×cost',
+        '④ FrequencyGA Level 2 — freq 1–3/week, ceil(cycle×freq/7) fleet calc',
+        '⑤ HubMILP — PuLP/CBC, fleet constraint active, direct+transfer flows',
+        '⑥ Profit Computation — Revenue−(Fixed+Dynamic+Handling+Transship+Port)',
+      ]},
+      {t:'Key Bug Fixes Applied',i:[
+        'FFE→TEU conversion at loader (×2), prevents 2× coverage inflation',
+        'Fleet constraint uncommented in MILP — enforced not warned',
+        'MILP status validated before variable extraction (no silent None→0.0)',
+        'Frequencies rounded to int before capacity calc (no fractional vessels)',
+        'Zero-demand service early rejection in GA fitness',
+        'compatible_services() port-ordering truthy fix (0 ≠ empty)',
+      ]},
+    ],
+    mets:[{k:'GA Population',v:'80'},{k:'GA Generations',v:'120'},{k:'MILP Timeout',v:'120s'},{k:'Freq Range',v:'1–3/week'}],
+    formula:`Profit = Revenue − (C_fixed + C_dynamic + C_handling\n         + C_transship + C_port)\n\nRevenue    = Σ min(capacity, demand_od) × Rate_od\nC_fixed    = Vessel_cost × round_trips/week\nC_dynamic  = FuelPrice × k × v³ × dist    [Ronen 1982]\nC_handling = Σ port_cost/TEU × TEU_loaded\nC_transship= Σ C_handling × factor + storage\nC_port     = call_fixed + TEU × call_variable\n\nGA Fitness = α×NormProfit + β×Coverage − γ×NormCost\nProfit Margin = (Revenue − OpCost) / Revenue  [EBIT]`
+  };
+
+  el.innerHTML = `<div class="rout">
+    <div class="rhdr"><div class="rhl">Regional Agent · ${reg.name}</div><div class="rht">${reg.id.toUpperCase()} — SELF-CONTAINED PIPELINE</div></div>
+    <div class="rpipe">${stHtml}</div>
+    <div class="rftr"><span class="rftr-l">HUBS: ${reg.hubs}</span><span class="rftr-v" id="rv-${reg.id}">IDLE</span></div>
+  </div>`;
+
+  el.addEventListener('click', () => showNodeDetail(regDetail));
+  el.addEventListener('mouseenter', e => showTip(e, `${reg.name} Regional Agent`));
+  el.addEventListener('mouseleave', hideTip);
+  stage.appendChild(el);
+  NR[reg.id] = { el, x: COL.REG, y, w: NW.REG, h: REG_H };
+});
+
+/* ─── INIT: MEASURE + POSITION ─── */
+setTimeout(() => {
+  Object.keys(NR).forEach(id => { NR[id].h = NR[id].el.offsetHeight || 100; });
+
+  const regTop = REG_TOP;
+  const regBot = REG_TOP + REGIONS.reduce((acc, reg) => acc + (NR[reg.id]?.h || REG_H) + REG_GAP, -REG_GAP);
+  const regCenterY = (regTop + regBot) / 2;
+
+  // Center main pipeline nodes
+  ['etl','orch','split','final','output','infra','resil'].forEach(id => {
+    const n = NR[id]; if (!n) return;
+    const newY = Math.round(regCenterY - n.h / 2);
+    n.y = newY; n.el.style.top = newY + 'px';
+  });
+
+  // Stack aggr + coord vertically
+  const aggrH  = NR['aggr']  ? NR['aggr'].h  : 115;
+  const coordH = NR['coord'] ? NR['coord'].h : 125;
+  const VGAP   = 22;
+  const stackH = aggrH + VGAP + coordH;
+  const stackTop = Math.round(regCenterY - stackH / 2);
+  if (NR['aggr'])  { NR['aggr'].y  = stackTop;            NR['aggr'].el.style.top  = stackTop + 'px'; }
+  if (NR['coord']) { NR['coord'].y = stackTop + aggrH + VGAP; NR['coord'].el.style.top = (stackTop + aggrH + VGAP) + 'px'; }
+
+  // Stack valid + bench vertically
+  const validH = NR['valid'] ? NR['valid'].h : 115;
+  const benchH = NR['bench'] ? NR['bench'].h : 115;
+  const vbStack = validH + VGAP + benchH;
+  const vbTop   = Math.round(regCenterY - vbStack / 2);
+  if (NR['valid']) { NR['valid'].y = vbTop;                NR['valid'].el.style.top = vbTop + 'px'; }
+  if (NR['bench']) { NR['bench'].y = vbTop + validH + VGAP; NR['bench'].el.style.top = (vbTop + validH + VGAP) + 'px'; }
+
+  drawSVG();
+  initView();
+  renderSceneDots();
+  goToScene(0);
+}, 150);
+
+/* ─── SVG HELPERS ─── */
+function svgEl(tag, attrs) {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k, v));
+  return e;
+}
+function edge(id, side = 'r') {
+  const n = NR[id]; if (!n) return {x:0,y:0};
+  const h = n.h || 100;
+  if (side==='r') return {x: n.x + n.w,    y: n.y + h/2};
+  if (side==='l') return {x: n.x,           y: n.y + h/2};
+  if (side==='t') return {x: n.x + n.w/2,  y: n.y};
+  if (side==='b') return {x: n.x + n.w/2,  y: n.y + h};
+  return {x:0,y:0};
+}
+
+function drawOrtho(x1, y1, x2, y2, opts) {
+  const {col='#4B8EFF', dash='7 5', w=1.5, opacity=0.5, cls='a-fwd', lbl='', midX=null} = opts || {};
+  const mx = midX !== null ? midX : Math.round((x1 + x2) / 2);
+  let d;
+  if (Math.abs(y1 - y2) < 3) {
+    d = `M${x1},${y1} L${x2},${y2}`;
+  } else {
+    d = `M${x1},${y1} L${mx},${y1} L${mx},${y2} L${x2},${y2}`;
+  }
+  const p = svgEl('path', {d, fill:'none', stroke:col,
+    'stroke-width':String(w), 'stroke-dasharray':dash, opacity:String(opacity)});
+  if (cls) p.setAttribute('class', cls);
+  svgl.appendChild(p);
+  let arrowAngle = 0;
+  if (Math.abs(y1 - y2) < 3) {
+    arrowAngle = x2 >= x1 ? 0 : 180;
+  } else {
+    arrowAngle = x2 >= mx ? 0 : 180;
+  }
+  const arr = svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:col,
+    opacity:String(Math.min(1, opacity * 1.4)),
+    transform:`translate(${x2},${y2}) rotate(${arrowAngle})`
+  });
+  svgl.appendChild(arr);
+  if (lbl) {
+    const lx = Math.round((x1 + x2) / 2);
+    const ly = Math.round(Math.min(y1, y2) + Math.abs(y2 - y1) / 2) - 9;
+    const t = svgEl('text', {x:String(lx), y:String(ly), fill:col,
+      'font-size':'8.5', 'font-family':'JetBrains Mono,monospace',
+      'text-anchor':'middle', opacity:'.5', 'letter-spacing':'0.3', 'font-weight':'500'});
+    t.textContent = lbl; svgl.appendChild(t);
+  }
+}
+
+function drawVert(x, y1, y2, opts) {
+  const {col='#FF5B5B', dash='5 3', w=1.5, opacity=0.5, cls='a-fwd', lbl=''} = opts || {};
+  const d = `M${x},${y1} L${x},${y2}`;
+  const p = svgEl('path', {d, fill:'none', stroke:col,
+    'stroke-width':String(w), 'stroke-dasharray':dash, opacity:String(opacity)});
+  if (cls) p.setAttribute('class', cls);
+  svgl.appendChild(p);
+  const arrowAngle = y2 > y1 ? 90 : -90;
+  svgl.appendChild(svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:col,
+    opacity:String(Math.min(1, opacity * 1.4)),
+    transform:`translate(${x},${y2}) rotate(${arrowAngle})`
+  }));
+  if (lbl) {
+    const t = svgEl('text', {x:String(x+5), y:String(Math.round((y1+y2)/2)),
+      fill:col, 'font-size':'8.5', 'font-family':'JetBrains Mono,monospace',
+      opacity:'.5', 'letter-spacing':'0.3', 'font-weight':'500'});
+    t.textContent = lbl; svgl.appendChild(t);
+  }
+}
+
+/* ─── DRAW ALL CONNECTIONS ─── */
+function drawSVG() {
+  svgl.innerHTML = '';
+  svgl.setAttribute('width',  String(LY.W));
+  svgl.setAttribute('height', String(LY.H));
+
+  // Data nodes → ETL (fan-in)
+  const etl_l = edge('etl','l');
+  DATA_NODES.forEach(dn => {
+    const n = NR[dn.id]; if (!n) return;
+    const ry = n.y + n.h/2;
+    drawOrtho(n.x + n.w, ry, etl_l.x, etl_l.y,
+      {col:'#888888', dash:'5 4', opacity:0.6, cls:'a-fwd', w:1.2});
+  });
+
+  // ETL → Orchestrator
+  const etl_r = edge('etl','r'), orch_l = edge('orch','l');
+  drawOrtho(etl_r.x, etl_r.y, orch_l.x, orch_l.y,
+    {col:'#5050D0', dash:'6 4', opacity:0.85, cls:'a-fwd', lbl:'validated data'});
+
+  // Orchestrator → Splitter
+  const orch_r = edge('orch','r'), spl_l = edge('split','l');
+  drawOrtho(orch_r.x, orch_r.y, spl_l.x, spl_l.y,
+    {col:'#1A6AE8', dash:'5 3', opacity:0.90, cls:'a-fwd'});
+
+  // Splitter → each region (fan-out)
+  const spl_r = edge('split','r');
+  REGIONS.forEach(reg => {
+    const rn = NR[reg.id]; if (!rn) return;
+    const ry = rn.y + (rn.h || REG_H) / 2;
+    drawOrtho(spl_r.x, spl_r.y, COL.REG, ry,
+      {col:'#1A6AE8', dash:'5 4', opacity:0.75, cls:'a-fwd', w:1.5});
+  });
+
+  // Each region → Aggregation (fan-in)
+  const aggr_l = edge('aggr','l');
+  REGIONS.forEach(reg => {
+    const rn = NR[reg.id]; if (!rn) return;
+    const ry = rn.y + (rn.h || REG_H) / 2;
+    drawOrtho(rn.x + rn.w, ry, aggr_l.x, aggr_l.y,
+      {col:'#D06800', dash:'4 3', opacity:0.85, cls:'a-ga', w:1.5});
+  });
+
+  // Aggregation → Coordinator (vertical)
+  const aggr_b  = edge('aggr','b');
+  const coord_t = edge('coord','t');
+  drawVert(aggr_b.x, aggr_b.y, coord_t.y,
+    {col:'#CC1010', dash:'5 3', opacity:0.90, cls:'a-fwd', w:2, lbl:'conflicts'});
+
+  // Coordinator → Validation (horizontal)
+  const coord_r = edge('coord','r');
+  const valid_l = edge('valid','l');
+  drawOrtho(coord_r.x, coord_r.y, valid_l.x, valid_l.y,
+    {col:'#B07800', dash:'5 3', opacity:0.85, cls:'a-fwd', w:1.8, lbl:'solution'});
+
+  // Aggregation → Benchmark
+  const aggr_r  = edge('aggr','r');
+  const bench_l = edge('bench','l');
+  drawOrtho(aggr_r.x, aggr_r.y, bench_l.x, bench_l.y,
+    {col:'#B07800', dash:'6 4', opacity:0.7, cls:'a-ga', w:1.5, lbl:'metrics'});
+
+  // Validation → Final Optimizer
+  const valid_r = edge('valid','r'), final_l = edge('final','l');
+  drawOrtho(valid_r.x, valid_r.y, final_l.x, final_l.y,
+    {col:'#0A8A40', dash:'none', opacity:0.90, cls:'a-milp', w:2});
+
+  // Bench → Final
+  const bench_r = edge('bench','r');
+  const fin_n   = NR['final'];
+  const finTargY = fin_n ? fin_n.y + Math.round(fin_n.h * 0.65) : edge('final','b').y - 20;
+  drawOrtho(bench_r.x, bench_r.y, COL.FINAL, finTargY,
+    {col:'#0A8A40', dash:'6 4', opacity:0.65, cls:'a-milp', w:1.5});
+
+  // Final → Infrastructure
+  const fin_r  = edge('final','r');
+  const infra_l = edge('infra','l');
+  drawOrtho(fin_r.x, fin_r.y, infra_l.x, infra_l.y,
+    {col:'#0099AA', dash:'5 3', opacity:0.8, cls:'a-fwd', w:1.8, lbl:'store'});
+
+  // Infrastructure → Resilience
+  const infra_r  = edge('infra','r');
+  const resil_l  = edge('resil','l');
+  drawOrtho(infra_r.x, infra_r.y, resil_l.x, resil_l.y,
+    {col:'#7050C0', dash:'5 4', opacity:0.75, cls:'a-fwd', w:1.5});
+
+  // Resilience → Output
+  const resil_r = edge('resil','r'), out_l = edge('output','l');
+  drawOrtho(resil_r.x, resil_r.y, out_l.x, out_l.y,
+    {col:'#0A8A40', dash:'none', opacity:0.95, cls:'a-milp', w:2.5, lbl:'solution'});
+
+  // Final → Output (direct pass)
+  const fin_out_l = edge('output','l');
+  const outTargY  = NR['output'] ? NR['output'].y + Math.round(NR['output'].h * 0.35) : fin_out_l.y - 10;
+  drawOrtho(fin_r.x, fin_r.y, COL.OUT, outTargY,
+    {col:'#0A8A40', dash:'6 4', opacity:0.5, cls:'a-milp', w:1.2});
+
+  // FEEDBACK LOOP — Coordinator bottom → DOWN → LEFT rail → UP → Orchestrator bottom
+  const coord_b = edge('coord','b');
+  const orch_b  = edge('orch','b');
+  const actualRegBot = REG_TOP + REGIONS.reduce((acc, reg) => acc + (NR[reg.id]?.h || REG_H) + REG_GAP, -REG_GAP);
+  const fbRailY = actualRegBot + 60;
+  const fbCoordX = coord_b.x;
+  const fbOrchX  = orch_b.x;
+
+  const fbPath = [
+    `M${fbCoordX},${coord_b.y}`,
+    `L${fbCoordX},${fbRailY}`,
+    `L${fbOrchX},${fbRailY}`,
+    `L${fbOrchX},${orch_b.y}`
+  ].join(' ');
+  const fbLine = svgEl('path', {d:fbPath, fill:'none', stroke:'#CC1010',
+    'stroke-width':'2', 'stroke-dasharray':'5 4', opacity:'0.85', class:'a-rev'});
+  svgl.appendChild(fbLine);
+  svgl.appendChild(svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:'#CC1010', opacity:'0.95',
+    transform:`translate(${fbOrchX},${orch_b.y}) rotate(-90)`
+  }));
+  const fbLblX = Math.round((fbCoordX + fbOrchX) / 2);
+  const fbTxt  = svgEl('text', {x:String(fbLblX), y:String(fbRailY - 6),
+    fill:'#CC1010', 'font-size':'8', 'font-family':'JetBrains Mono,monospace',
+    'text-anchor':'middle', opacity:'0.9', 'letter-spacing':'0.3', 'font-weight':'700'});
+  fbTxt.textContent = 'adaptive feedback loop';
+  svgl.appendChild(fbTxt);
+
+  // TOP RESOLUTION FLOW — Orchestrator top → UP → RIGHT → DOWN into Coordinator top
+  const orch_t    = edge('orch','t');
+  const coord_top = edge('coord','t');
+  const topRailY  = REG_TOP - 60;
+  const resPath = [
+    `M${orch_t.x},${orch_t.y}`,
+    `L${orch_t.x},${topRailY}`,
+    `L${coord_top.x},${topRailY}`,
+    `L${coord_top.x},${coord_top.y}`
+  ].join(' ');
+  const resLine = svgEl('path', {d:resPath, fill:'none', stroke:'#1A6AE8',
+    'stroke-width':'1.8', 'stroke-dasharray':'5 4', opacity:'0.80', class:'a-fwd'});
+  svgl.appendChild(resLine);
+  svgl.appendChild(svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:'#1A6AE8', opacity:'0.95',
+    transform:`translate(${coord_top.x},${coord_top.y}) rotate(90)`
+  }));
+  const resLblX = Math.round((orch_t.x + coord_top.x) / 2);
+  const resTxt  = svgEl('text', {x:String(resLblX), y:String(topRailY - 5),
+    fill:'#1A6AE8', 'font-size':'8', 'font-family':'JetBrains Mono,monospace',
+    'text-anchor':'middle', opacity:'0.9', 'letter-spacing':'0.3', 'font-weight':'700'});
+  resTxt.textContent = 'Resolutions';
+  svgl.appendChild(resTxt);
+
+  // Infrastructure monitoring loop → orchestrator (telemetry back-channel)
+  const infra_b = edge('infra','b');
+  const orch_b2 = edge('orch','b');
+  const monRailY = fbRailY + 30;
+  const monPath = [
+    `M${infra_b.x},${infra_b.y}`,
+    `L${infra_b.x},${monRailY}`,
+    `L${orch_b2.x + 10},${monRailY}`,
+    `L${orch_b2.x + 10},${orch_b2.y}`
+  ].join(' ');
+  const monLine = svgEl('path', {d:monPath, fill:'none', stroke:'#0099AA',
+    'stroke-width':'1.4', 'stroke-dasharray':'4 5', opacity:'0.55', class:'a-rev'});
+  svgl.appendChild(monLine);
+  const monLblX = Math.round((infra_b.x + orch_b2.x + 10) / 2);
+  const monTxt  = svgEl('text', {x:String(monLblX), y:String(monRailY - 5),
+    fill:'#0099AA', 'font-size':'7.5', 'font-family':'JetBrains Mono,monospace',
+    'text-anchor':'middle', opacity:'0.55', 'letter-spacing':'0.3', 'font-weight':'700'});
+  monTxt.textContent = 'telemetry / health';
+  svgl.appendChild(monTxt);
+}
+
+/* ─── SCENE ENGINE ─── */
+function renderSceneDots() {
+  const cont = document.getElementById('scene-dots');
+  cont.innerHTML = '';
+  SCENES.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'sd'; btn.id = `sd-${i}`; btn.title = s.title;
+    btn.onclick = () => goToScene(i);
+    cont.appendChild(btn);
+  });
+}
+
+function goToScene(idx) {
+  curScene = Math.max(0, Math.min(SCENES.length - 1, idx));
+  const sc = SCENES[curScene];
+  document.getElementById('sh-num').textContent   = `SCENE ${String(curScene+1).padStart(2,'0')} — ${sc.num.split('—')[1]?.trim()||''}`;
+  document.getElementById('sh-title').textContent = sc.title;
+  document.getElementById('sh-desc').textContent  = sc.desc;
+  document.getElementById('sc-cur').textContent   = curScene + 1;
+  document.getElementById('sc-tot').textContent   = SCENES.length;
+
+  SCENES.forEach((_, i) => {
+    const d = document.getElementById(`sd-${i}`); if (!d) return;
+    d.className = 'sd' + (i < curScene ? ' done':'') + (i===curScene ? ' active':'');
+  });
+  document.getElementById('btn-prev').disabled = curScene === 0;
+  document.getElementById('btn-next').disabled = curScene === SCENES.length - 1;
+
+  Object.keys(NR).forEach(id => NR[id].el.classList.remove('scene-hi','pulse'));
+  sc.highlight.forEach(id => {
+    const n = NR[id]; if (!n) return;
+    n.el.classList.add('scene-hi');
+    if (sc.highlight.length === 1) n.el.classList.add('pulse');
+  });
+
+  updateIterPanel(sc);
+
+  if (curScene >= 4 && curScene <= 7) {
+    const map = {4:null, 5:'sg', 6:'ga', 7:'ml'};
+    animateRegionalStages(map[curScene] || null);
+  } else {
+    resetRegionalStages();
+  }
+
+  document.getElementById('node-detail').innerHTML = `<div class="nd-placeholder"><div class="nd-placeholder-icon">◎</div><div class="nd-placeholder-text">Click any node to see details</div></div>`;
+}
+
+function updateIterPanel(sc) {
+  const [it1,it2,it3] = ['it1','it2','it3'].map(id=>document.getElementById(id));
+  const step = document.getElementById('it-step');
+  const bar  = document.getElementById('it-bar');
+  [it1,it2,it3].forEach(d => d.className = 'it-d');
+  if (sc.iter===0) { step.textContent=sc.step; bar.style.width='0%'; }
+  else if (sc.iter===1) { it1.className='it-d run'; step.textContent=sc.step; bar.style.width='33%'; setWeights(0.50,0.40,0.10); }
+  else if (sc.iter===2) { it1.className='it-d done'; it2.className='it-d run'; step.textContent=sc.step; bar.style.width='66%'; setWeights(0.42,0.50,0.08); }
+  else if (sc.iter===3) { [it1,it2,it3].forEach(d=>d.className='it-d done'); step.textContent=sc.step; bar.style.width='100%'; setWeights(0.40,0.52,0.08); }
+  const sm = {0:'IDLE',1:'OPTIMIZING...',2:'CONVERGING',3:'DONE ✓'};
+  REGIONS.forEach(reg => { const el=document.getElementById(`rv-${reg.id}`); if(el) el.textContent=sm[sc.iter]||'IDLE'; });
+}
+
+function setWeights(a,b,g) {
+  document.getElementById('w-alpha').style.width=(a*100)+'%'; document.getElementById('wv-alpha').textContent=a.toFixed(2);
+  document.getElementById('w-beta').style.width=(b*100)+'%';  document.getElementById('wv-beta').textContent=b.toFixed(2);
+  document.getElementById('w-gamma').style.width=(g*100)+'%'; document.getElementById('wv-gamma').textContent=g.toFixed(2);
+}
+
+function animateRegionalStages(target) {
+  STAGES.forEach(s => REGIONS.forEach(reg => {
+    const box = document.getElementById(`rs-${reg.id}-${s.id}`); if (!box) return;
+    box.classList.remove('lit');
+    if (target===null || s.id===target || (target==='ga' && s.id==='sg')) box.classList.add('lit');
+  }));
+}
+function resetRegionalStages() {
+  STAGES.forEach(s => REGIONS.forEach(reg => {
+    const box = document.getElementById(`rs-${reg.id}-${s.id}`); if (box) box.classList.remove('lit');
+  }));
+}
+
+/* ─── NAVIGATION ─── */
+function prevScene() { if (curScene>0) goToScene(curScene-1); }
+function nextScene() { if (curScene<SCENES.length-1) goToScene(curScene+1); }
+function togglePlay() {
+  const btn = document.getElementById('btn-play');
+  if (isPlaying) {
+    clearInterval(playInterval); isPlaying=false; btn.textContent='▶ Play All'; btn.classList.remove('playing');
+  } else {
+    isPlaying=true; btn.textContent='⏹ Stop'; btn.classList.add('playing');
+    playInterval = setInterval(() => {
+      if (curScene < SCENES.length-1) { nextScene(); }
+      else { clearInterval(playInterval); isPlaying=false; btn.textContent='▶ Play All'; btn.classList.remove('playing'); }
+    }, 3200);
+  }
+}
+
+/* ─── NODE DETAIL ─── */
+function showNodeDetail(detail) {
+  if (!detail) return;
+  let html = '';
+  if (detail.secs) detail.secs.forEach(sec => {
+    html += `<div class="nd-section"><div class="nd-section-title">${sec.t}</div><ul class="nd-list">`;
+    sec.i.forEach(item => { html += `<li>${item}</li>`; });
+    html += `</ul></div>`;
+  });
+  if (detail.mets) {
+    html += `<div class="nd-section"><div class="nd-section-title">Parameters</div>`;
+    detail.mets.forEach(m => { html += `<div class="nd-metric"><span class="k">${m.k}</span><span class="v">${m.v}</span></div>`; });
+    html += `</div>`;
+  }
+  if (detail.formula) html += `<div class="nd-section"><div class="nd-section-title">Profit Formula</div><div class="nd-formula">${detail.formula}</div></div>`;
+  if (detail.weights) html += `<div class="nd-section"><div class="nd-section-title">Current Weights</div><div class="it-weights" style="margin-top:4px"><div class="it-w-row"><div class="it-w-lbl">α</div><div class="it-w-bar"><div class="it-w-fill" style="width:50%;background:#4B8EFF"></div></div><div class="it-w-val">0.50</div></div><div class="it-w-row"><div class="it-w-lbl">β</div><div class="it-w-bar"><div class="it-w-fill" style="width:40%;background:#34D882"></div></div><div class="it-w-val">0.40</div></div><div class="it-w-row"><div class="it-w-lbl">γ</div><div class="it-w-bar"><div class="it-w-fill" style="width:10%;background:#FF9A45"></div></div><div class="it-w-val">0.10</div></div></div></div>`;
+  document.getElementById('node-detail').innerHTML = html;
+}
+
+/* ─── VIEW / ZOOM / PAN ─── */
+let vx=0, vy=0, vz=0.55, panning=false, startX, startY, startVx, startVy;
+function applyTransform() {
+  stage.style.transform = `translate(${vx}px,${vy}px) scale(${vz})`;
+  document.getElementById('zv') && (document.getElementById('zv').textContent = Math.round(vz*100)+'%');
+}
+function initView() {
+  const canvas = document.getElementById('canvas');
+  const cw=canvas.offsetWidth, ch=canvas.offsetHeight;
+  vz = Math.min(cw/(LY.W+60), ch/(LY.H+60), 0.6);
+  vx = (cw - LY.W*vz)/2; vy = (ch - LY.H*vz)/2;
+  applyTransform();
+}
+function resetView() { initView(); }
+const canvas = document.getElementById('canvas');
+canvas.addEventListener('mousedown', e => {
+  if (e.target.closest('.node,.rnode')) return;
+  panning=true; startX=e.clientX; startY=e.clientY; startVx=vx; startVy=vy;
+  canvas.classList.add('grabbing');
+});
+window.addEventListener('mousemove', e => { if (!panning) return; vx=startVx+e.clientX-startX; vy=startVy+e.clientY-startY; applyTransform(); });
+window.addEventListener('mouseup', () => { panning=false; canvas.classList.remove('grabbing'); });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect(), mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const factor=e.deltaY<0?1.1:0.9, nz=Math.max(0.15,Math.min(2.0,vz*factor));
+  vx=mx-(mx-vx)*(nz/vz); vy=my-(my-vy)*(nz/vz); vz=nz; applyTransform();
+},{passive:false});
+
+/* ─── TOOLTIP ─── */
+const tip = document.getElementById('tip');
+function showTip(e,text){ tip.textContent=text; tip.classList.add('show'); moveTip(e); }
+function moveTip(e){ tip.style.left=Math.min(e.clientX+14,window.innerWidth-220)+'px'; tip.style.top=(e.clientY-36)+'px'; }
+function hideTip(){ tip.classList.remove('show'); }
+document.addEventListener('mousemove', e => { if(tip.classList.contains('show')) moveTip(e); });
+
+/* ─── TOGGLES ─── */
+function toggleDtype() {
+  document.getElementById('dto').classList.toggle('show');
+  document.getElementById('btn-dtype').classList.toggle('active');
+}
+function toggleAnim() {
+  animEnabled = !animEnabled;
+  const btn = document.getElementById('btn-anim');
+  document.querySelectorAll('.a-fwd,.a-rev,.a-ga,.a-milp').forEach(el=>{ el.style.animationPlayState=animEnabled?'running':'paused'; });
+  btn.textContent = animEnabled ? '⏸ Pause' : '▶ Resume';
+  btn.classList.toggle('active', !animEnabled);
+}
+</script>
+</body>
+</html>

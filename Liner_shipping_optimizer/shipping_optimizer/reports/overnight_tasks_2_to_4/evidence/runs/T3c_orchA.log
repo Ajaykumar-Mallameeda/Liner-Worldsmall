@@ -1,0 +1,203 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-7.4.4, pluggy-1.6.0 -- C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Scripts\python.exe
+rootdir: C:\Users\WINDOWS\AppData\Local\Temp\claude\C--Users-WINDOWS-Liner-Worldsmall-Liner-shipping-optimizer-shipping-optimizer\4de648c7-4db7-4986-a7a8-caad08c69c21\scratchpad\T3c_runA
+plugins: anyio-4.15.1
+collecting ... + Configuration validated
+  Provider order: groq
+collected 1 item
+
+tests/test_orchestrator.py::test_orchestrator 
+[1m======================================================================[0m
+[1m  LINER SHIPPING OPTIMIZER - WORLDSMALL FULL PIPELINE TEST [0m
+[1m======================================================================[0m
+
+[1m[96m0 . INITIALISATION[0m
+  ----------------------------------------------------------------------
+[92m+[0m  OrchestratorAgent created
+[92m+[0m  Regional agents: ['regional_asia', 'regional_europe', 'regional_americas', 'regional_middle_east', 'regional_africa']
+[92m+[0m  CoordinatorAgent: coordinator
+[92m+[0m  WorldSmall dir: C:\Users\WINDOWS\AppData\Local\Temp\claude\C--Users-WINDOWS-Liner-Worldsmall-Liner-shipping-optimizer-shipping-optimizer\4de648c7-4db7-4986-a7a8-caad08c69c21\scratchpad\T3c_runA\data\raw\WorldSmall
+[92m+[0m  WorldSmall loaded via production CSV loaders (ports, demands, distances, fleet)
+
+[1m[96mW . WORLDSMALL DATA CONTRACT[0m
+  ----------------------------------------------------------------------
+  [92m+[0m  Ports == 47 (WorldSmall source)
+  [92m+[0m  Demand rows == 1764 (WorldSmall source)
+  [92m+[0m  No invalid port references in demands
+  [2mRaw source FFE/week       [0m138,247
+  [2mRuntime TEU/week          [0m276,446.8
+  [2mTEU / FFE ratio           [0m1.9997  (expected ~2.0; x6 scaling => 12.0)
+  [2mFlat FFE x 2 nominal      [0m276,494
+  [2mDelta vs nominal          [0m-47.2 TEU (lane-specific factors on 6 lanes)
+  [92m+[0m  No artificial demand scaling (TEU/FFE ratio ~= 2.0)
+  [92m+[0m  DEMAND_SCALE=6 NOT applied to WorldSmall
+  [92m+[0m  WorldSmall Problem carries a Fleet object
+  [92m+[0m  Fleet total == sum(class quantities) (derived, not hardcoded)
+  [92m+[0m  Fleet total == 263 vessels (from fleet_WorldSmall.csv)
+  [92m+[0m  Fleet has 6 vessel classes
+  [92m+[0m  Fleet[Feeder_450] == 24
+  [92m+[0m  Fleet[Feeder_800] == 29
+  [92m+[0m  Fleet[Panamax_1200] == 68
+  [92m+[0m  Fleet[Panamax_2400] == 74
+  [92m+[0m  Fleet[Post_panamax] == 58
+  [92m+[0m  Fleet[Super_panamax] == 10
+  [2mFleet total vessels       [0m263  (no FLEET_SIZE constant)
+  [2mFleet classes             [0m6
+  [92m+[0m  Directed distance pairs == 2162 (47 x 46)
+  [92m+[0m  Every required OD pair has a distance (no 500 nm fallback)
+  [92m+[0m  All distance values are positive
+  [2mDirected pairs            [0m2,162
+  [2mFallback pairs            [0m0
+  [92m+[0m  Problem starts with services=[] (generated at runtime)
+
+  ----------------------------------------------------------------------
+
+[1m[96m1 . ECONOMIC DATA LOADING SUMMARY[0m
+  ----------------------------------------------------------------------
+
+  [1mPORT COST COLUMNS LOADED[0m
+  [2mCostPerFULL (handling)    [0m[OK] Loaded (47 ports with data)
+  [2m  Min/Max/Avg             [0m$9/$349/$121 per TEU
+  [2m  Sample port             [0mKaohsiung: $9/TEU
+  [2mPortCallCostFixed         [0m[OK] Loaded (47 ports with data)
+  [2m  Min/Max/Avg             [0m$533/$34,988/$8,115 per call
+  [2mPortCallCostPerFFE (variable)[0m[OK] Loaded (47 ports with data)
+  [2m  Min/Max/Avg             [0m$0/$30/$5 per TEU
+  [2mCostPerFULLTrnsf (transshipment)[0m[OK] Loaded (46 ports with data)
+  [2m  Min/Max/Avg             [0m$10/$430/$79 per TEU
+
+  ----------------------------------------------------------------------
+  [92m+[0m  Port handling costs loaded
+  [92m+[0m  Port call costs loaded
+
+[1m[96m2 . REVENUE MODEL SUMMARY[0m
+  ----------------------------------------------------------------------
+
+  [1mREVENUE MODEL STATUS[0m
+  [2mRevenue model             [0m[OK] Active (FFE->TEU conversion applied)
+  [2mFFE->TEU conversion       [0m[OK] Trade lane specific factors (1.75-2.1)
+  [2mSample factors            [0mAOLAD-AEJEA:2.00, AUBNE-AEJEA:2.00, BEANR-AEJEA:2.00
+  [2mEstimated weekly revenue  [0m$264,870,100
+  [2mEstimated annual revenue  [0m$13,773,245,200
+
+  ----------------------------------------------------------------------
+  [92m+[0m  Weekly revenue > 0
+  [92m+[0m  Weekly demand > 0
+
+[1m[96m3 . PROBLEM STATISTICS[0m
+  ----------------------------------------------------------------------
+  [2mPorts                     [0m47
+  [2mCandidate services        [0m0
+  [2mDemand lanes              [0m1,764
+  [2mTotal weekly demand       [0m276,447 TEU
+  [2mAvg demand/lane           [0m156.7 TEU
+  [2mNetwork density           [0m163.2%
+  [2mTop-3 corridor share      [0m3.9% of total demand
+
+  #      Origin  Destination     TEU/week     Share
+  --------------------------------------------------
+  1       CNYTN        USLAX        3,730      1.3%
+  2       CNSHA        DEBRV        3,720      1.3%
+  3       KRPUS        DEBRV        3,210      1.2%
+  4       CNYTN        NLRTM        2,694      1.0%
+  5       CNSHA        USLAX        2,231      0.8%
+
+  ----------------------------------------------------------------------
+  [92m+[0m  Ports loaded
+  [92m+[0m  Demand lanes loaded
+  [92m+[0m  Total demand > 0 TEU
+  [93m![0m  Candidate services not pre-loaded -- generated during pipeline
+
+[1m[96m4 . PORT COST SUMMARY[0m
+  ----------------------------------------------------------------------
+
+  [1mAGGREGATE PORT COSTS[0m
+  [2mTotal handling cost capacity[0m$5,690 per TEU (sum across ports)
+  [2mTotal transshipment cost capacity[0m$3,634 per TEU (sum across ports)
+  [2mTotal fixed port-call cost[0m$381,394 per call (sum across ports)
+  [2mTotal variable cost capacity[0m$254 per TEU (sum across ports)
+
+  [1mTOP 5 PORTS BY HANDLING COST[0m
+  [2m  Newark                  [0m$349/TEU
+  [2m  Barcelona               [0m$298/TEU
+  [2m  Brisbane                [0m$270/TEU
+  [2m  Los Angeles             [0m$265/TEU
+  [2m  Hamburg                 [0m$233/TEU
+
+  ----------------------------------------------------------------------
+  [92m+[0m  Total handling cost > 0
+  [92m+[0m  At least one port has handling cost
+
+[1m[96mRUNNING PIPELINE[0m
+  ----------------------------------------------------------------------
+  [2mSteps:[0m
+  [2m  -> Orchestrator LLM -- problem analysis[0m
+  [2m  -> PortClustering -> RegionalSplitter -- decomposition[0m
+  [2m  -> RegionalAgent x 5 -- GA + MILP + LLM[0m
+  [2m  -> CoordinatorAgent -- conflict detection + resolution + feedback[0m
+  [2m  -> Feedback loop -- up to 3 iterations[0m
+  [2m  -> Orchestrator LLM -- executive summary[0m
+
+  [93mRunning... (this may take several minutes)[0m
+
+FAILED
+
+================================== FAILURES ===================================
+______________________________ test_orchestrator ______________________________
+src\agents\regional_agent.py:375: in process
+    result = milp.solve()
+src\optimization\hub_milp.py:389: in solve
+    prob += total_vessels_used <= self.fleet_size
+C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Lib\site-packages\pulp\pulp.py:1697: in __iadd__
+    raise TypeError("A False object cannot be passed as a constraint")
+E   TypeError: A False object cannot be passed as a constraint
+
+During handling of the above exception, another exception occurred:
+src\agents\orchestrator_agent.py:619: in process
+    result = future.result()
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\concurrent\futures\thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+src\agents\regional_agent.py:379: in process
+    logger.error("milp_solve_failed", hub=hub, error=str(e))
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\logging\__init__.py:1518: in error
+    self._log(ERROR, msg, args, **kwargs)
+E   TypeError: Logger._log() got an unexpected keyword argument 'hub'
+
+During handling of the above exception, another exception occurred:
+tests\test_orchestrator.py:2138: in test_orchestrator
+    result  = orchestrator.process({"problem": problem})
+src\agents\orchestrator_agent.py:627: in process
+    logger.error("regional_agent_failed",
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\logging\__init__.py:1518: in error
+    self._log(ERROR, msg, args, **kwargs)
+E   TypeError: Logger._log() got an unexpected keyword argument 'agent_name'
+------------------------------ Captured log call ------------------------------
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=orchestrator reason=groq: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m2n71jmmeh98vk6jpwzmymvk` service tier `on_demand` on tokens per day (TPD): Limit  last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+WARNING  llm.router:router.py:372 llm_circuit_breaker_open provider=groq model=qwen/qwen3.8-27b error_type=http_429 cooldown_sec=60.0
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=orchestrator reason=groq: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m2n71jmmeh98vk6jpwzmymvk` service tier `on_demand` on tokens per day (TPD): Limit  last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=service_generator reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=service_generator reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=service_generator reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=service_generator reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=service_generator reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=service_generator reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+ERROR    llm.router:router.py:414 llm_all_providers_failed role=regional reason=circuit_breaker_open last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+============================== warnings summary ===============================
+..\..\..\..\..\..\..\..\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Lib\site-packages\pulp\apis\xpress_api.py:322
+  C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Lib\site-packages\pulp\apis\xpress_api.py:322: DeprecationWarning: invalid escape sequence '\ '
+    """
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_orchestrator.py::test_orchestrator - TypeError: Logger._log...
+================== 1 failed, 1 warning in 108.91s (0:01:48) ===================

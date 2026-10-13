@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Multi-Agent Shipping Network Optimization — Interactive Explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F5F0E8;
+  --bg2: #EDE8DF;
+  --bg3: #E6E0D5;
+  --bg4: #DDD7CC;
+  --blue: #4B8EFF;
+  --blue-dim: rgba(75,142,255,0.12);
+  --blue-glow: rgba(75,142,255,0.25);
+  --orange: #FF9A45;
+  --orange-dim: rgba(255,154,69,0.12);
+  --green: #34D882;
+  --green-dim: rgba(52,216,130,0.12);
+  --red: #FF5B5B;
+  --red-dim: rgba(255,91,91,0.12);
+  --purple: #A978FF;
+  --purple-dim: rgba(169,120,255,0.12);
+  --t1: #000000;
+  --t2: #1A1A1A;
+  --t3: #444444;
+  --bd: rgba(0,0,0,0.12);
+  --bd2: rgba(0,0,0,0.22);
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'DM Sans', system-ui, sans-serif;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--t1); font-family: var(--sans); }
+
+/* TOPBAR */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 52px;
+  background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+  border-bottom: 2px solid var(--bd); z-index: 1000;
+  display: flex; align-items: center; padding: 0 20px; gap: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+.tb-logo { display: flex; align-items: center; gap: 8px; }
+.tb-ship { font-size: 18px; }
+.tb-title { font-size: 13px; font-weight: 600; letter-spacing: -0.2px; color: var(--t1); }
+.tb-sep { flex: 1; }
+.tb-stat {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 3px;
+}
+.tb-online { background: rgba(52,216,130,0.1); color: var(--green); border: 1px solid rgba(52,216,130,0.25); }
+.tb-info { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue-glow); }
+.tb-btn {
+  background: transparent; border: 2px solid var(--bd); color: var(--t2);
+  font-family: var(--sans); font-size: 11px; font-weight: 700; padding: 5px 12px;
+  border-radius: 5px; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+.tb-btn:hover { border-color: var(--t3); color: var(--t1); background: rgba(0,0,0,0.03); }
+.tb-btn.active { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); border-width: 2px; }
+.scene-counter {
+  font-size: 11px; color: var(--t3); font-weight: 500; font-family: var(--mono);
+  padding: 4px 10px; border: 1px solid var(--bd); border-radius: 3px;
+}
+
+/* CANVAS */
+#canvas {
+  position: fixed; top: 52px; left: 0; right: 360px; bottom: 0;
+  overflow: hidden; cursor: grab;
+}
+#canvas.grabbing { cursor: grabbing; }
+#stage { position: absolute; transform-origin: 0 0; will-change: transform; }
+#svgl { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+
+/* INFO PANEL */
+#panel {
+  position: fixed; top: 52px; right: 0; bottom: 0; width: 360px;
+  background: #FFFFFF; border-left: 2px solid var(--bd);
+  display: flex; flex-direction: column; z-index: 500;
+  box-shadow: -4px 0 15px rgba(0,0,0,0.03);
+}
+#scene-head { padding: 20px 20px 16px; border-bottom: 1px solid var(--bd); flex-shrink: 0; }
+.sh-num { font-size: 10px; font-family: var(--mono); color: var(--t3); font-weight: 500; letter-spacing: 1px; margin-bottom: 6px; }
+.sh-title { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; line-height: 1.25; color: var(--t1); margin-bottom: 8px; }
+.sh-desc { font-size: 12.5px; color: var(--t2); line-height: 1.65; font-weight: 400; }
+#scene-dots { padding: 14px 20px 0; display: flex; flex-wrap: wrap; gap: 5px; flex-shrink: 0; }
+.sd { width: 24px; height: 6px; border-radius: 3px; background: #DDD7CC; cursor: pointer; transition: all 0.2s; border: none; }
+.sd.done { background: #4B8EFF; opacity: 0.5; }
+.sd.active { background: var(--blue); width: 36px; opacity: 1; }
+#node-detail { flex: 1; overflow-y: auto; padding: 16px 20px; }
+#node-detail::-webkit-scrollbar { width: 3px; }
+#node-detail::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 2px; }
+.nd-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--t3); text-align: center; gap: 10px; }
+.nd-placeholder-icon { font-size: 32px; opacity: 0.4; }
+.nd-placeholder-text { font-size: 12px; font-weight: 500; letter-spacing: 0.3px; }
+.nd-section { margin-bottom: 18px; }
+.nd-section-title { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--bd); }
+.nd-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.nd-list li { font-size: 11.5px; color: var(--t2); padding: 5px 9px 5px 22px; position: relative; line-height: 1.55; background: rgba(255,255,255,0.02); border-radius: 3px; border: 1px solid var(--bd); }
+.nd-list li::before { content: '›'; position: absolute; left: 8px; color: var(--t3); font-size: 12px; top: 4px; }
+.nd-metric { display: flex; justify-content: space-between; align-items: center; padding: 6px 9px; background: rgba(255,255,255,0.025); border: 1px solid var(--bd); border-radius: 3px; margin-bottom: 4px; }
+.nd-metric .k { font-size: 10px; color: var(--t3); font-weight: 500; }
+.nd-metric .v { font-size: 11px; color: var(--t1); font-weight: 600; font-family: var(--mono); }
+.nd-formula { background: var(--bg); border: 1px solid var(--bd); border-radius: 4px; padding: 12px; font-family: var(--mono); font-size: 10px; color: var(--orange); line-height: 1.9; white-space: pre; overflow-x: auto; }
+#nav-bar { padding: 14px 20px; border-top: 1px solid var(--bd); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.nav-btn { 
+  background: transparent; 
+  border: 2px solid var(--bd); 
+  color: var(--t2); 
+  font-family: var(--sans); 
+  font-size: 11px; 
+  font-weight: 700; 
+  padding: 6px 14px; 
+  border-radius: 5px; 
+  cursor: pointer; 
+  transition: all 0.15s; 
+  white-space: nowrap; 
+}
+.nav-btn:hover { border-color: var(--t3); color: var(--t1); background: rgba(0,0,0,0.03); }
+.nav-btn:disabled { opacity: 0.3; cursor: not-allowed; border-width: 1px; }
+.nav-play { background: var(--blue-dim); border-color: var(--blue-glow); color: var(--blue); flex: 1; text-align: center; }
+.nav-play:hover { background: rgba(75,142,255,0.2); }
+.nav-play.playing { background: var(--red-dim); border-color: rgba(255,91,91,0.25); color: var(--red); }
+
+/* LAYER BANDS */
+.lband { position: absolute; border-radius: 6px; pointer-events: none; border: 1px dashed; }
+/* Layer labels: solid background, above the band */
+.llabel {
+  position: absolute; font-size: 9px; font-weight: 800;
+  letter-spacing: 2px; text-transform: uppercase;
+  pointer-events: none; color: var(--t1);
+  background: #FFFFFF; padding: 3px 10px;
+  border-radius: 4px; border: 2px solid var(--bd); z-index: 5;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+/* NODES */
+.node { position: absolute; border-radius: 5px; cursor: pointer; transition: transform 0.15s; z-index: 10; }
+.node:hover { transform: translateY(-1px) scale(1.015); z-index: 50; }
+.ni { 
+  padding: 13px 15px 12px; 
+  border-radius: 6px; 
+  border: 2px solid var(--bd); 
+  background: #FFFFFF; 
+  position: relative; 
+  overflow: hidden; 
+  transition: all 0.2s;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.06);
+}
+.node:hover .ni { border-color: var(--t3); background: #FFFFFF; box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+.nlbl { font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin-bottom: 4px; }
+.ntit { font-size: 13.5px; font-weight: 800; line-height: 1.2; margin-bottom: 5px; color: var(--t1); }
+.ndesc { font-size: 10.5px; font-weight: 500; line-height: 1.55; color: var(--t2); }
+.npills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px; }
+.np { font-size: 9px; padding: 2px 7px; border-radius: 3px; background: #F0F0F0; color: #111; border: 1px solid var(--bd); font-weight: 700; }
+.t-orch .ni { border-left: 4px solid var(--blue); }
+.t-orch .nlbl { color: #0056D2; }
+.t-coord .ni { border-left: 4px solid var(--red); }
+.t-coord .nlbl { color: #C81010; }
+.t-out .ni { border-left: 4px solid var(--green); }
+.t-out .nlbl { color: #008542; }
+.t-data .ni { border-left: 4px solid var(--t3); }
+.t-ga .ni { border-left: 4px solid var(--orange); }
+.t-ga .nlbl { color: #B35900; }
+.t-milp .ni { border-left: 4px solid var(--green); }
+.t-milp .nlbl { color: #008542; }
+
+/* REGIONAL NODES */
+.rnode { position: absolute; border-radius: 5px; cursor: pointer; z-index: 10; transition: transform 0.15s; }
+.rnode:hover { transform: translateY(-1px); z-index: 50; }
+.rout { 
+  border-radius: 6px; 
+  border: 2px solid #B0C4DE; 
+  border-left: 5px solid #0056D2; 
+  background: #F0F4F8; 
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+.rnode:hover .rout { border-color: #0056D2; box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+.rhdr { padding: 10px 14px 8px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.rhl { font-size: 9px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #667788; margin-bottom: 3px; }
+.rht { font-size: 13px; font-weight: 800; color: #111111; }
+
+/* Regional pipeline — horizontal row, evenly spaced */
+.rpipe { display: flex; flex-direction: row; align-items: center; gap: 4px; padding: 10px 14px; background: rgba(255,255,255,0.3); }
+.rstg { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+.rsbox {
+  padding: 4px 6px; 
+  border-radius: 4px; 
+  font-size: 9px; 
+  font-weight: 800;
+  text-align: center; 
+  border: 1.5px solid var(--box-bc) !important; 
+  white-space: nowrap;
+  line-height: 1.4; 
+  transition: all 0.25s ease; 
+  background: var(--box-bg) !important;
+  color: var(--box-col) !important;
+  width: 100%;
+}
+.rsbox.lit { 
+  opacity: 1 !important; 
+  background: var(--box-col) !important; 
+  color: #FFFFFF !important; 
+  border-color: rgba(0,0,0,0.1) !important;
+  box-shadow: 0 0 15px var(--box-col);
+  transform: scale(1.05);
+  z-index: 2;
+}
+.rarr { color: var(--t3); font-size: 9px; flex: 0 0 auto; margin-top: 0; padding: 0 3px; }
+
+.rftr { padding: 4px 12px 6px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--bd); }
+.rftr-l { font-size: 10px; color: #556677; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.rftr-v { font-size: 11px; color: #00A852; font-weight: 900; font-family: var(--mono); letter-spacing: 1px; }
+
+/* HIGHLIGHTS */
+.scene-hi .ni, .scene-hi .rout {
+  border-color: var(--blue) !important;
+  border-width: 2px 2px 2px 6px !important;
+  background: rgba(75,142,255,0.12) !important;
+  box-shadow: 0 0 35px rgba(75,142,255,0.4), inset 0 0 20px rgba(75,142,255,0.05) !important;
+}
+.scene-hi.t-coord .ni { 
+  border-color: var(--red) !important; 
+  background: rgba(255,91,91,0.12) !important;
+  box-shadow: 0 0 35px rgba(255,91,91,0.4) !important; 
+}
+.scene-hi.t-out .ni { 
+  border-color: var(--green) !important; 
+  background: rgba(52,216,130,0.12) !important;
+  box-shadow: 0 0 35px rgba(52,216,130,0.4) !important; 
+}
+.scene-hi.t-ga .ni { 
+  border-color: var(--orange) !important; 
+  background: rgba(255,154,69,0.12) !important;
+  box-shadow: 0 0 35px rgba(255,154,69,0.4) !important; 
+}
+.scene-hi .rout { 
+  border-color: var(--blue) !important; 
+  background: rgba(75,142,255,0.08) !important;
+  box-shadow: 0 0 40px rgba(75,142,255,0.45) !important; 
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(75,142,255,0.6); }
+  70% { box-shadow: 0 0 0 15px rgba(75,142,255,0); }
+  100% { box-shadow: 0 0 0 0 rgba(75,142,255,0); }
+}
+.pulse .ni { animation: pulse-ring 1.2s ease-out infinite; border-width: 3px 3px 3px 8px !important; }
+
+/* ITERATION PANEL */
+#itp { 
+  position: fixed; 
+  left: 14px; 
+  top: 64px; 
+  background: #FFFFFF; 
+  border: 2px solid var(--bd); 
+  border-radius: 8px; 
+  padding: 12px 15px; 
+  z-index: 200; 
+  min-width: 190px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+.it-t { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: var(--t3); margin-bottom: 8px; text-transform: uppercase; }
+.it-dots { display: flex; gap: 5px; margin-bottom: 7px; }
+.it-d { 
+  width: 50px; 
+  height: 30px; 
+  border-radius: 4px; 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  justify-content: center; 
+  font-size: 9px; 
+  font-weight: 700; 
+  border: 2px solid var(--bd); 
+  color: var(--t3); 
+  transition: all 0.3s; 
+  gap: 1px; 
+  background: #F9F7F2; 
+  font-family: var(--mono); 
+}
+.it-d span { font-size: 8px; opacity: 0.5; letter-spacing: 0.3px; font-family: var(--sans); }
+.it-d.done { border-color: rgba(52,216,130,0.4); color: var(--green); background: rgba(52,216,130,0.06); }
+.it-d.run { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.it-step { font-size: 9.5px; color: var(--t2); padding: 4px 7px; background: rgba(255,255,255,0.03); border-radius: 2px; border: 1px solid var(--bd); font-weight: 500; }
+.it-prog { height: 2px; background: rgba(255,255,255,0.06); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.it-bar { height: 100%; background: var(--blue); border-radius: 2px; width: 0%; transition: width 0.7s; }
+.it-weights { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.it-w-row { display: flex; align-items: center; gap: 6px; }
+.it-w-lbl { font-size: 10px; font-weight: 600; font-family: var(--mono); color: var(--t2); width: 16px; }
+.it-w-bar { flex: 1; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.it-w-fill { height: 100%; border-radius: 2px; transition: width 0.6s; }
+.it-w-val { font-size: 9px; color: var(--t1); font-weight: 600; width: 28px; text-align: right; font-family: var(--mono); }
+
+/* LEGEND */
+#legend { 
+  position: fixed; 
+  left: 14px; 
+  bottom: 14px; 
+  background: #FFFFFF; 
+  border: 2px solid var(--bd); 
+  border-radius: 8px; 
+  padding: 12px 15px; 
+  z-index: 200;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+.leg-t { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: var(--t3); margin-bottom: 8px; text-transform: uppercase; }
+.li { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 10px; color: var(--t2); font-weight: 500; }
+.ld-bar { width: 3px; height: 14px; border-radius: 1px; flex-shrink: 0; }
+.ll { width: 22px; height: 1.5px; flex-shrink: 0; border-radius: 1px; }
+
+#zoom-ind { position: fixed; right: 374px; bottom: 14px; background: var(--bg2); border: 1px solid var(--bd); border-radius: 3px; padding: 5px 10px; font-size: 10px; color: var(--t3); z-index: 200; font-family: var(--mono); }
+#tip { 
+  position: fixed; 
+  background: #FFFFFF; 
+  border: 2px solid var(--bd); 
+  border-radius: 6px; 
+  padding: 8px 12px; 
+  font-size: 11px; 
+  color: var(--t1); 
+  pointer-events: none; 
+  z-index: 800; 
+  opacity: 0; 
+  transition: opacity 0.15s; 
+  max-width: 220px; 
+  line-height: 1.5; 
+  font-weight: 600; 
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+#tip.show { opacity: 1; }
+
+/* SVG ANIMATIONS */
+@keyframes flowfwd { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+@keyframes flowrev { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 60; } }
+@keyframes flowga  { from { stroke-dashoffset: 40; } to { stroke-dashoffset: 0; } }
+.a-fwd  { animation: flowfwd 1.5s linear infinite; }
+.a-rev  { animation: flowrev 1.2s linear infinite; }
+.a-ga   { animation: flowga  1.8s linear infinite; }
+.a-milp { animation: flowfwd 1.2s linear infinite; }
+
+/* DATA TYPE OVERLAY */
+#dto { 
+  position: fixed; 
+  top: 60px; 
+  left: 50%; 
+  transform: translateX(calc(-50% - 180px)); 
+  background: #FFFFFF; 
+  border: 2px solid var(--bd); 
+  border-radius: 8px; 
+  padding: 10px 18px; 
+  z-index: 300; 
+  display: none; 
+  flex-direction: row; 
+  gap: 18px; 
+  align-items: center;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+#dto.show { display: flex; }
+.dti { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 500; color: var(--t2); }
+@keyframes nodeglow { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+.active-glow { animation: nodeglow 1.4s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="tb-logo">
+    <span class="tb-ship">🚢</span>
+    <div><div class="tb-title">AI Vessel Routing System</div></div>
+  </div>
+  <span class="tb-stat tb-online">● LIVE</span>
+  <span class="tb-stat tb-info">435 PORTS · 9,622 LANES · 5 REGIONS</span>
+  <div class="tb-sep"></div>
+  <div class="scene-counter">Scene <span id="sc-cur">1</span> / <span id="sc-tot">11</span></div>
+  <button class="tb-btn" id="btn-dtype" onclick="toggleDtype()">≋ Data Flows</button>
+  <button class="tb-btn" id="btn-anim" onclick="toggleAnim()">⏸ Pause</button>
+  <button class="tb-btn" onclick="resetView()">⌖ Fit</button>
+</div>
+
+<!-- DATA TYPE OVERLAY -->
+<div id="dto">
+  <div class="dti"><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#4B8EFF" stroke-width="1.5" stroke-dasharray="5,3"/></svg><span>Control Flow</span></div>
+  <div class="dti"><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#FF9A45" stroke-width="1.5" stroke-dasharray="3,2"/></svg><span>GA Output</span></div>
+  <div class="dti"><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#34D882" stroke-width="1.5"/></svg><span>MILP Flow</span></div>
+  <div class="dti"><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#FF5B5B" stroke-width="1.5" stroke-dasharray="4,3"/></svg><span>Feedback</span></div>
+</div>
+
+<!-- CANVAS -->
+<div id="canvas">
+  <div id="stage"><svg id="svgl"></svg></div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div id="panel">
+  <div id="scene-head">
+    <div class="sh-num" id="sh-num">SCENE 01 — OVERVIEW</div>
+    <div class="sh-title" id="sh-title">AI Multi-Agent Shipping Network</div>
+    <div class="sh-desc" id="sh-desc">A closed-loop optimization system for global maritime logistics. Click any node to explore its role.</div>
+  </div>
+  <div id="scene-dots"></div>
+  <div id="node-detail">
+    <div class="nd-placeholder">
+      <div class="nd-placeholder-icon">◎</div>
+      <div class="nd-placeholder-text">Click any node to see details</div>
+    </div>
+  </div>
+  <div id="nav-bar">
+    <button class="nav-btn" id="btn-prev" onclick="prevScene()" disabled>← Prev</button>
+    <button class="nav-btn nav-play" id="btn-play" onclick="togglePlay()">▶ Play All</button>
+    <button class="nav-btn" id="btn-next" onclick="nextScene()">Next →</button>
+  </div>
+</div>
+
+<!-- ITERATION PANEL -->
+<div id="itp">
+  <div class="it-t">Feedback Loop</div>
+  <div class="it-dots">
+    <div class="it-d" id="it1">I1<span>INIT</span></div>
+    <div class="it-d" id="it2">I2<span>REFINE</span></div>
+    <div class="it-d" id="it3">I3<span>FINAL</span></div>
+  </div>
+  <div class="it-step" id="it-step">READY</div>
+  <div class="it-prog"><div class="it-bar" id="it-bar"></div></div>
+  <div class="it-weights">
+    <div class="it-w-row"><div class="it-w-lbl">α</div><div class="it-w-bar"><div class="it-w-fill" id="w-alpha" style="width:50%;background:#4B8EFF"></div></div><div class="it-w-val" id="wv-alpha">0.50</div></div>
+    <div class="it-w-row"><div class="it-w-lbl">β</div><div class="it-w-bar"><div class="it-w-fill" id="w-beta" style="width:40%;background:#34D882"></div></div><div class="it-w-val" id="wv-beta">0.40</div></div>
+    <div class="it-w-row"><div class="it-w-lbl">γ</div><div class="it-w-bar"><div class="it-w-fill" id="w-gamma" style="width:10%;background:#FF9A45"></div></div><div class="it-w-val" id="wv-gamma">0.10</div></div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div id="legend">
+  <div class="leg-t">Legend</div>
+  <div class="li"><div class="ld-bar" style="background:var(--blue)"></div>Orchestrator / Control</div>
+  <div class="li"><div class="ld-bar" style="background:var(--red)"></div>Coordinator / Feedback</div>
+  <div class="li"><div class="ld-bar" style="background:var(--orange)"></div>GA Optimizer</div>
+  <div class="li"><div class="ld-bar" style="background:var(--green)"></div>MILP / Output</div>
+  <div class="li"><div class="ld-bar" style="background:var(--t3)"></div>Data / Input</div>
+  <div class="li"><div class="ll" style="background:repeating-linear-gradient(90deg,#4B8EFF 0,#4B8EFF 5px,transparent 5px,transparent 8px)"></div>Forward Flow</div>
+  <div class="li"><div class="ll" style="background:var(--red)"></div>Feedback Loop</div>
+</div>
+
+<div id="zoom-ind">ZOOM: <span id="zv">75%</span></div>
+<div id="tip"></div>
+
+<script>
+/* ─── STRUCTURED GRID LAYOUT CONSTANTS ─── */
+// Pipeline columns (left edge of each column)
+const COL = {
+  INPUT:  40,
+  ORCH:   250,
+  SPLIT:  490,
+  REG:    690,
+  RES:    1350,   // Aggregation + Coordinator column
+  FINAL:  1590,
+  OUT:    1820,
+};
+
+// Node widths
+const NW = { SM: 160, STD: 195, ORCH: 220, REG: 620, OUT: 200, FIN: 185 };
+
+// Regional block top and gap
+const REG_TOP  = 80;
+const REG_H    = 100;  // approximate; measured after render
+const REG_GAP  = 14;
+
+const REGIONS = [
+  {id:'asia',    name:'ASIA',        hubs:'SGSIN · CNSHA · KRPUS'},
+  {id:'europe',  name:'EUROPE',      hubs:'NLRTM · DEHAM · BEANR'},
+  {id:'americas',name:'AMERICAS',    hubs:'USLAX · BRSSZ · COBUN'},
+  {id:'africa',  name:'AFRICA',      hubs:'ZADUR · NGAPP · TZDAR'},
+  {id:'mideast', name:'MIDDLE EAST', hubs:'AEJEA · OMMCT · KWSWK'},
+];
+
+const STAGES = [
+  {id:'sg', lbl:'SVC GEN',   col:'#0056D2', bg:'rgba(0,86,210,0.08)',  bc:'rgba(0,86,210,0.2)'},
+  {id:'sf', lbl:'FILTER',    col:'#666666', bg:'rgba(100,100,100,0.06)', bc:'rgba(100,100,100,0.15)'},
+  {id:'ga', lbl:'GA L1+L2', col:'#B35900', bg:'rgba(179,89,0,0.08)',   bc:'rgba(179,89,0,0.25)'},
+  {id:'ml', lbl:'MILP FLOW', col:'#008542', bg:'rgba(0,133,66,0.08)',   bc:'rgba(0,133,66,0.25)'},
+  {id:'pr', lbl:'PROFIT',    col:'#666666', bg:'rgba(100,100,100,0.06)', bc:'rgba(100,100,100,0.15)'},
+];
+
+const totalRegH = REGIONS.length * (REG_H + REG_GAP) - REG_GAP;
+
+// Canvas size
+const LY = { W: 2100, H: 900 };
+
+/* ─── SCENE DEFINITIONS ─── */
+const SCENES = [
+  { id:1, title:'Global Input & Problem Setup', num:'01 — DATA INGESTION',
+    desc:'Raw maritime data is ingested: 435 global ports, 9,622 demand lanes, fleet specifications, and 62,002 inter-port distances. The system preprocesses and partitions this data for regional analysis.',
+    highlight:['input'], iter:0, step:'LOADING DATA' },
+  { id:2, title:'Orchestrator Initializes', num:'02 — MASTER CONTROL',
+    desc:'The LLM-powered Orchestrator Agent analyzes network complexity, classifies problem scale, and prepares the iterative optimization strategy. It sets initial weights α=0.50, β=0.40, γ=0.10.',
+    highlight:['orch'], iter:0, step:'ANALYZING' },
+  { id:3, title:'Geographic Decomposition', num:'03 — REGIONAL SPLIT',
+    desc:'K-means clustering decomposes all 435 ports into 5 geographic regions. Each region receives its filtered port list, demand subset, and 800–2,000 candidate service routes.',
+    highlight:['orch','split'], iter:0, step:'DECOMPOSING' },
+  { id:4, title:'Regional Agents Launch (Parallel)', num:'04 — PARALLEL EXECUTION',
+    desc:'Five independent regional agents launch simultaneously. Each runs its own complete optimization pipeline: service generation → filtering → genetic algorithms → MILP → profit computation.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'ITER 1: OPTIMIZING' },
+  { id:5, title:'Genetic Algorithm — Service Selection', num:'05 — GA LEVEL 1',
+    desc:'ServiceGA (population 80, 120 generations) selects optimal service subsets using fitness = α×profit + β×coverage − γ×cost. Early stopping fires if no improvement for N generations.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'RUNNING GA L1' },
+  { id:6, title:'GA Level 2 — Frequency Optimization', num:'06 — GA LEVEL 2',
+    desc:'FrequencyGA determines sailing frequencies (1–3×/week) per service. Fleet usage computed as ceil(cycle_time × freq / 7). Post-GA pruning removes inefficient services to satisfy fleet cap.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'RUNNING GA L2' },
+  { id:7, title:'MILP Flow Optimization', num:'07 — MILP SOLVER',
+    desc:'HubMILP (PuLP/CBC) allocates cargo flows across services and transshipment hubs. Maximizes profit while satisfying capacity constraints. Up to 2,000 transfer pairs per region, 120s timeout.',
+    highlight:['asia','europe','americas','africa','mideast'], iter:1, step:'SOLVING MILP' },
+  { id:8, title:'Global Aggregation', num:'08 — CONFLICT RESOLUTION',
+    desc:'The Aggregation Layer merges all 5 regional results, removes overlapping service assignments, and ensures each OD demand pair is served by exactly one region (highest-profit wins).',
+    highlight:['aggr'], iter:1, step:'AGGREGATING' },
+  { id:9, title:'Coordinator Evaluates & Decides', num:'09 — COORDINATOR AGENT',
+    desc:'The LLM Coordinator detects conflicts, evaluates coverage gaps, and generates feedback signals. If coverage_gap > 5%, it increases β and decreases α. Triggers rerun if convergence not met.',
+    highlight:['coord'], iter:1, step:'COORDINATING' },
+  { id:10, title:'Feedback Loop — Weight Adjustment', num:'10 — ADAPTIVE FEEDBACK',
+    desc:'Feedback flows back to the Orchestrator: updated weights, conflict signals, and coverage metrics. The system re-optimizes with adjusted priorities. Loop runs up to 3 iterations.',
+    highlight:['coord','orch','split'], iter:2, step:'ITER 2: REFINING' },
+  { id:11, title:'Optimized Network Output', num:'11 — FINAL SOLUTION',
+    desc:'After convergence, the Final Optimizer validates all hard constraints (fleet ≤300, coverage ≥70%, flow balance). The system outputs the complete optimized shipping network with profit breakdown.',
+    highlight:['final','output'], iter:3, step:'CONVERGED ✓' },
+];
+
+/* ─── STATE ─── */
+let curScene = 0, animEnabled = true, playInterval = null, isPlaying = false;
+const NR = {};
+const stage = document.getElementById('stage');
+const svgl  = document.getElementById('svgl');
+
+/* ─── BUILD LAYER BANDS ─── */
+function band(x, y, w, h, bg, bc, lbl, lx, ly) {
+  const d = document.createElement('div');
+  d.className = 'lband';
+  d.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;background:${bg};border-color:${bc}`;
+  stage.appendChild(d);
+  if (lbl) {
+    const l = document.createElement('div');
+    l.className = 'llabel';
+    l.style.cssText = `left:${lx}px;top:${ly}px`;
+    l.textContent = lbl;
+    stage.appendChild(l);
+  }
+}
+
+// ── GLOBAL CONTROL band (Orchestrator + Splitter column only)
+band(COL.ORCH - 14, REG_TOP - 36,
+     (COL.SPLIT + NW.SM + 14) - COL.ORCH + 28,
+     totalRegH + 36 + 28,
+     'rgba(75,142,255,0.02)', 'rgba(75,142,255,0.12)',
+     'GLOBAL CONTROL', COL.ORCH - 12, REG_TOP - 34);
+
+// ── PARALLEL REGIONAL EXECUTION band
+band(COL.REG - 14, REG_TOP - 36,
+     NW.REG + 28, totalRegH + 36 + 28,
+     'rgba(75,142,255,0.015)', 'rgba(75,142,255,0.08)',
+     'PARALLEL REGIONAL EXECUTION', COL.REG - 12, REG_TOP - 34);
+
+// ── RESOLUTION LAYER band (Aggregation + Coordinator + Final)
+band(COL.RES - 14, REG_TOP - 36,
+     (COL.FINAL + NW.FIN + 14) - COL.RES + 28,
+     totalRegH + 36 + 28,
+     'rgba(255,91,91,0.012)', 'rgba(255,91,91,0.1)',
+     'RESOLUTION LAYER', COL.RES - 12, REG_TOP - 34);
+
+/* ─── NODE FACTORY ─── */
+function mkNode(cfg) {
+  const el = document.createElement('div');
+  el.className = `node ${cfg.cls}`;
+  el.id = 'n-' + cfg.id;
+  el.style.cssText = `left:${cfg.x}px;top:${cfg.y}px;width:${cfg.w || NW.STD}px`;
+  const pills = (cfg.pills || []).slice(0,3).map(p => `<span class="np">${p}</span>`).join('');
+  el.innerHTML = `<div class="ni"><div class="nlbl">${cfg.lbl||''}</div><div class="ntit">${cfg.tit}</div><div class="ndesc">${(cfg.desc||'').replace(/\n/g,'<br>')}</div><div class="npills">${pills}</div></div>`;
+  el.addEventListener('click', () => showNodeDetail(cfg.detail));
+  el.addEventListener('mouseenter', e => showTip(e, cfg.tit));
+  el.addEventListener('mouseleave', hideTip);
+  stage.appendChild(el);
+  NR[cfg.id] = { el, x: cfg.x, y: cfg.y, w: cfg.w || NW.STD, h: 0 };
+}
+
+/* ─── NODE DEFINITIONS — initially placed at y=0; repositioned after height measurement ─── */
+mkNode({id:'input', cls:'t-data', x:COL.INPUT, y:0, w:NW.SM, lbl:'Layer 1 — Input Data',
+  tit:'INPUT DATA', desc:'435 ports · 9,622 demand lanes\nFleet specs · Distance matrix',
+  pills:['ports.csv','demand.csv','fleet.csv'],
+  detail:{secs:[
+    {t:'Datasets',i:['ports.csv — 435 global ports with draft, cost, coordinates','Demand_WorldLarge.csv — 9,622 OD lanes, FFE/week, revenue, transit time','fleet_WorldLarge.csv — vessel class definitions & capacities','dist_dense.csv — 62,002 port-pair distances with Panama/Suez flags']},
+    {t:'Preprocessing',i:['Geographic port partitioning by region','Sparse distance matrix construction','TEU demand normalization & aggregation','Port draft & capacity validation']},
+  ], mets:[{k:'Ports',v:'435'},{k:'Demand Lanes',v:'9,622'},{k:'Distance Pairs',v:'62,002'},{k:'Fleet Limit',v:'≤300 vessels'}]}
+});
+
+mkNode({id:'orch', cls:'t-orch', x:COL.ORCH, y:0, w:NW.ORCH, lbl:'Layer 2 — Master Controller (LLM)',
+  tit:'GLOBAL ORCHESTRATOR', desc:'LLM-powered control · Problem analysis\nIter management · Global constraints',
+  pills:['GPT-OSS-120B','Iter Control','α β γ Weights'],
+  detail:{secs:[
+    {t:'Core Responsibilities',i:['Network complexity assessment & scale classification','K-means geographic port clustering into 3–5 regions','Global fleet constraint enforcement (≤300 vessels)','Iterative feedback loop control (max 3 iterations)','LLM-driven strategy selection and weight adjustment','Final aggregation of all regional results']},
+    {t:'LLM Integration',i:['Model: GPT-OSS-120B via OpenRouter API','Structured JSON output format','Temperature: 0.1 for consistent outputs','Fallback: rule-based logic when API fails']},
+  ], mets:[{k:'Model',v:'GPT-OSS-120B'},{k:'Max Iterations',v:'3'},{k:'Conv. Threshold',v:'gap < 1%'},{k:'Explore Factor',v:'+10%/iter'}]}
+});
+
+mkNode({id:'split', cls:'t-orch', x:COL.SPLIT, y:0, w:NW.SM, lbl:'Decomposition Engine',
+  tit:'REGIONAL SPLITTER', desc:'K-means clustering\n5 geographic regions\n800–2,000 candidates each',
+  pills:['Asia','Europe','Americas'],
+  detail:{secs:[
+    {t:'Decomposition Strategy',i:['K-means clustering on all 435 ports','Assigns ports, demand lanes, and service candidates per region','Maintains inter-regional connectivity via hub bridge ports','Generates 800–2,000 candidate services per regional partition','Problem size reduced approx 3× per region']},
+  ], mets:[{k:'Regions',v:'5'},{k:'Size reduction',v:'~3× per region'},{k:'Candidates/region',v:'800–2,000'}]}
+});
+
+mkNode({id:'aggr', cls:'t-coord', x:COL.RES, y:0, w:NW.STD, lbl:'Aggregation Layer',
+  tit:'GLOBAL AGGREGATION', desc:'Merges 5 regional results\nRemoves service overlaps\nOD uniqueness enforced',
+  pills:['Merge Regions','OD Uniqueness','Deduplication'],
+  detail:{secs:[
+    {t:'Functions',i:['Merge optimization outputs from all 5 regional agents','Detect and remove overlapping service assignments','Prevent double-counting of inter-regional demand flows','Guarantee each OD pair served by exactly one region','Resolve inter-regional cargo flow conflicts']},
+    {t:'Conflict Strategy',i:['Services in multiple regions → keep highest-profit region','Overlapping demand reallocated accordingly','Global metrics recomputed post-deduplication']},
+  ], mets:[{k:'Input sources',v:'5 regions'},{k:'Strategy',v:'Max-profit region'},{k:'Output',v:'Unified solution'}]}
+});
+
+mkNode({id:'coord', cls:'t-coord', x:COL.RES, y:0, w:NW.STD, lbl:'Decision Engine (LLM)',
+  tit:'COORDINATOR AGENT', desc:'Conflict resolution\nWeight tuning α β γ\nFeedback signal generation',
+  pills:['Conflict Detect','α/β/γ Tune','Feedback Signal'],
+  detail:{secs:[
+    {t:'Conflict Detection',i:['Scans services for multi-region assignments','Retains service in highest-profit region only','Computes conflict_severity score','Validates flow conservation post-resolution']},
+    {t:'Feedback Signals',i:['coverage_gap — delta below 70% target','profit_gap — vs previous iteration','conflict_severity — overlapping assignments','weight_adjustments — new α, β, γ values','needs_rerun — boolean trigger','convergence_score — stability (0–1)']},
+    {t:'Weight Protocol',i:['α = profit weight (default 0.50)','β = coverage weight (default 0.40)','γ = cost weight (default 0.10)','If coverage_gap > 5%: increase β, decrease α']},
+  ], mets:[{k:'LLM Model',v:'Llama-3.1-8B'},{k:'Max iterations',v:'3'},{k:'Stop condition',v:'gap < 1%'}], weights:true}
+});
+
+mkNode({id:'final', cls:'t-coord', x:COL.FINAL, y:0, w:NW.FIN, lbl:'Validation Layer',
+  tit:'FINAL OPTIMIZER', desc:'Hard constraint validation\nFleet ≤300 · Coverage ≥70%\nFlow balance enforced',
+  pills:['Fleet ≤300','Flow Balance','Coverage ≥70%'],
+  detail:{secs:[
+    {t:'Hard Constraints',i:['Fleet cap: total vessels ≤ 300','Flow conservation: flow_in = flow_out at hubs','Coverage target: ≥ 70% weekly TEU demand','Capacity: service_capacity × freq ≥ allocated_flow','Port handling limit respected']},
+  ], mets:[{k:'Fleet limit',v:'≤300 vessels'},{k:'Coverage floor',v:'≥70% demand'},{k:'Profit floor',v:'Weekly ≥ $0'}]}
+});
+
+mkNode({id:'output', cls:'t-out', x:COL.OUT, y:0, w:NW.OUT, lbl:'Layer 5 — Solution Output',
+  tit:'OPTIMIZED NETWORK', desc:'Full service configuration\nVessel deployment plan\nProfit breakdown · Coverage',
+  pills:['Services Plan','Weekly Profit','Coverage %'],
+  detail:{secs:[
+    {t:'Global Metrics',i:['Weekly Profit (USD) — total across all regions','Annual Profit (USD) — weekly × 52','Total Operating Cost — all components','Demand Coverage (%) — served TEU / total TEU','Services Selected — count and list','Vessels Deployed — total (must be ≤ 300)']},
+    {t:'Regional Breakdown',i:['Profit per region with component breakdown','Coverage per region (%)','Service count per region','Cost: fixed / dynamic / handling / transship / port']},
+  ], mets:[{k:'Ports served',v:'Up to 435'},{k:'Services',v:'50–200'},{k:'Demand lanes',v:'9,622'},{k:'TEU/week',v:'800K+'}]}
+});
+
+/* ─── REGIONAL PIPELINE NODES ─── */
+REGIONS.forEach((reg, i) => {
+  const y = REG_TOP + i * (REG_H + REG_GAP);
+  const el = document.createElement('div');
+  el.className = 'rnode';
+  el.id = 'n-' + reg.id;
+  el.style.cssText = `left:${COL.REG}px;top:${y}px;width:${NW.REG}px`;
+
+  const stHtml = STAGES.map((s, si) => {
+    const arr = si < STAGES.length - 1 ? `<div class="rarr">→</div>` : '';
+    return `<div class="rstg"><div class="rsbox" id="rs-${reg.id}-${s.id}" style="--box-col:${s.col}; --box-bg:${s.bg}; --box-bc:${s.bc}">${s.lbl}</div></div>${arr}`;
+  }).join('');
+
+  const regDetail = {
+    secs:[
+      {t:'Internal Pipeline',i:[
+        '① Svc Generator — direct (top-500 corridors), hub-loops, trunks, feeders',
+        '② Service Filter — margin threshold, fleet viability, capacity feasibility',
+        '③ ServiceGA Level 1 — pop:80, gen:120, fitness=α×profit+β×cov−γ×cost',
+        '④ FrequencyGA Level 2 — freq 1–3/week, ceil(cycle×freq/7) fleet calc',
+        '⑤ HubMILP — PuLP/CBC, direct+transfer flows, up to 2,000 transfer pairs',
+        '⑥ Profit Computation — Revenue−(Fixed+Dynamic+Handling+Transship+Port)'
+      ]},
+      {t:'Independence',i:['No shared GA/MILP instance with other regions','Runs concurrently during parallel execution','Independent convergence per region']},
+    ],
+    mets:[{k:'GA Population',v:'80'},{k:'GA Generations',v:'120'},{k:'MILP Timeout',v:'120s'},{k:'Freq Range',v:'1–3/week'}],
+    formula:`Profit = Revenue − (C_fixed + C_dynamic + C_handling\n         + C_transship + C_port)\n\nRevenue    = Σ Rate_od × Flow_od\nC_fixed    = Vessel_cost × round_trips/week\nC_dynamic  = Fuel_price × consumption × dist\nC_handling = Σ port_cost/TEU × TEU_loaded\nC_transship= Σ C_handling × factor + storage\nC_port     = call_fixed + TEU × call_variable\n\nGA Fitness = α×NormProfit + β×Coverage − γ×Cost`
+  };
+
+  el.innerHTML = `<div class="rout">
+    <div class="rhdr"><div class="rhl">Regional Agent · ${reg.name}</div><div class="rht">${reg.id.toUpperCase()} — SELF-CONTAINED PIPELINE</div></div>
+    <div class="rpipe">${stHtml}</div>
+    <div class="rftr"><span class="rftr-l">HUBS: ${reg.hubs}</span><span class="rftr-v" id="rv-${reg.id}">IDLE</span></div>
+  </div>`;
+
+  el.addEventListener('click', () => showNodeDetail(regDetail));
+  el.addEventListener('mouseenter', e => showTip(e, `${reg.name} Regional Agent`));
+  el.addEventListener('mouseleave', hideTip);
+  stage.appendChild(el);
+  NR[reg.id] = { el, x: COL.REG, y, w: NW.REG, h: REG_H };
+});
+
+/* ─── INIT: MEASURE HEIGHTS, VERTICALLY CENTER MAIN-ROW NODES ─── */
+setTimeout(() => {
+  // Measure true rendered heights
+  Object.keys(NR).forEach(id => { NR[id].h = NR[id].el.offsetHeight || 100; });
+
+  // Compute actual regional block extents
+  const regTop = REG_TOP;
+  const regBot = REG_TOP + REGIONS.reduce((acc, reg) => acc + (NR[reg.id]?.h || REG_H) + REG_GAP, -REG_GAP);
+  const regCenterY = (regTop + regBot) / 2;
+
+  // Vertically center simple pipeline nodes relative to regional block
+  ['input','orch','split','final','output'].forEach(id => {
+    const n = NR[id]; if (!n) return;
+    const newY = Math.round(regCenterY - n.h / 2);
+    n.y = newY;
+    n.el.style.top = newY + 'px';
+  });
+
+  // Stack aggr + coord vertically, centered within regional block
+  const aggrH  = NR['aggr']  ? NR['aggr'].h  : 115;
+  const coordH = NR['coord'] ? NR['coord'].h : 125;
+  const VGAP   = 22;
+  const stackH = aggrH + VGAP + coordH;
+  const stackTop = Math.round(regCenterY - stackH / 2);
+
+  if (NR['aggr'])  { NR['aggr'].y  = stackTop;            NR['aggr'].el.style.top  = stackTop + 'px'; }
+  if (NR['coord']) { NR['coord'].y = stackTop + aggrH + VGAP; NR['coord'].el.style.top = (stackTop + aggrH + VGAP) + 'px'; }
+
+  drawSVG();
+  initView();
+  renderSceneDots();
+  goToScene(0);
+}, 150);
+
+/* ─── SVG HELPERS ─── */
+function svgEl(tag, attrs) {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k, v));
+  return e;
+}
+
+function edge(id, side = 'r') {
+  const n = NR[id]; if (!n) return {x:0,y:0};
+  const h = n.h || 100;
+  if (side==='r') return {x: n.x + n.w,    y: n.y + h/2};
+  if (side==='l') return {x: n.x,           y: n.y + h/2};
+  if (side==='t') return {x: n.x + n.w/2,  y: n.y};
+  if (side==='b') return {x: n.x + n.w/2,  y: n.y + h};
+  return {x:0,y:0};
+}
+
+/* ─── ORTHOGONAL (right-angle) PATH ─── */
+// Routes: x1,y1 → midX,y1 → midX,y2 → x2,y2  (elbow connector)
+function drawOrtho(x1, y1, x2, y2, opts) {
+  const {col='#4B8EFF', dash='7 5', w=1.5, opacity=0.5, cls='a-fwd', lbl='', midX=null} = opts || {};
+  const mx = midX !== null ? midX : Math.round((x1 + x2) / 2);
+
+  let d;
+  if (Math.abs(y1 - y2) < 3) {
+    d = `M${x1},${y1} L${x2},${y2}`;
+  } else {
+    d = `M${x1},${y1} L${mx},${y1} L${mx},${y2} L${x2},${y2}`;
+  }
+
+  const p = svgEl('path', {d, fill:'none', stroke:col,
+    'stroke-width':String(w), 'stroke-dasharray':dash, opacity:String(opacity)});
+  if (cls) p.setAttribute('class', cls);
+  svgl.appendChild(p);
+
+  // Arrow at destination: detect exit direction of last segment
+  let arrowAngle = 0;
+  if (Math.abs(y1 - y2) < 3) {
+    arrowAngle = x2 >= x1 ? 0 : 180;
+  } else {
+    // last segment is horizontal from mx→x2 at y2
+    arrowAngle = x2 >= mx ? 0 : 180;
+  }
+  const arr = svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:col,
+    opacity:String(Math.min(1, opacity * 1.4)),
+    transform:`translate(${x2},${y2}) rotate(${arrowAngle})`
+  });
+  svgl.appendChild(arr);
+
+  if (lbl) {
+    const lx = Math.round((x1 + x2) / 2);
+    const ly = Math.round(Math.min(y1, y2) + Math.abs(y2 - y1) / 2) - 9;
+    const t = svgEl('text', {x:String(lx), y:String(ly), fill:col,
+      'font-size':'8.5', 'font-family':'JetBrains Mono,monospace',
+      'text-anchor':'middle', opacity:'.5', 'letter-spacing':'0.3', 'font-weight':'500'});
+    t.textContent = lbl; svgl.appendChild(t);
+  }
+}
+
+/* ─── VERTICAL ARROW helper (for strictly vertical segments) ─── */
+function drawVert(x, y1, y2, opts) {
+  const {col='#FF5B5B', dash='5 3', w=1.5, opacity=0.5, cls='a-fwd', lbl=''} = opts || {};
+  const d = `M${x},${y1} L${x},${y2}`;
+  const p = svgEl('path', {d, fill:'none', stroke:col,
+    'stroke-width':String(w), 'stroke-dasharray':dash, opacity:String(opacity)});
+  if (cls) p.setAttribute('class', cls);
+  svgl.appendChild(p);
+  const arrowAngle = y2 > y1 ? 90 : -90;
+  svgl.appendChild(svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:col,
+    opacity:String(Math.min(1, opacity * 1.4)),
+    transform:`translate(${x},${y2}) rotate(${arrowAngle})`
+  }));
+  if (lbl) {
+    const t = svgEl('text', {x:String(x+5), y:String(Math.round((y1+y2)/2)),
+      fill:col, 'font-size':'8.5', 'font-family':'JetBrains Mono,monospace',
+      opacity:'.5', 'letter-spacing':'0.3', 'font-weight':'500'});
+    t.textContent = lbl; svgl.appendChild(t);
+  }
+}
+
+/* ─── DRAW ALL CONNECTIONS ─── */
+function drawSVG() {
+  svgl.innerHTML = '';
+  svgl.setAttribute('width',  String(LY.W));
+  svgl.setAttribute('height', String(LY.H));
+
+  // ① Input → Orchestrator
+  const inp_r  = edge('input','r'),  orch_l = edge('orch','l');
+  drawOrtho(inp_r.x, inp_r.y, orch_l.x, orch_l.y,
+    {col:'#1A6AE8', dash:'6 4', opacity:0.85, cls:'a-fwd', lbl:'raw data'});
+
+  // ② Orchestrator → Splitter
+  const orch_r = edge('orch','r'),   spl_l  = edge('split','l');
+  drawOrtho(orch_r.x, orch_r.y, spl_l.x, spl_l.y,
+    {col:'#1A6AE8', dash:'5 3', opacity:0.90, cls:'a-fwd'});
+
+  // ③ Splitter → each region (fan-out)
+  const spl_r = edge('split','r');
+  REGIONS.forEach(reg => {
+    const rn = NR[reg.id]; if (!rn) return;
+    const ry = rn.y + (rn.h || REG_H) / 2;
+    drawOrtho(spl_r.x, spl_r.y, COL.REG, ry,
+      {col:'#1A6AE8', dash:'5 4', opacity:0.75, cls:'a-fwd', w:1.5});
+  });
+
+  // ④ Each region → Aggregation (fan-in)
+  const aggr_l = edge('aggr','l');
+  REGIONS.forEach(reg => {
+    const rn = NR[reg.id]; if (!rn) return;
+    const ry = rn.y + (rn.h || REG_H) / 2;
+    drawOrtho(rn.x + rn.w, ry, aggr_l.x, aggr_l.y,
+      {col:'#D06800', dash:'4 3', opacity:0.85, cls:'a-ga', w:1.5});
+  });
+
+  // ⑤ Aggregation → Coordinator (vertical, same X)
+  const aggr_b  = edge('aggr','b');
+  const coord_t = edge('coord','t');
+  drawVert(aggr_b.x, aggr_b.y, coord_t.y,
+    {col:'#CC1010', dash:'5 3', opacity:0.90, cls:'a-fwd', w:2, lbl:'conflicts'});
+
+  // ⑥ Coordinator → Final Optimizer (horizontal)
+  const coord_r = edge('coord','r'), final_l = edge('final','l');
+  drawOrtho(coord_r.x, coord_r.y, final_l.x, final_l.y,
+    {col:'#0A8A40', dash:'none', opacity:0.90, cls:'a-milp', w:2});
+
+  // ⑦ Aggregation → Final (direct pass, slight offset)
+  const aggr_r  = edge('aggr','r');
+  const fin_n   = NR['final'];
+  const finTargY = fin_n ? fin_n.y + Math.round(fin_n.h * 0.33) : edge('final','t').y + 20;
+  drawOrtho(aggr_r.x, aggr_r.y, COL.FINAL, finTargY,
+    {col:'#0A8A40', dash:'6 4', opacity:0.75, cls:'a-milp', w:1.5});
+
+  // ⑧ Final → Output
+  const fin_r = edge('final','r'), out_l = edge('output','l');
+  drawOrtho(fin_r.x, fin_r.y, out_l.x, out_l.y,
+    {col:'#0A8A40', dash:'none', opacity:0.95, cls:'a-milp', w:2.5, lbl:'solution'});
+
+  // ─────────────────────────────────────────────────────────
+  // FEEDBACK LOOP — rectangular path:
+  //   Coordinator bottom → DOWN → LEFT rail → UP → Orchestrator bottom
+  // ─────────────────────────────────────────────────────────
+  const coord_b = edge('coord','b');
+  const orch_b  = edge('orch','b');
+  // Rail sits below all nodes
+  const actualRegBot = REG_TOP + REGIONS.reduce((acc, reg) => acc + (NR[reg.id]?.h || REG_H) + REG_GAP, -REG_GAP);
+  const fbRailY = actualRegBot + 52;
+  const fbCoordX = coord_b.x;
+  const fbOrchX  = orch_b.x;
+
+  const fbPath = [
+    `M${fbCoordX},${coord_b.y}`,
+    `L${fbCoordX},${fbRailY}`,
+    `L${fbOrchX},${fbRailY}`,
+    `L${fbOrchX},${orch_b.y}`
+  ].join(' ');
+
+  const fbLine = svgEl('path', {d:fbPath, fill:'none', stroke:'#CC1010',
+    'stroke-width':'2', 'stroke-dasharray':'5 4', opacity:'0.85', class:'a-rev'});
+  svgl.appendChild(fbLine);
+
+  // Arrow pointing UP into orchestrator bottom
+  svgl.appendChild(svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:'#CC1010', opacity:'0.95',
+    transform:`translate(${fbOrchX},${orch_b.y}) rotate(-90)`
+  }));
+
+  // Label on rail
+  const fbLblX = Math.round((fbCoordX + fbOrchX) / 2);
+  const fbTxt  = svgEl('text', {x:String(fbLblX), y:String(fbRailY - 6),
+    fill:'#CC1010', 'font-size':'8', 'font-family':'JetBrains Mono,monospace',
+    'text-anchor':'middle', opacity:'0.9', 'letter-spacing':'0.3', 'font-weight':'700'});
+  fbTxt.textContent = 'feedback loop';
+  svgl.appendChild(fbTxt);
+
+  // ─────────────────────────────────────────────────────────
+  // TOP RESOLUTION FLOW — Orchestrator top → UP → RIGHT → DOWN into Coordinator top
+  // ─────────────────────────────────────────────────────────
+  const orch_t  = edge('orch','t');
+  const coord_top = edge('coord','t');
+  const topRailY  = REG_TOP - 52;  // above the band labels
+
+  const resPath = [
+    `M${orch_t.x},${orch_t.y}`,
+    `L${orch_t.x},${topRailY}`,
+    `L${coord_top.x},${topRailY}`,
+    `L${coord_top.x},${coord_top.y}`
+  ].join(' ');
+
+  const resLine = svgEl('path', {d:resPath, fill:'none', stroke:'#1A6AE8',
+    'stroke-width':'1.8', 'stroke-dasharray':'5 4', opacity:'0.80', class:'a-fwd'});
+  svgl.appendChild(resLine);
+
+  // Arrow pointing DOWN into coordinator top
+  svgl.appendChild(svgEl('polygon', {
+    points:'0,-2.5 5.5,0 0,2.5', fill:'#1A6AE8', opacity:'0.95',
+    transform:`translate(${coord_top.x},${coord_top.y}) rotate(90)`
+  }));
+
+  // "Resolutions" label
+  const resLblX = Math.round((orch_t.x + coord_top.x) / 2);
+  const resTxt  = svgEl('text', {x:String(resLblX), y:String(topRailY - 5),
+    fill:'#1A6AE8', 'font-size':'8', 'font-family':'JetBrains Mono,monospace',
+    'text-anchor':'middle', opacity:'0.9', 'letter-spacing':'0.3', 'font-weight':'700'});
+  resTxt.textContent = 'Resolutions';
+  svgl.appendChild(resTxt);
+}
+
+/* ─── SCENE ENGINE ─── */
+function renderSceneDots() {
+  const cont = document.getElementById('scene-dots');
+  cont.innerHTML = '';
+  SCENES.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'sd'; btn.id = `sd-${i}`; btn.title = s.title;
+    btn.onclick = () => goToScene(i);
+    cont.appendChild(btn);
+  });
+}
+
+function goToScene(idx) {
+  curScene = Math.max(0, Math.min(SCENES.length - 1, idx));
+  const sc = SCENES[curScene];
+  document.getElementById('sh-num').textContent   = `SCENE ${String(curScene+1).padStart(2,'0')} — ${sc.num.split('—')[1]?.trim()||''}`;
+  document.getElementById('sh-title').textContent = sc.title;
+  document.getElementById('sh-desc').textContent  = sc.desc;
+  document.getElementById('sc-cur').textContent   = curScene + 1;
+  document.getElementById('sc-tot').textContent   = SCENES.length;
+
+  SCENES.forEach((_, i) => {
+    const d = document.getElementById(`sd-${i}`); if (!d) return;
+    d.className = 'sd' + (i < curScene ? ' done':'') + (i===curScene ? ' active':'');
+  });
+  document.getElementById('btn-prev').disabled = curScene === 0;
+  document.getElementById('btn-next').disabled = curScene === SCENES.length - 1;
+
+  Object.keys(NR).forEach(id => NR[id].el.classList.remove('scene-hi','pulse'));
+  sc.highlight.forEach(id => {
+    const n = NR[id]; if (!n) return;
+    n.el.classList.add('scene-hi');
+    if (sc.highlight.length === 1) n.el.classList.add('pulse');
+  });
+
+  updateIterPanel(sc);
+
+  if (curScene >= 3 && curScene <= 6) {
+    animateRegionalStages({3:null,4:'sg',5:'ga',6:'ml'}[curScene]);
+  } else {
+    resetRegionalStages();
+  }
+
+  document.getElementById('node-detail').innerHTML = `<div class="nd-placeholder"><div class="nd-placeholder-icon">◎</div><div class="nd-placeholder-text">Click any node to see details</div></div>`;
+}
+
+function updateIterPanel(sc) {
+  const [it1,it2,it3] = ['it1','it2','it3'].map(id=>document.getElementById(id));
+  const step = document.getElementById('it-step');
+  const bar  = document.getElementById('it-bar');
+  [it1,it2,it3].forEach(d => d.className = 'it-d');
+  if (sc.iter===0) { step.textContent=sc.step; bar.style.width='0%'; }
+  else if (sc.iter===1) { it1.className='it-d run'; step.textContent=sc.step; bar.style.width='33%'; setWeights(0.50,0.40,0.10); }
+  else if (sc.iter===2) { it1.className='it-d done'; it2.className='it-d run'; step.textContent=sc.step; bar.style.width='66%'; setWeights(0.42,0.50,0.08); }
+  else if (sc.iter===3) { [it1,it2,it3].forEach(d=>d.className='it-d done'); step.textContent=sc.step; bar.style.width='100%'; setWeights(0.40,0.52,0.08); }
+  const sm = {0:'IDLE',1:'OPTIMIZING...',2:'CONVERGING',3:'DONE ✓'};
+  REGIONS.forEach(reg => { const el=document.getElementById(`rv-${reg.id}`); if(el) el.textContent=sm[sc.iter]||'IDLE'; });
+}
+
+function setWeights(a,b,g) {
+  document.getElementById('w-alpha').style.width=(a*100)+'%'; document.getElementById('wv-alpha').textContent=a.toFixed(2);
+  document.getElementById('w-beta').style.width=(b*100)+'%';  document.getElementById('wv-beta').textContent=b.toFixed(2);
+  document.getElementById('w-gamma').style.width=(g*100)+'%'; document.getElementById('wv-gamma').textContent=g.toFixed(2);
+}
+
+function animateRegionalStages(target) {
+  STAGES.forEach(s => REGIONS.forEach(reg => {
+    const box = document.getElementById(`rs-${reg.id}-${s.id}`); if (!box) return;
+    box.classList.remove('lit');
+    if (target===null || s.id===target || (target==='ga' && s.id==='sg')) box.classList.add('lit');
+  }));
+}
+function resetRegionalStages() {
+  STAGES.forEach(s => REGIONS.forEach(reg => {
+    const box = document.getElementById(`rs-${reg.id}-${s.id}`); if (box) box.classList.remove('lit');
+  }));
+}
+
+/* ─── NAVIGATION ─── */
+function prevScene() { if (curScene>0) goToScene(curScene-1); }
+function nextScene() { if (curScene<SCENES.length-1) goToScene(curScene+1); }
+function togglePlay() {
+  const btn = document.getElementById('btn-play');
+  if (isPlaying) {
+    clearInterval(playInterval); isPlaying=false; btn.textContent='▶ Play All'; btn.classList.remove('playing');
+  } else {
+    isPlaying=true; btn.textContent='⏹ Stop'; btn.classList.add('playing');
+    playInterval = setInterval(() => {
+      if (curScene < SCENES.length-1) { nextScene(); }
+      else { clearInterval(playInterval); isPlaying=false; btn.textContent='▶ Play All'; btn.classList.remove('playing'); }
+    }, 3200);
+  }
+}
+
+/* ─── NODE DETAIL ─── */
+function showNodeDetail(detail) {
+  if (!detail) return;
+  let html = '';
+  if (detail.secs) detail.secs.forEach(sec => {
+    html += `<div class="nd-section"><div class="nd-section-title">${sec.t}</div><ul class="nd-list">`;
+    sec.i.forEach(item => { html += `<li>${item}</li>`; });
+    html += `</ul></div>`;
+  });
+  if (detail.mets) {
+    html += `<div class="nd-section"><div class="nd-section-title">Parameters</div>`;
+    detail.mets.forEach(m => { html += `<div class="nd-metric"><span class="k">${m.k}</span><span class="v">${m.v}</span></div>`; });
+    html += `</div>`;
+  }
+  if (detail.formula) html += `<div class="nd-section"><div class="nd-section-title">Profit Formula</div><div class="nd-formula">${detail.formula}</div></div>`;
+  if (detail.weights) html += `<div class="nd-section"><div class="nd-section-title">Current Weights</div><div class="it-weights" style="margin-top:4px"><div class="it-w-row"><div class="it-w-lbl">α</div><div class="it-w-bar"><div class="it-w-fill" style="width:50%;background:#4B8EFF"></div></div><div class="it-w-val">0.50</div></div><div class="it-w-row"><div class="it-w-lbl">β</div><div class="it-w-bar"><div class="it-w-fill" style="width:40%;background:#34D882"></div></div><div class="it-w-val">0.40</div></div><div class="it-w-row"><div class="it-w-lbl">γ</div><div class="it-w-bar"><div class="it-w-fill" style="width:10%;background:#FF9A45"></div></div><div class="it-w-val">0.10</div></div></div></div>`;
+  document.getElementById('node-detail').innerHTML = html;
+}
+
+/* ─── VIEW / ZOOM / PAN ─── */
+let vx=0, vy=0, vz=0.72, panning=false, startX, startY, startVx, startVy;
+function applyTransform() {
+  stage.style.transform = `translate(${vx}px,${vy}px) scale(${vz})`;
+  document.getElementById('zv').textContent = Math.round(vz*100)+'%';
+}
+function initView() {
+  const canvas = document.getElementById('canvas');
+  const cw=canvas.offsetWidth, ch=canvas.offsetHeight;
+  vz = Math.min(cw/(LY.W+40), ch/(LY.H+40), 0.75);
+  vx = (cw - LY.W*vz)/2; vy = (ch - LY.H*vz)/2;
+  applyTransform();
+}
+function resetView() { initView(); }
+const canvas = document.getElementById('canvas');
+canvas.addEventListener('mousedown', e => {
+  if (e.target.closest('.node,.rnode')) return;
+  panning=true; startX=e.clientX; startY=e.clientY; startVx=vx; startVy=vy;
+  canvas.classList.add('grabbing');
+});
+window.addEventListener('mousemove', e => { if (!panning) return; vx=startVx+e.clientX-startX; vy=startVy+e.clientY-startY; applyTransform(); });
+window.addEventListener('mouseup', () => { panning=false; canvas.classList.remove('grabbing'); });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect(), mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const factor=e.deltaY<0?1.1:0.9, nz=Math.max(0.2,Math.min(2.0,vz*factor));
+  vx=mx-(mx-vx)*(nz/vz); vy=my-(my-vy)*(nz/vz); vz=nz; applyTransform();
+},{passive:false});
+
+/* ─── TOOLTIP ─── */
+const tip = document.getElementById('tip');
+function showTip(e,text){ tip.textContent=text; tip.classList.add('show'); moveTip(e); }
+function moveTip(e){ tip.style.left=Math.min(e.clientX+14,window.innerWidth-220)+'px'; tip.style.top=(e.clientY-36)+'px'; }
+function hideTip(){ tip.classList.remove('show'); }
+document.addEventListener('mousemove', e => { if(tip.classList.contains('show')) moveTip(e); });
+
+/* ─── TOGGLES ─── */
+function toggleDtype() {
+  document.getElementById('dto').classList.toggle('show');
+  document.getElementById('btn-dtype').classList.toggle('active');
+}
+function toggleAnim() {
+  animEnabled = !animEnabled;
+  const btn = document.getElementById('btn-anim');
+  svgl.style.animationPlayState = animEnabled?'running':'paused';
+  document.querySelectorAll('.a-fwd,.a-rev,.a-ga,.a-milp').forEach(el=>{ el.style.animationPlayState=animEnabled?'running':'paused'; });
+  btn.textContent = animEnabled ? '⏸ Pause' : '▶ Resume';
+  btn.classList.toggle('active', !animEnabled);
+}
+</script>
+</body>
+</html>

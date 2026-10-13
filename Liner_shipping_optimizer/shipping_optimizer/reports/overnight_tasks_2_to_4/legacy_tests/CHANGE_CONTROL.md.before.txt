@@ -1,0 +1,50 @@
+# Change Control
+
+**Phase:** 0 · **Date:** 2026-08-26 · **Applies to:** all future modification of this repository (maritime phases and beyond)
+
+## 1. Mandatory change record
+
+Every future PR/commit that touches runtime behavior MUST state, in its description:
+
+1. **Affected component** — per `PROTECTED_COMPONENTS.md` tier registry (file + function/class).
+2. **Integration boundary** — which sanctioned boundary is used (IP-1/2/3/5, Tier-2 pattern), or "none — internal fix" with justification.
+3. **Expected behavior change** — flags-off semantics vs flags-on semantics.
+4. **Regression risk** — which frozen contracts are nearby; why they are not violated.
+5. **Tests** — new/updated tests + full-suite result (`venv/Scripts/python.exe -m pytest tests/ --ignore=tests/test_orchestrator.py`) and, for anything touching pipeline behavior, a golden-run comparison against PHASE_0_BASELINE.md.
+6. **Performance impact** — measured delta vs baseline (~319 s class run); maritime snapshot budget ≤5 s once per run.
+7. **Rollback mechanism** — flag / module removal / revert; name the level (1–4) per INTEGRATION_BOUNDARIES.md.
+
+## 2. Automatic rejections
+
+A change is rejected without further review if it:
+
+- Directly modifies any **Tier 0** component without explicit product-owner approval AND a recertification plan.
+- Adds network calls inside optimization loops or optimizer modules (network-isolation test fails).
+- Silently changes the output contract (renames/removes/re-types keys in `pipeline_output.json`, WS event names/shapes, REST response shapes consumed by the frontend).
+- Bypasses or loosens validation (validators, clamp ranges, consensus reconciliation).
+- Allows external data to override deterministic policy — including indirect routes through weights beyond validated/clamped channels.
+- Introduces unbounded retries or unbounded latency into the pipeline path.
+- Makes maritime features default-ON, or lets source/stale/invalid/network failure degrade the deterministic baseline.
+- Installs dependencies without updating PHASE_0_DEPENDENCY_BASELINE.md.
+- Modifies certification assertions to make a failing check pass.
+
+## 3. Review checklist (for the reviewer)
+
+- [ ] Tier of every touched file identified; Tier-0 untouched or explicitly approved.
+- [ ] Flags-off behavior proven identical (golden/schema test output attached).
+- [ ] Failure-path behavior: source failure / stale / invalid / network-down ⇒ deterministic baseline.
+- [ ] No new imports in optimizer modules from network-capable libraries (`tests/architecture/test_network_isolation.py` green).
+- [ ] Output contract: additive-only diff against `docs/architecture/PIPELINE_OUTPUT_CONTRACT.json`.
+- [ ] Performance budget respected; stage timings reported for pipeline-touching changes.
+- [ ] Rollback story is real (flag actually flips behavior off; removal doesn't strand references).
+
+## 4. Emergency fixes
+
+Production-breakage hotfixes still require the record above, filed retroactively within
+24 h, plus immediate regression evidence. Emergency fixes may never be the vehicle for
+Tier-0 retuning.
+
+## 5. Documentation hygiene
+
+No new audit-report proliferation: architectural artifacts live under `docs/architecture/`
+and must stay concise, current, and non-duplicative. Update-in-place beats new-document.

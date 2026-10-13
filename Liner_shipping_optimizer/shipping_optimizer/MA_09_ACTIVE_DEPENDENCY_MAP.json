@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "artifact": "MA_09_ACTIVE_DEPENDENCY_MAP.json",
+    "system": "AI Vessel Routing System - Multi-Agent Optimizer",
+    "generated": "2026-10-05",
+    "scope": "Runtime path that actually produces frontend/public/pipeline_output.json, plus the data that feeds it. Nodes marked active:true are confirmed to execute on the production path.",
+    "verification_method": "Static source inspection + __pycache__ inventory + cross-module grep. No module was executed for its side effects."
+  },
+  "runtime_topology": {
+    "optimizer_runs_at_serve_time": false,
+    "evidence": [
+      "backend/__pycache__ contains only __init__.cpython-311.pyc and server.cpython-311.pyc",
+      "backend/services/__pycache__ does not exist",
+      "backend/routes/__pycache__ does not exist",
+      "grep for Orchestrator|NetworkLoader|src. in backend/server.py returns 0 matches"
+    ],
+    "conclusion": "The dashboard is a static artifact viewer. The optimizer runs only under pytest."
+  },
+  "active_path": [
+    {
+      "id": "n01",
+      "node": "tests/test_orchestrator.py :: load_worldsmall_problem()",
+      "location": "tests/test_orchestrator.py:210-238",
+      "active": true,
+      "calls": ["n02", "n03", "n04", "n05"]
+    },
+    { "id": "n02", "node": "NetworkLoader.load_ports(WorldSmall/ports.csv)", "location": "src/data/network_loader.py:15", "active": true, "reads": ["data/raw/WorldSmall/ports.csv"], "produces": "47 Port objects", "defects": ["MA-02-07 data_dir discarded", "MA-02-08 default file is 435 ports"] },
+    { "id": "n03", "node": "NetworkLoader.load_demands(demand_world_small.csv)", "location": "src/data/network_loader.py:58", "active": true, "reads": ["data/raw/demand_world_small.csv"], "produces": "1764 Demand objects", "defects": ["MA-02-01 k^2 revenue", "MA-02-02 non-uniform inflation", "MA-02-03 four malformed lane keys"], "CRITICAL": true },
+    { "id": "n04", "node": "NetworkLoader.load_distance_matrix(distance_dense.csv)", "location": "src/data/network_loader.py:125", "active": true, "reads": ["data/raw/distance_dense.csv"], "produces": "dict of dicts, last-write-wins", "defects": ["MA-02-09 17,169 conflicting duplicate OD pairs", "MA-02-10 227/435 WorldLarge ports missing"], "note": "IsPanama and IsSuez columns are read by pandas and silently discarded - the matrix is Dict[str,Dict[str,float]] with nowhere to put them." },
+    { "id": "n05", "node": "NetworkLoader.load_fleet(fleet_WorldSmall.csv, fleet_data.csv)", "location": "src/data/network_loader.py:151", "active": true, "reads": ["data/raw/fleet_world_small.csv", "data/raw/WorldSmall/fleet_data.csv"], "produces": "Fleet with 263 vessels", "defects": ["MA-02-11 all economic fields loaded and never read", "MA-04-08 tc_rate_daily unused", "MA-04-09 panamaFee/suezFee unused"] },
+
+    { "id": "n06", "node": "OrchestratorAgent.process", "location": "src/agents/orchestrator_agent.py:430", "active": true, "calls": ["n07"] },
+    { "id": "n07", "node": "CONFIG.get_weights() -> problem.{profit,coverage,cost}_weight", "location": "orchestrator_agent.py:435-438", "active": true, "value": {"profit": 0.60, "coverage": 0.25, "cost": 0.15}, "terminal": true, "defects": ["MA-01-05 DEAD - consumed only inside the unreachable legacy branch"], "note": "The artifact reports these as iteration_audit[*].weights_used, so it misreports the objective that actually ran." },
+
+    { "id": "n08", "node": "true_global_demand = sum(d.weekly_teu)", "location": "orchestrator_agent.py:505", "active": true, "value": 276446.80, "verdict": "correct" },
+    { "id": "n09", "node": "n_clusters = 3 if num_ports < 50 else 5", "location": "orchestrator_agent.py:510", "active": true, "value": 3 },
+
+    { "id": "n10", "node": "RegionalAgent.process (x3 regions)", "location": "src/agents/regional_agent.py", "active": true, "calls": ["n11", "n12", "n13"] },
+    { "id": "n11", "node": "split_by_hubs -> KMeans port clustering", "location": "regional_agent.py:134-147", "active": true, "defects": ["MA-02-08 origin-only regional split"] },
+    { "id": "n12", "node": "ServiceGeneratorAgent", "location": "src/agents/service_generator_agent.py", "active": true, "produces": "2238 candidate services (812 + 623 + 803)", "defects": ["MA-05-05 LLM output unused in all 3 regions", "MA-06-C3 vessel_class TEU ladder matched against FFE table", "MA-06-C4 synthetic cycle_time 7/14/21 vs real 70-80", "MA-06-F synthetic weekly_cost ignoring tc_rate_daily"], "artifact_counter": {"servicegen_ai_count": 0, "servicegen_fallback_count": 3} },
+    { "id": "n13", "node": "_filter_services", "location": "regional_agent.py:298", "active": true, "produces": "826 retained of 2238", "defects": ["MA-05-06 63.1% discarded with no documented criterion"] },
+
+    { "id": "n14", "node": "HierarchicalGA.run", "location": "src/optimization/hierarchical_ga.py:144", "active": true, "calls": ["n15", "n16", "n17"] },
+    { "id": "n15", "node": "ServiceGA", "location": "src/optimization/service_ga.py", "active": true, "defects": ["MA-06-08 fitness = +0.1*cost REWARDS cost", "MA-06-19 CONFIG weights inert", "MA-03-02 network-average rate", "MA-03-03 multi-service double count", "MA-06-11 total_capacity omits 7/cycle_time", "MA-06-12 stale port_hc", "MA-06-13 fuel computed twice"], "CRITICAL": true },
+    { "id": "n16", "node": "FrequencyGA", "location": "src/optimization/frequency_ga.py", "active": true, "defects": ["MA-06-09 FUEL OMITTED from fitness", "MA-03-04 demands[0] used as an average"], "works_correctly": "fleet early-reject at :128-138 uses the real 263-vessel fleet" },
+    { "id": "n17", "node": "post-GA fleet prune", "location": "hierarchical_ga.py:182-203", "active": true, "defects": ["MA-05-01 PER-REGION scope - each region checked against the FULL unpartitioned fleet"], "note": "The check works; the scope is wrong. Each region passes (208/200/216 <= 263); the SUM 624 is never checked." },
+
+    { "id": "n18", "node": "HubMILP.solve (per hub cluster)", "location": "src/optimization/hub_milp.py", "active": true, "solver": "PULP 2.7.0 / CBC", "runtime": {"time_limit_sec": "30-90 (adaptive_budget clamps 30..90; hub_milp default is 120)", "gap_tolerance": "NOT SET - no ratioGap, so status 'Optimal' may be a truncated incumbent", "threads": "NOT SET - single-threaded default"}, "defects": ["MA-06-01 coverage_reward scales with cost", "MA-06-02 profit_v includes the bonus", "MA-06-03 fleet constraint is a Python bool", "MA-06-04 warn-only fleet check", "MA-06-06 per-TEU port cost charged per port", "MA-06-07 no revenue key returned", "MA-06-20 OPEX not port-filtered, re-billed per cluster", "MA-06-21 FUEL not port-filtered, re-billed per cluster", "MA-06-min_coverage dead", "MA-06-port_capacity can never bind"], "CRITICAL": true },
+    { "id": "n19", "node": "cluster_demands by 'origin OR destination'", "location": "regional_agent.py:349-352", "active": true, "defects": ["MA-02-05 cross-cluster duplication"], "note": "Contrast with regional_splitter.py:34 which assigns by ORIGIN ONLY. The re-expansion to OR is the duplication source.", "CRITICAL": true },
+
+    { "id": "n20", "node": "CoordinatorAgent + ConsensusEngine", "location": "src/agents/coordinator_agent.py", "active": true, "artifact_counter": {"llm_calls": 5, "coordinator_fallback_count": 0}, "verdict": "LLM calls SUCCEEDED - corrects a prior audit claim", "note": "LLM-authored explanation/strategy text describes a solution the LLM did not generate." },
+    { "id": "n21", "node": "IterationSelector", "location": "src/agents/", "active": true },
+
+    { "id": "n22", "node": "Orchestrator aggregation", "location": "orchestrator_agent.py:295-325", "active": true, "defects": ["MA-06-14 satisfied clamped twice, unserved never", "MA-06-15 revenue = profit + cost tautology"], "identities_holding": ["cost components sum to total_cost", "annual = weekly*52", "sum(regional) = global"], "CRITICAL": true },
+    { "id": "n23", "node": "tests/test_orchestrator.py:2222-2235 WRITES pipeline_output.json", "location": "tests/test_orchestrator.py", "active": true, "CRITICAL": true },
+    { "id": "n24", "node": "backend/server.py load_pipeline_data()", "location": "backend/server.py:71-79", "active": true, "note": "Reads a static file. Never imports the optimizer." }
+  ],
+  "inactive_nodes": [
+    { "node": "backend/routes/metrics.py", "reason": "mounted by no entrypoint; include_router absent from server.py, main.py, unified_main.py", "dead_code": true },
+    { "node": "backend/routes/pipeline.py", "reason": "same", "dead_code": true },
+    { "node": "backend/routes/regions.py", "reason": "same", "dead_code": true },
+    { "node": "backend/routes/websocket.py", "reason": "same", "dead_code": true },
+    { "node": "backend/services/pipeline_service.py", "reason": "returns MockProblem with 435 synthetic ports and a ZERO distance matrix; MockPort/MockDemand have no cost attributes", "dead_code": true },
+    { "node": "src/optimization/flow_optimizer.py", "reason": "imported at backend/real_orchestrator_integration.py:19, never instantiated anywhere", "dead_code": true },
+    { "node": "hub_milp._total_port_cost", "reason": "defined at :157-173, never called", "dead_code": true },
+    { "node": "hierarchical_ga skip_milp flag", "reason": "written at :223, never read by hub_milp or regional_agent", "dead_code": true },
+    { "node": "NetworkLoader.load_problem (JSON path)", "reason": "used by legacy CLI benchmark, not the artifact path", "note": "Applies DEMAND_SCALE=6; Problem built without fleet= so fleet is None" }
+  ],
+  "critical_path_summary": {
+    "single_point_of_failure": "src/data/network_loader.py:109",
+    "note": "revenue_per_teu = Revenue_1 * k. This one line propagates to ServiceGA revenue, FrequencyGA revenue, the MILP revenue expression, and the global revenue metric. No downstream unit check exists anywhere in src/.",
+    "measured_effect": {"rate_inflation": 4.001773, "network_weighted": 4.001773, "per_lane_min": 3.0625, "per_lane_max": 4.41},
+    "why_untested": "Every economic assertion in the test suite is an internal identity, which remains true under a scale factor. Five maritime test modules pin the artifact SHA-256, protecting the bytes rather than the economics."
+  }
+}

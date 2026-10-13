@@ -1,0 +1,3073 @@
+diff --git a/data/raw/demand_world_large.csv b/data/raw/WorldLarge/demand_world_large.csv
+similarity index 100%
+rename from data/raw/demand_world_large.csv
+rename to data/raw/WorldLarge/demand_world_large.csv
+diff --git a/data/raw/demand_world_small.csv b/data/raw/WorldLarge/demand_world_small.csv
+similarity index 100%
+rename from data/raw/demand_world_small.csv
+rename to data/raw/WorldLarge/demand_world_small.csv
+diff --git a/data/raw/distance_dense.csv b/data/raw/WorldLarge/distance_dense.csv
+similarity index 100%
+rename from data/raw/distance_dense.csv
+rename to data/raw/WorldLarge/distance_dense.csv
+diff --git a/data/raw/fleet_world_large.csv b/data/raw/WorldLarge/fleet_world_large.csv
+similarity index 100%
+rename from data/raw/fleet_world_large.csv
+rename to data/raw/WorldLarge/fleet_world_large.csv
+diff --git a/data/raw/fleet_world_small.csv b/data/raw/WorldLarge/fleet_world_small copy.csv
+similarity index 100%
+rename from data/raw/fleet_world_small.csv
+rename to data/raw/WorldLarge/fleet_world_small copy.csv
+diff --git a/data/raw/WorldSmall/fleet_world_small.csv b/data/raw/WorldLarge/fleet_world_small.csv
+similarity index 100%
+copy from data/raw/WorldSmall/fleet_world_small.csv
+copy to data/raw/WorldLarge/fleet_world_small.csv
+diff --git a/data/raw/port_mapping.csv b/data/raw/WorldLarge/port_mapping.csv
+similarity index 100%
+rename from data/raw/port_mapping.csv
+rename to data/raw/WorldLarge/port_mapping.csv
+diff --git a/data/raw/ports.csv b/data/raw/WorldLarge/ports.csv
+similarity index 100%
+rename from data/raw/ports.csv
+rename to data/raw/WorldLarge/ports.csv
+diff --git a/data/raw/ports_world_small.csv b/data/raw/WorldLarge/ports_world_small.csv
+similarity index 100%
+rename from data/raw/ports_world_small.csv
+rename to data/raw/WorldLarge/ports_world_small.csv
+diff --git a/scripts/run_pipeline_benchmark.py b/scripts/run_pipeline_benchmark.py
+index 4dd5a9b..7742d93 100644
+--- a/scripts/run_pipeline_benchmark.py
++++ b/scripts/run_pipeline_benchmark.py
+@@ -30,14 +30,14 @@ def _load_problem(dataset: str = None):
+     """Load the canonical dataset and assemble a ``Problem`` object.
+ 
+     Args:
+-        dataset: Instance name — "WorldSmall" or "WorldLarge".
+-            Defaults to auto-detection from environment or "WorldLarge".
++        dataset: Instance name. Only "WorldSmall" is supported.
++            Defaults to the INSTANCE environment variable, then "WorldSmall".
+     """
+     from src.data.network_loader import NetworkLoader
+     from src.optimization.data import Problem, Fleet
+     import os
+ 
+-    instance = dataset or os.environ.get("INSTANCE", "WorldLarge").strip()
++    instance = dataset or os.environ.get("INSTANCE", "WorldSmall").strip()
+     loader = NetworkLoader()
+ 
+     try:
+@@ -51,14 +51,12 @@ def _load_problem(dataset: str = None):
+                 ws_dir / "fleet_data.csv",
+             )
+         else:
+-            ports = loader.load_ports()
+-            demands = loader.load_demands()
+-            distance_matrix = loader.load_distance_matrix()
+-            # WorldLarge: derive fleet size from fleet_world_large.csv for constraint accuracy
+-            try:
+-                fleet = loader.load_fleet()
+-            except Exception:  # noqa: BLE001
+-                fleet = None
++            # The loader's no-argument defaults are WorldSmall; calling them here would
++            # silently load WorldSmall data under a different instance name.
++            raise ValueError(
++                f"instance {instance!r} is not supported: the loader reads only "
++                f"data/raw/WorldSmall (set INSTANCE=WorldSmall)"
++            )
+     except Exception as e:                                    # noqa: BLE001
+         raise RuntimeError(f"dataset load failed: {e}") from e
+ 
+diff --git a/src/agents/service_generator_agent.py b/src/agents/service_generator_agent.py
+index 84fcb2a..75e4f9b 100644
+--- a/src/agents/service_generator_agent.py
++++ b/src/agents/service_generator_agent.py
+@@ -271,7 +271,19 @@ class ServiceGeneratorAgent(BaseAgent):
+         generator = CandidateServiceGenerator(problem)
+         generator._service_id_counter = sid
+         base_services = generator.generate_services(num_services=heuristic_limit)
+-        services.extend(base_services)
++        # CandidateServiceGenerator yields plain {"ports": [...]} records. They are
++        # converted here so the pool honours the declared ``List[Service]`` contract
++        # (optimisers read ``.ports`` / ``.capacity`` attributes). The defaults are
++        # exactly the ones RegionalAgent applied downstream, so values are unchanged.
++        for rec in base_services:
++            cap = rec.get("capacity", 5000)
++            services.append(Service(
++                id=sid, ports=rec["ports"], capacity=cap,
++                weekly_cost=rec.get("weekly_cost", 150_000),
++                cycle_time=rec.get("cycle_time", 14),
++                vessel_class=rec.get("vessel_class", map_capacity_to_vessel_class(cap)),
++            ))
++            sid += 1
+         logger.info("heuristic_services_added", count=len(base_services))
+ 
+         logger.info("candidate_services_generated", num_services=len(services))
+diff --git a/src/data/network_loader.py b/src/data/network_loader.py
+index 9048262..ce46869 100644
+--- a/src/data/network_loader.py
++++ b/src/data/network_loader.py
+@@ -1,286 +1,858 @@
+-import pandas as pd
+-from pathlib import Path
+-from src.optimization.data import Port, Demand, Fleet, FleetClass
+-
+-class NetworkLoader:
+-
+-    def __init__(self, data_dir="data"):
+-
+-        base = Path(__file__).resolve().parents[2]
+-        self.data_dir = base / "data" / "raw"
+-
+-    # --------------------------------
+-    # Load ports
+-    # --------------------------------
+-    def load_ports(self, ports_file=None):
+-
+-        if ports_file is None:
+-            ports_file = self.data_dir / "ports.csv"
+-        elif isinstance(ports_file, str):
+-            ports_file = Path(ports_file)
+-
+-        df = pd.read_csv(ports_file, sep="\t")
+-        df.columns = [c.strip().lower() for c in df.columns]
+-
+-        df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+-        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+-        df["draft"] = pd.to_numeric(df["draft"], errors="coerce")
+-        df["costperfull"] = pd.to_numeric(df["costperfull"], errors="coerce")
+-        df["costperfulltrnsf"] = pd.to_numeric(df["costperfulltrnsf"], errors="coerce")
+-        df["portcallcostfixed"] = pd.to_numeric(df["portcallcostfixed"], errors="coerce")
+-        df["portcallcostperffe"] = pd.to_numeric(df["portcallcostperffe"], errors="coerce")
+-
+-        df = df.dropna(subset=["latitude", "longitude"])
+-
+-        ports = []
+-
+-        for _, row in df.iterrows():
+-
+-            ports.append(
+-                Port(
+-                    id=str(row["unlocode"]).strip(),
+-                    name=str(row["name"]).strip(),
+-                    latitude=float(row["latitude"]),
+-                    longitude=float(row["longitude"]),
+-                    handling_cost=float(row["costperfull"]) * 2.0 if pd.notna(row["costperfull"]) else 0.0,
+-                    draft=float(row["draft"]) if pd.notna(row["draft"]) else 0.0,
+-                    port_call_cost=float(row["portcallcostfixed"]) if pd.notna(row["portcallcostfixed"]) else 0.0,
+-                    transshipment_cost=float(row["costperfulltrnsf"]) * 2.0 if pd.notna(row["costperfulltrnsf"]) else 0.0,
+-                    variable_port_call_cost=float(row["portcallcostperffe"]) * 2.0 if pd.notna(row["portcallcostperffe"]) else 0.0
+-                )
+-            )
+-
+-        return ports
+-
+-    # --------------------------------
+-    # Load demand
+-    # --------------------------------
+-    def load_demands(self, demand_file=None):
+-
+-        if demand_file is None:
+-            demand_file = self.data_dir / "demand_world_small.csv"
+-            if not demand_file.exists():
+-                demand_file = self.data_dir / "WorldSmall" / "Demand_WorldSmall_Fixed_Sep.csv"
+-        elif isinstance(demand_file, str):
+-            demand_file = Path(demand_file)
+-
+-        df = pd.read_csv(demand_file, sep="\t")
+-        df.columns = [c.strip() for c in df.columns]
+-
+-        demands = []
+-
+-        # Trade lane specific FFE to TEU conversion factors
+-        # Based on typical cargo mix for different regions
+-        FFE_TO_TEU_CONVERSIONS = {
+-            # Asia-Europe: Higher ratio of 40' containers (2.1)
+-            "AEJEA-GBSOU": 2.1, "AEJEA-DEHAM": 2.1, "AEJEA-NLRTM": 2.1, "AEJEA-ITGOA": 2.1,
+-            "CNSHA-GBSOU": 2.1, "CNSHA-DEHAM": 2.1, "CNSHA-NLRTM": 2.1, "CNSHA-ITGOA": 2.1,
+-
+-            # Transpacific: Balanced mix (1.85)
+-            "CNSHA-USLAX": 1.85, "CNSHA-USAOS": 1.85, "CNSHA-USSEA": 1.85, "CNSHA-USA NY": 1.85,
+-            "JPTYO-USLAX": 1.85, "JPTYO-USAOS": 1.85, "JPTYO-USSEA": 1.85, "JPTYO-USA NY": 1.85,
+-
+-            # Transatlantic: More 20' containers (1.75)
+-            "USLAX-GBSOU": 1.75, "USAOS-GBSOU": 1.75, "USNYC-DEHAM": 1.75, "USNYC-NLRTM": 1.75,
+-
+-            # Intra-Asia: High 40' usage (2.0)
+-            "CNSHA-JPTYO": 2.0, "CNSHA-SGSGP": 2.0, "JPTYO-KRPUS": 2.0,
+-
+-            # Latin America: Mixed (1.9)
+-            "BRSSZ-USLAX": 1.9, "BRSSZ-USAOS": 1.9, "MXVER-CNSHA": 1.9,
+-        }
+-
+-        for _, row in df.iterrows():
+-
+-            origin = str(row["Origin"]).strip()
+-            dest = str(row["Destination"]).strip()
+-
+-            if origin == dest:
+-                continue
+-
+-            # Get trade lane specific conversion factor, default to 2.0
+-            lane_key = f"{origin}-{dest}"
+-            ffe_to_teu_factor = FFE_TO_TEU_CONVERSIONS.get(lane_key, 2.0)
+-
+-            # Convert FFE to TEU
+-            weekly_teu = float(row["FFEPerWeek"]) * ffe_to_teu_factor
+-
+-            # Revenue_1 is $/FFE, convert to $/TEU
+-            revenue_per_teu = float(row["Revenue_1"]) * ffe_to_teu_factor
+-
+-            demands.append(
+-                Demand(
+-                    origin=origin,
+-                    destination=dest,
+-                    weekly_teu=weekly_teu,
+-                    revenue_per_teu=revenue_per_teu
+-                )
+-            )
+-
+-        return demands
+-
+-    # --------------------------------
+-    # Load distance matrix
+-    # --------------------------------
+-    def load_distance_matrix(self, dist_file=None):
+-
+-        if dist_file is None:
+-            dist_file = self.data_dir / "distance_dense.csv"
+-        elif isinstance(dist_file, str):
+-            dist_file = Path(dist_file)
+-
+-        df = pd.read_csv(dist_file, sep="\t")
+-        df.columns = [c.strip().lower() for c in df.columns]
+-
+-        matrix = {}
+-
+-        for _, row in df.iterrows():
+-
+-            o = str(row["fromunlocode"]).strip()
+-            d = str(row["tounlocode"]).strip()
+-            dist = float(row["distance"])
+-
+-            matrix.setdefault(o, {})
+-            matrix[o][d] = dist
+-
+-        return matrix
+-
+-    # --------------------------------
+-    # Load fleet
+-    # --------------------------------
+-    def load_fleet(self, fleet_file=None, fleet_data_file=None):
+-        """Load fleet from CSV files into Fleet dataclass.
+-
+-        Args:
+-            fleet_file: Path to vessel class quantities CSV (e.g., fleet_WorldSmall.csv)
+-                       Expected columns: Vessel class, Quantity
+-            fleet_data_file: Path to vessel specifications CSV (e.g., fleet_data.csv)
+-                            Expected columns: Vessel class, Capacity FFE, TC rate daily (fixed Cost),
+-                                             draft, minSpeed, maxSpeed, designSpeed,
+-                                             Bunker ton per day at designSpeed, Idle Consumption ton/day,
+-                                             panamaFee, suezFee
+-
+-        Returns:
+-            Fleet instance with classes populated from both files.
+-        """
+-        if fleet_file is None:
+-            fleet_file = self.data_dir / "fleet_world_small.csv"
+-            if not fleet_file.exists():
+-                fleet_file = self.data_dir / "WorldSmall" / "fleet_WorldSmall.csv"
+-        elif isinstance(fleet_file, str):
+-            fleet_file = Path(fleet_file)
+-
+-        if fleet_data_file is None:
+-            fleet_data_file = self.data_dir / "fleet_data.csv"
+-        elif isinstance(fleet_data_file, str):
+-            fleet_data_file = Path(fleet_data_file)
+-
+-        # Load quantities
+-        qty_df = pd.read_csv(fleet_file, sep="\t")
+-        qty_map = {}
+-        for _, row in qty_df.iterrows():
+-            cls_name = str(row["Vessel class"]).strip()
+-            qty_map[cls_name] = int(row["Quantity"])
+-
+-        # Load specifications (optional — WorldLarge has no separate fleet_data.csv)
+-        spec_map = {}
+-        if fleet_data_file.exists():
+-            spec_df = pd.read_csv(fleet_data_file, sep="\t")
+-            for _, row in spec_df.iterrows():
+-                cls_name = str(row["Vessel class"]).strip()
+-                spec_map[cls_name] = {
+-                    "capacity_teu": float(row["Capacity FFE"]),
+-                    "tc_rate_daily": float(row["TC rate daily (fixed Cost)"]),
+-                    "draft": float(row["draft"]),
+-                    "min_speed": float(row["minSpeed"]),
+-                    "max_speed": float(row["maxSpeed"]),
+-                    "design_speed": float(row["designSpeed"]),
+-                    "bunker_consumption_tons_per_day": float(row["Bunker ton per day at designSpeed"]),
+-                    "idle_consumption_tons_per_day": float(row["Idle Consumption ton/day"]),
+-                    "panama_fee": float(row["panamaFee"]) if pd.notna(row.get("panamaFee")) and row.get("panamaFee") not in ("", "nan") else 0.0,
+-                    "suez_fee": float(row["suezFee"]) if pd.notna(row.get("suezFee")) and row.get("suezFee") not in ("", "nan") else 0.0,
+-                }
+-
+-        # Combine into Fleet
+-        classes = []
+-        for cls_name, qty in qty_map.items():
+-            specs = spec_map.get(cls_name, {})
+-            fc = FleetClass(
+-                vessel_class=cls_name,
+-                quantity=qty,
+-                capacity_teu=specs.get("capacity_teu", 0.0),
+-                tc_rate_daily=specs.get("tc_rate_daily", 0.0),
+-                draft=specs.get("draft", 0.0),
+-                min_speed=specs.get("min_speed", 0.0),
+-                max_speed=specs.get("max_speed", 0.0),
+-                design_speed=specs.get("design_speed", 0.0),
+-                bunker_consumption_tons_per_day=specs.get("bunker_consumption_tons_per_day", 0.0),
+-                idle_consumption_tons_per_day=specs.get("idle_consumption_tons_per_day", 0.0),
+-                panama_fee=specs.get("panama_fee", 0.0),
+-                suez_fee=specs.get("suez_fee", 0.0),
+-            )
+-            classes.append(fc)
+-
+-        return Fleet(classes=classes)
+-
+-    # --------------------------------
+-    # MAIN LOADER
+-    # --------------------------------
+-    def load_network(self, ports_file=None, demand_file=None, dist_file=None):
+-
+-        ports = self.load_ports(ports_file)
+-        demands = self.load_demands(demand_file)
+-        distance_matrix = self.load_distance_matrix(dist_file)
+-
+-        port_ids = {p.id for p in ports}
+-
+-        # ensure every port exists in matrix
+-        for pid in port_ids:
+-            distance_matrix.setdefault(pid, {})
+-
+-        return {
+-            "ports": ports,
+-            "demands": demands,
+-            "distance_matrix": distance_matrix
+-        }
+-
+-    # --------------------------------
+-    # Load full problem (with fleet)
+-    # --------------------------------
+-    def load_problem(self, dataset_path=None):
+-        """Load a Problem from a JSON dataset file (legacy path used by tests).
+-
+-        This preserves the existing DEMAND_SCALE behavior for WorldLarge test
+-        compatibility while allowing WorldSmall datasets that already have
+-        correctly-scaled values.
+-        """
+-        import json
+-        from src.optimization.data import Problem
+-
+-        if dataset_path is None:
+-            dataset_path = self.data_dir.parent / "datasets" / "worldsmall_shipping_problem.json"
+-        elif isinstance(dataset_path, str):
+-            dataset_path = Path(dataset_path)
+-
+-        with open(dataset_path, encoding="utf-8") as f:
+-            data = json.load(f)
+-
+-        ports = [Port(**dict(p)) for p in data["ports"]]
+-        services = []  # Services are generated at runtime
+-        demands = [Demand(**dict(d)) for d in data["demands"]]
+-
+-        # DEMAND_SCALE: legacy test scaling for WorldLarge benchmark
+-        # WorldSmall JSON already contains correctly scaled values (FFE*2)
+-        # so this scale only applies to WorldLarge's pre-baked JSON values
+-        DEMAND_SCALE = 6
+-        for d in demands:
+-            d.weekly_teu *= DEMAND_SCALE
+-
+-        distance_matrix = self.load_distance_matrix()
+-
+-        return Problem(
+-            ports=ports,
+-            services=services,
+-            demands=demands,
+-            distance_matrix=distance_matrix,
+-        )
++"""WorldSmall network loader.
++
++Data contract (all sources live in ``data/raw/WorldSmall`` and are tab-separated
++despite the ``.csv`` extension):
++
++    ports.csv                       47 ports   (coordinates in decimal degrees)
++    Demand_WorldSmall_Fixed_Sep.csv 1764 OD rows
++                                    FFEPerWeek [FFE/week], Revenue_1 [USD/FFE]
++    dist_dense.csv                  2162 directed OD pairs, Distance [nautical miles]
++    fleet_WorldSmall.csv            vessel-class quantities (263 vessels)
++    fleet_data.csv                  per-vessel specifications
++                                    ``Capacity FFE`` is used directly as
++                                    ``capacity_teu`` (no further x2)
++
++Unit contract (FFE -> TEU; 1 FFE = 2 TEU):
++
++    quantities     FFEPerWeek [FFE/wk]  * lane factor k  -> weekly_teu [TEU/wk]
++    revenue rates  Revenue_1  [USD/FFE] / lane factor k  -> revenue_per_teu [USD/TEU]
++    port costs     CostPerFULL, CostPerFULLTrnsf, PortCallCostPerFFE [USD/FFE]
++                   / 2.0                                  -> USD/TEU
++    fixed cost     PortCallCostFixed [USD per call]       -> unchanged
++
++The same invariant holds for all per-FFE rates: ``converted TEU flow *
++converted USD/TEU == raw FFE flow * raw USD/FFE``. Per-FFE rates are always
++DIVIDED when converted to per-TEU rates, never multiplied.
++
++Canal fees: ``panamaFee`` / ``suezFee`` blank in the source means "no value
++given", loaded as ``None`` (not 0.0). A blank fee is neither a confirmed zero
++fee nor evidence about transit feasibility.
++
++Default paths are explicit and never fall back to another dataset or to a
++similarly named file: a missing required file raises ``FileNotFoundError``.
++
++Explicit paths are validated, not trusted: a path inside the managed raw-data
++tree but outside ``data/raw/WorldSmall`` is rejected, and a file whose
++identifiers mix WorldSmall ports with foreign ports is rejected. Dataset
++identity is decided from location and content, never from a file name.
++Files outside the raw-data tree (e.g. isolated test fixtures) are accepted
++when they are self-consistent.
++"""
++
++import csv
++import json
++import logging
++import math
++from pathlib import Path
++
++import pandas as pd
++
++from src.optimization.data import Port, Demand, Fleet, FleetClass
++
++logger = logging.getLogger(__name__)
++
++# --------------------------------
++# Canonical WorldSmall sources
++# --------------------------------
++RAW_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "raw"
++WORLDSMALL_DIR = RAW_DATA_DIR / "WorldSmall"
++
++WORLDSMALL_FILES = {
++    "ports": WORLDSMALL_DIR / "ports.csv",
++    "demand": WORLDSMALL_DIR / "Demand_WorldSmall_Fixed_Sep.csv",
++    "distance": WORLDSMALL_DIR / "dist_dense.csv",
++    "fleet": WORLDSMALL_DIR / "fleet_WorldSmall.csv",
++    "fleet_data": WORLDSMALL_DIR / "fleet_data.csv",
++}
++
++# --------------------------------
++# Unit conversions and scaling
++# --------------------------------
++# FFE -> TEU. Quantities are multiplied by the lane factor and revenue rates
++# are divided by it, so that weekly_teu * revenue_per_teu == FFEPerWeek * Revenue_1.
++DEFAULT_FFE_TO_TEU = 2.0
++
++# Trade lane specific FFE to TEU conversion factors (based on typical cargo mix).
++FFE_TO_TEU_LANE_FACTORS = {
++    # Asia-Europe: Higher ratio of 40' containers (2.1)
++    "AEJEA-GBSOU": 2.1, "AEJEA-DEHAM": 2.1, "AEJEA-NLRTM": 2.1, "AEJEA-ITGOA": 2.1,
++    "CNSHA-GBSOU": 2.1, "CNSHA-DEHAM": 2.1, "CNSHA-NLRTM": 2.1, "CNSHA-ITGOA": 2.1,
++
++    # Transpacific: Balanced mix (1.85)
++    "CNSHA-USLAX": 1.85, "CNSHA-USAOS": 1.85, "CNSHA-USSEA": 1.85, "CNSHA-USA NY": 1.85,
++    "JPTYO-USLAX": 1.85, "JPTYO-USAOS": 1.85, "JPTYO-USSEA": 1.85, "JPTYO-USA NY": 1.85,
++
++    # Transatlantic: More 20' containers (1.75)
++    "USLAX-GBSOU": 1.75, "USAOS-GBSOU": 1.75, "USNYC-DEHAM": 1.75, "USNYC-NLRTM": 1.75,
++
++    # Intra-Asia: High 40' usage (2.0)
++    "CNSHA-JPTYO": 2.0, "CNSHA-SGSGP": 2.0, "JPTYO-KRPUS": 2.0,
++
++    # Latin America: Mixed (1.9)
++    "BRSSZ-USLAX": 1.9, "BRSSZ-USAOS": 1.9, "MXVER-CNSHA": 1.9,
++}
++
++# Demand scaling is dataset specific. WorldSmall is never scaled beyond the
++# FFE -> TEU conversion; the legacy multiplier below belongs to WorldLarge.
++WORLDSMALL_DEMAND_SCALE = 1
++LEGACY_WORLDLARGE_DEMAND_SCALE = 6
++
++# 1 FFE = 2 TEU. The port cost columns are priced per FFE ("per FULL" container,
++# USD/FFE; see DATA_DICTIONARY: model fields are USD/TEU), so a per-FFE rate is
++# DIVIDED by this factor to obtain the per-TEU rate -- the same direction as
++# Revenue_1. It is a property of the unit, not of the lane, so the lane-specific
++# revenue factors do not apply to port costs.
++TEU_PER_FFE = 2.0
++
++_PORT_REQUIRED = [
++    "unlocode", "name", "latitude", "longitude", "draft",
++    "costperfull", "costperfulltrnsf", "portcallcostfixed", "portcallcostperffe",
++]
++_DEMAND_REQUIRED = ["Origin", "Destination", "FFEPerWeek", "Revenue_1"]
++_DISTANCE_REQUIRED = ["fromunlocode", "tounlocode", "distance"]
++_FLEET_QTY_REQUIRED = ["Vessel class", "Quantity"]
++_FLEET_SPEC_REQUIRED = [
++    "Vessel class", "Capacity FFE", "TC rate daily (fixed Cost)", "draft",
++    "minSpeed", "maxSpeed", "designSpeed",
++    "Bunker ton per day at designSpeed", "Idle Consumption ton/day",
++]
++
++
++class DataValidationError(ValueError):
++    """A WorldSmall input file violates its schema or data contract."""
++
++
++# --------------------------------
++# Public helpers
++# --------------------------------
++def ffe_to_teu_factor(origin, destination):
++    """FFE -> TEU factor for an OD lane (lane specific, default 2.0)."""
++    return FFE_TO_TEU_LANE_FACTORS.get(f"{origin}-{destination}", DEFAULT_FFE_TO_TEU)
++
++
++def demand_scale_for_dataset(dataset_name):
++    """Explicit, dataset-specific demand scale.
++
++    WorldSmall is never scaled (1). Anything else keeps the legacy WorldLarge
++    multiplier of 6, which is applied by the WorldLarge benchmark only.
++    """
++    if "worldsmall" in str(dataset_name).lower():
++        return WORLDSMALL_DEMAND_SCALE
++    return LEGACY_WORLDLARGE_DEMAND_SCALE
++
++
++# --------------------------------
++# Parsing / validation helpers
++# --------------------------------
++def _clean_name(name):
++    """Strip whitespace, BOM and surrounding quote characters from a header."""
++    s = str(name).replace("﻿", "")
++    while True:
++        t = s.strip().strip("\"'").strip()
++        if t == s:
++            return t
++        s = t
++
++
++def _strip_columns(columns, source, lower=False):
++    """Normalize column names; refuse to let normalization merge two columns."""
++    cleaned = [_clean_name(c) for c in columns]
++    if lower:
++        cleaned = [c.lower() for c in cleaned]
++
++    if any(c == "" for c in cleaned):
++        raise DataValidationError(f"{source}: empty column name in header {list(columns)}")
++
++    seen, dupes = set(), []
++    for c in cleaned:
++        if c in seen and c not in dupes:
++            dupes.append(c)
++        seen.add(c)
++    if dupes:
++        raise DataValidationError(
++            f"{source}: duplicate column names after normalization: {dupes} "
++            f"(raw header: {list(columns)})"
++        )
++    return cleaned
++
++
++def _read_table(path, required, lower_columns=False):
++    """Read a tab-separated WorldSmall table as strings, validating its header."""
++    path = Path(path)
++    name = path.name
++
++    try:
++        with open(path, newline="", encoding="utf-8-sig") as fh:
++            header = next(csv.reader(fh, delimiter="\t"), None)
++    except UnicodeDecodeError as exc:
++        raise DataValidationError(f"{name}: not valid UTF-8 text: {exc}") from exc
++    if not header:
++        raise DataValidationError(f"{name}: file is empty (no header row)")
++
++    columns = _strip_columns(header, name, lower=lower_columns)
++    missing = [c for c in required if c not in columns]
++    if missing:
++        hint = ""
++        if len(columns) == 1:
++            hint = " (only one column found - the file must be tab-separated)"
++        raise DataValidationError(
++            f"{name}: missing required column(s) {missing}; found {columns}{hint}"
++        )
++
++    try:
++        df = pd.read_csv(
++            path, sep="\t", dtype=str, na_filter=False, encoding="utf-8-sig",
++            header=0, names=columns, index_col=False,
++        )
++    except (pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
++        raise DataValidationError(f"{name}: malformed tab-separated data: {exc}") from exc
++
++    df = df.fillna("")
++    for c in df.columns:
++        df[c] = df[c].str.strip()
++    if df.empty:
++        raise DataValidationError(f"{name}: no data rows")
++    return df
++
++
++def _number(value, source, column, label):
++    """Parse a finite float, naming file / column / record on failure."""
++    try:
++        v = float(value)
++    except (TypeError, ValueError):
++        raise DataValidationError(
++            f"{source}: column '{column}' at {label}: non-numeric value {value!r}"
++        ) from None
++    if not math.isfinite(v):
++        raise DataValidationError(
++            f"{source}: column '{column}' at {label}: non-finite value {value!r}"
++        )
++    return v
++
++
++def _non_negative(value, source, column, label):
++    v = _number(value, source, column, label)
++    if v < 0:
++        raise DataValidationError(
++            f"{source}: column '{column}' at {label}: negative value {value!r}"
++        )
++    return v
++
++
++def _positive(value, source, column, label):
++    v = _non_negative(value, source, column, label)
++    if v <= 0:
++        raise DataValidationError(
++            f"{source}: column '{column}' at {label}: value must be > 0, got {value!r}"
++        )
++    return v
++
++
++def _identifier(value, source, column, label):
++    if not value:
++        raise DataValidationError(f"{source}: column '{column}' at {label}: blank identifier")
++    return value
++
++
++class NetworkLoader:
++
++    def __init__(self, data_dir="data"):
++
++        # ``data_dir`` is accepted for backward compatibility; paths are fixed.
++        self.data_dir = RAW_DATA_DIR
++        self.worldsmall_dir = WORLDSMALL_DIR
++
++        # Populated by every load_* call: counts, totals and exclusions.
++        self.validation_report = {}
++
++        # Canonical WorldSmall port identifiers (lazy; see _worldsmall_port_ids).
++        self._ws_port_ids = None
++
++    # --------------------------------
++    # Path resolution (explicit, no fallback)
++    # --------------------------------
++    def _resolve(self, key, explicit, description):
++        path = WORLDSMALL_FILES[key] if explicit is None else Path(explicit)
++        if not path.is_file():
++            raise FileNotFoundError(
++                f"Required WorldSmall {description} file not found: {path}. "
++                f"No fallback to another dataset or file is attempted; restore the file "
++                f"or pass an explicit path."
++            )
++        if explicit is not None:
++            self._reject_foreign_location(path, description)
++        return path
++
++    # --------------------------------
++    # Dataset boundary for explicit paths
++    # --------------------------------
++    @staticmethod
++    def _reject_foreign_location(path, description):
++        """Reject a file that lives in the managed raw-data tree but not in WorldSmall.
++
++        Decided from the resolved location only, so a WorldLarge file cannot be
++        passed off as WorldSmall by its name. Locations outside the raw-data tree
++        (isolated fixtures) are not judged here; see ``_check_dataset_identity``.
++        """
++        resolved = Path(path).resolve()
++        raw_root = RAW_DATA_DIR.resolve()
++        ws_root = WORLDSMALL_DIR.resolve()
++        if resolved.is_relative_to(raw_root) and not resolved.is_relative_to(ws_root):
++            raise DataValidationError(
++                f"{Path(path).name}: {description} file {resolved} is inside the raw-data "
++                f"tree but not inside {ws_root}; this loader reads only WorldSmall and will "
++                f"not load or combine another dataset (e.g. WorldLarge)."
++            )
++
++    def _worldsmall_port_ids(self):
++        """Port identifiers of the canonical WorldSmall ports file (read once)."""
++        if self._ws_port_ids is None:
++            ref = Path(WORLDSMALL_FILES["ports"])
++            if not ref.is_file():
++                raise FileNotFoundError(
++                    f"Canonical WorldSmall ports file not found: {ref}; it is required "
++                    f"to establish dataset identity for explicit paths."
++                )
++            df = _read_table(ref, _PORT_REQUIRED, lower_columns=True)
++            self._ws_port_ids = frozenset(df["unlocode"])
++        return self._ws_port_ids
++
++    def _check_dataset_identity(self, path, kind, ids, source):
++        """Reject an explicit file whose identifiers mix WorldSmall and foreign ports.
++
++        * every identifier is a WorldSmall port  -> WorldSmall (or a subset)
++        * no identifier is a WorldSmall port     -> isolated fixture, accepted
++        * some are and some are not              -> a different dataset presented
++                                                    as WorldSmall (or a corrupted
++                                                    one); rejected.
++
++        Canonical files are exempt (they define the reference).
++        """
++        if Path(path).resolve() == Path(WORLDSMALL_FILES[kind]).resolve():
++            return
++        ws = self._worldsmall_port_ids()
++        ids = set(ids)
++        known, foreign = ids & ws, ids - ws
++        if known and foreign:
++            raise DataValidationError(
++                f"{source}: {kind} file mixes {len(known)} WorldSmall port ids with "
++                f"{len(foreign)} ids outside the WorldSmall port set "
++                f"(e.g. {sorted(foreign)[:5]}); a non-WorldSmall dataset cannot be "
++                f"loaded as WorldSmall."
++            )
++
++    # --------------------------------
++    # Load ports
++    # --------------------------------
++    def load_ports(self, ports_file=None):
++
++        path = self._resolve("ports", ports_file, "ports")
++        src = path.name
++        df = _read_table(path, _PORT_REQUIRED, lower_columns=True)
++
++        ports = []
++        excluded = []
++        first_seen = {}
++
++        for n, row in enumerate(df.to_dict("records"), start=1):
++
++            pid = _identifier(row["unlocode"], src, "UNLocode", f"row {n}")
++            label = f"row {n} ({pid})"
++
++            if pid in first_seen:
++                raise DataValidationError(
++                    f"{src}: duplicate port identifier {pid!r} at row {n} "
++                    f"(first seen at row {first_seen[pid]})"
++                )
++            first_seen[pid] = n
++
++            # Ports with unusable coordinates are excluded from the network,
++            # visibly: logged and listed in the validation report.
++            reason = None
++            lat = lon = None
++            try:
++                lat = _number(row["latitude"], src, "Latitude", label)
++                lon = _number(row["longitude"], src, "Longitude", label)
++                if not -90.0 <= lat <= 90.0:
++                    reason = f"latitude {lat} outside [-90, 90]"
++                elif not -180.0 <= lon <= 180.0:
++                    reason = f"longitude {lon} outside [-180, 180]"
++            except DataValidationError as exc:
++                reason = str(exc).split(": ", 1)[-1]
++            if reason is not None:
++                logger.warning("%s: port %s excluded - %s", src, pid, reason)
++                excluded.append({"id": pid, "row": n, "reason": reason})
++                continue
++
++            name = row["name"]
++            if not name:
++                raise DataValidationError(f"{src}: column 'name' at {label}: blank port name")
++
++            ports.append(
++                Port(
++                    id=pid,
++                    name=name,
++                    latitude=lat,
++                    longitude=lon,
++                    handling_cost=_non_negative(row["costperfull"], src, "CostPerFULL", label)
++                    / TEU_PER_FFE,
++                    draft=_non_negative(row["draft"], src, "Draft", label),
++                    port_call_cost=_non_negative(
++                        row["portcallcostfixed"], src, "PortCallCostFixed", label
++                    ),
++                    transshipment_cost=_non_negative(
++                        row["costperfulltrnsf"], src, "CostPerFULLTrnsf", label
++                    ) / TEU_PER_FFE,
++                    variable_port_call_cost=_non_negative(
++                        row["portcallcostperffe"], src, "PortCallCostPerFFE", label
++                    ) / TEU_PER_FFE,
++                )
++            )
++
++        self._check_dataset_identity(
++            path, "ports", {pid for pid in df["unlocode"]}, src
++        )
++
++        self.validation_report["ports"] = {
++            "source": str(path),
++            "rows": len(df),
++            "loaded": len(ports),
++            "excluded": excluded,
++            "cost_basis": f"per-FFE columns divided by {TEU_PER_FFE} (USD/FFE -> USD/TEU)",
++        }
++        return ports
++
++    # --------------------------------
++    # Load demand
++    # --------------------------------
++    def load_demands(self, demand_file=None):
++        """Load OD demand, converting FFE to TEU without changing gross revenue.
++
++        weekly_teu      = FFEPerWeek * k
++        revenue_per_teu = Revenue_1 / k      (Revenue_1 is USD per FFE)
++
++        so weekly_teu * revenue_per_teu == FFEPerWeek * Revenue_1 per lane.
++        No dataset-level demand scaling is applied.
++        """
++        path = self._resolve("demand", demand_file, "demand")
++        src = path.name
++        df = _read_table(path, _DEMAND_REQUIRED)
++
++        demands = []
++        seen = {}
++        self_loops = 0
++        raw_ffe = raw_gross = 0.0
++
++        for n, row in enumerate(df.to_dict("records"), start=1):
++
++            origin = _identifier(row["Origin"], src, "Origin", f"row {n}")
++            dest = _identifier(row["Destination"], src, "Destination", f"row {n}")
++            label = f"row {n} ({origin}->{dest})"
++
++            ffe = _non_negative(row["FFEPerWeek"], src, "FFEPerWeek", label)
++            revenue_per_ffe = _non_negative(row["Revenue_1"], src, "Revenue_1", label)
++
++            if origin == dest:
++                self_loops += 1
++                logger.warning("%s: %s skipped - origin equals destination", src, label)
++                continue
++
++            if (origin, dest) in seen:
++                raise DataValidationError(
++                    f"{src}: duplicate OD pair {origin}->{dest} at row {n} "
++                    f"(first seen at row {seen[(origin, dest)]})"
++                )
++            seen[(origin, dest)] = n
++
++            k = ffe_to_teu_factor(origin, dest)
++
++            demands.append(
++                Demand(
++                    origin=origin,
++                    destination=dest,
++                    weekly_teu=ffe * k,
++                    revenue_per_teu=revenue_per_ffe / k,
++                )
++            )
++            raw_ffe += ffe
++            raw_gross += ffe * revenue_per_ffe
++
++        self._check_dataset_identity(
++            path, "demand", {i for o, d in seen for i in (o, d)}, src
++        )
++
++        self.validation_report["demands"] = {
++            "source": str(path),
++            "rows": len(df),
++            "loaded": len(demands),
++            "self_loops_skipped": self_loops,
++            "demand_scale": WORLDSMALL_DEMAND_SCALE,
++            "raw_weekly_ffe": raw_ffe,
++            "converted_weekly_teu": sum(d.weekly_teu for d in demands),
++            "raw_gross_revenue_usd_per_week": raw_gross,
++            "converted_gross_revenue_usd_per_week": sum(
++                d.weekly_teu * d.revenue_per_teu for d in demands
++            ),
++        }
++        return demands
++
++    # --------------------------------
++    # Load distance matrix
++    # --------------------------------
++    def load_distance_matrix(self, dist_file=None):
++        """Load directed distances in nautical miles as ``matrix[origin][dest]``.
++
++        Directions are kept separate; d(A,B) is never assumed to equal d(B,A).
++        """
++        path = self._resolve("distance", dist_file, "distance")
++        src = path.name
++        df = _read_table(path, _DISTANCE_REQUIRED, lower_columns=True)
++
++        matrix = {}
++        seen = {}
++
++        for n, row in enumerate(df.to_dict("records"), start=1):
++
++            o = _identifier(row["fromunlocode"], src, "fromUNLOCODe", f"row {n}")
++            d = _identifier(row["tounlocode"], src, "ToUNLOCODE", f"row {n}")
++            label = f"row {n} ({o}->{d})"
++
++            dist = _non_negative(row["distance"], src, "Distance", label)
++            if o != d and dist == 0:
++                raise DataValidationError(
++                    f"{src}: column 'Distance' at {label}: zero distance between distinct ports"
++                )
++
++            if (o, d) in seen:
++                first_row, first_val = seen[(o, d)]
++                kind = "conflicting" if first_val != dist else "repeated"
++                raise DataValidationError(
++                    f"{src}: duplicate directed pair {o}->{d} at row {n} "
++                    f"({kind} distance {first_val} vs {dist}; first seen at row {first_row})"
++                )
++            seen[(o, d)] = (n, dist)
++
++            matrix.setdefault(o, {})
++            matrix[o][d] = dist
++
++        self._check_dataset_identity(
++            path, "distance", {i for o, d in seen for i in (o, d)}, src
++        )
++
++        self.validation_report["distances"] = {
++            "source": str(path),
++            "unit": "nautical miles",
++            "directed_pairs": len(seen),
++        }
++        return matrix
++
++    # --------------------------------
++    # Load fleet
++    # --------------------------------
++    def load_fleet(self, fleet_file=None, fleet_data_file=None):
++        """Load fleet from CSV files into Fleet dataclass.
++
++        Args:
++            fleet_file: Path to vessel class quantities CSV (default fleet_WorldSmall.csv)
++                       Expected columns: Vessel class, Quantity
++            fleet_data_file: Path to vessel specifications CSV (default fleet_data.csv)
++                            Expected columns: Vessel class, Capacity FFE, TC rate daily (fixed Cost),
++                                             draft, minSpeed, maxSpeed, designSpeed,
++                                             Bunker ton per day at designSpeed, Idle Consumption ton/day,
++                                             panamaFee, suezFee
++
++        ``Capacity FFE`` is already the per-vessel capacity used as TEU in the
++        project's model and is NOT multiplied again. Quantities and
++        specifications must describe exactly the same set of vessel classes.
++
++        Returns:
++            Fleet instance with classes populated from both files.
++        """
++        qty_path = self._resolve("fleet", fleet_file, "fleet quantity")
++        spec_path = self._resolve("fleet_data", fleet_data_file, "fleet specification")
++
++        # Load quantities
++        qty_src = qty_path.name
++        qty_df = _read_table(qty_path, _FLEET_QTY_REQUIRED)
++        qty_map = {}
++        for n, row in enumerate(qty_df.to_dict("records"), start=1):
++            cls_name = _identifier(row["Vessel class"], qty_src, "Vessel class", f"row {n}")
++            label = f"row {n} ({cls_name})"
++            if cls_name in qty_map:
++                raise DataValidationError(
++                    f"{qty_src}: duplicate vessel class {cls_name!r} at row {n}"
++                )
++            q = _non_negative(row["Quantity"], qty_src, "Quantity", label)
++            if q != int(q):
++                raise DataValidationError(
++                    f"{qty_src}: column 'Quantity' at {label}: not an integer: {row['Quantity']!r}"
++                )
++            qty_map[cls_name] = int(q)
++
++        # Load specifications
++        spec_src = spec_path.name
++        spec_df = _read_table(spec_path, _FLEET_SPEC_REQUIRED)
++        spec_map = {}
++        fee_blank = {}   # class -> canal fee columns left blank in the source
++        for n, row in enumerate(spec_df.to_dict("records"), start=1):
++            cls_name = _identifier(row["Vessel class"], spec_src, "Vessel class", f"row {n}")
++            label = f"row {n} ({cls_name})"
++            if cls_name in spec_map:
++                raise DataValidationError(
++                    f"{spec_src}: duplicate vessel class {cls_name!r} at row {n} "
++                    f"(conflicting specifications)"
++                )
++
++            spec = {
++                # "Capacity FFE" is used as TEU capacity as-is (no x2).
++                "capacity_teu": _positive(row["Capacity FFE"], spec_src, "Capacity FFE", label),
++                "tc_rate_daily": _non_negative(
++                    row["TC rate daily (fixed Cost)"], spec_src, "TC rate daily (fixed Cost)", label
++                ),
++                "draft": _positive(row["draft"], spec_src, "draft", label),
++                "min_speed": _positive(row["minSpeed"], spec_src, "minSpeed", label),
++                "max_speed": _positive(row["maxSpeed"], spec_src, "maxSpeed", label),
++                "design_speed": _positive(row["designSpeed"], spec_src, "designSpeed", label),
++                "bunker_consumption_tons_per_day": _non_negative(
++                    row["Bunker ton per day at designSpeed"], spec_src,
++                    "Bunker ton per day at designSpeed", label,
++                ),
++                "idle_consumption_tons_per_day": _non_negative(
++                    row["Idle Consumption ton/day"], spec_src, "Idle Consumption ton/day", label
++                ),
++            }
++            if not spec["min_speed"] <= spec["design_speed"] <= spec["max_speed"]:
++                raise DataValidationError(
++                    f"{spec_src}: {label}: speeds must satisfy minSpeed <= designSpeed <= maxSpeed "
++                    f"(got {spec['min_speed']}, {spec['design_speed']}, {spec['max_speed']})"
++                )
++            # Optional fee columns. A blank cell is "no value given" (None): it is
++            # not a confirmed 0.0 fee and says nothing about transit feasibility.
++            for col, key in (("panamaFee", "panama_fee"), ("suezFee", "suez_fee")):
++                raw = row.get(col, "")
++                if raw == "":
++                    spec[key] = None
++                    fee_blank.setdefault(cls_name, []).append(col)
++                else:
++                    spec[key] = _non_negative(raw, spec_src, col, label)
++            spec_map[cls_name] = spec
++
++        # Class identifiers must agree across both files.
++        no_spec = [c for c in qty_map if c not in spec_map]
++        no_qty = [c for c in spec_map if c not in qty_map]
++        if no_spec or no_qty:
++            raise DataValidationError(
++                f"{qty_src} / {spec_src}: vessel classes do not match; "
++                f"classes without specifications: {no_spec}; "
++                f"classes without quantities: {no_qty}"
++            )
++
++        # Combine into Fleet
++        classes = []
++        for cls_name, qty in qty_map.items():
++            specs = spec_map[cls_name]
++            fc = FleetClass(
++                vessel_class=cls_name,
++                quantity=qty,
++                capacity_teu=specs["capacity_teu"],
++                tc_rate_daily=specs["tc_rate_daily"],
++                draft=specs["draft"],
++                min_speed=specs["min_speed"],
++                max_speed=specs["max_speed"],
++                design_speed=specs["design_speed"],
++                bunker_consumption_tons_per_day=specs["bunker_consumption_tons_per_day"],
++                idle_consumption_tons_per_day=specs["idle_consumption_tons_per_day"],
++                panama_fee=specs["panama_fee"],
++                suez_fee=specs["suez_fee"],
++            )
++            classes.append(fc)
++
++        self.validation_report["fleet"] = {
++            "quantity_source": str(qty_path),
++            "specification_source": str(spec_path),
++            "classes": len(classes),
++            "total_vessels": sum(c.quantity for c in classes),
++            # Blank canal fees are unknown (None), never an implied 0.0 or a
++            # statement about whether the class may transit the canal.
++            "canal_fee_blank": fee_blank,
++        }
++        return Fleet(classes=classes)
++
++    # --------------------------------
++    # Cross-file validation
++    # --------------------------------
++    def validate_network(self, ports, demands, distance_matrix):
++        """Check demand and distance records against the loaded WorldSmall port set.
++
++        Raises DataValidationError if a demand or distance record references an
++        unknown port, or if any directed pair of distinct ports has no distance.
++        """
++        port_ids = {p.id for p in ports}
++
++        bad_demand = sorted(
++            {i for d in demands for i in (d.origin, d.destination) if i not in port_ids}
++        )
++        if bad_demand:
++            raise DataValidationError(
++                f"demand references ports not in the WorldSmall port set: {bad_demand[:10]}"
++            )
++
++        bad_dist = sorted(
++            {i for o, row in distance_matrix.items() for i in (o, *row) if i not in port_ids}
++        )
++        if bad_dist:
++            raise DataValidationError(
++                f"distance matrix references ports not in the WorldSmall port set: {bad_dist[:10]}"
++            )
++
++        missing = [
++            (o, d) for o in sorted(port_ids) for d in sorted(port_ids)
++            if o != d and d not in distance_matrix.get(o, {})
++        ]
++        if missing:
++            raise DataValidationError(
++                f"{len(missing)} directed port pair(s) have no distance, e.g. {missing[:5]}; "
++                f"no synthetic distance is substituted"
++            )
++
++        return {"ports": len(port_ids), "demands": len(demands),
++                "directed_pairs": sum(len(r) for r in distance_matrix.values())}
++
++    # --------------------------------
++    # MAIN LOADER
++    # --------------------------------
++    def load_network(self, ports_file=None, demand_file=None, dist_file=None):
++
++        ports = self.load_ports(ports_file)
++        demands = self.load_demands(demand_file)
++        distance_matrix = self.load_distance_matrix(dist_file)
++
++        self.validate_network(ports, demands, distance_matrix)
++
++        port_ids = {p.id for p in ports}
++
++        # ensure every port exists in matrix
++        for pid in port_ids:
++            distance_matrix.setdefault(pid, {})
++
++        return {
++            "ports": ports,
++            "demands": demands,
++            "distance_matrix": distance_matrix
++        }
++
++    # --------------------------------
++    # Load full problem (with fleet)
++    # --------------------------------
++    def load_problem(self, dataset_path=None):
++        """Load a Problem.
++
++        With no argument the Problem is built from the canonical WorldSmall CSV
++        sources (demand scale 1, fleet from fleet_WorldSmall.csv / fleet_data.csv).
++
++        An explicit JSON dataset path is still accepted for WorldSmall datasets
++        only; the demand scale is chosen per dataset (see demand_scale_for_dataset)
++        and never inherited from WorldLarge. Distances always come from the
++        WorldSmall distance file, so a non-WorldSmall dataset is rejected
++        instead of being mixed with WorldSmall distances.
++        """
++        from src.optimization.data import Problem
++
++        if dataset_path is None:
++            network = self.load_network()
++            return Problem(
++                ports=network["ports"],
++                services=[],  # Services are generated at runtime
++                demands=network["demands"],
++                distance_matrix=network["distance_matrix"],
++                fleet=self.load_fleet(),
++            )
++
++        dataset_path = Path(dataset_path)
++        # The file name is only a first, cheap gate. Dataset identity is
++        # established from content below: a WorldLarge dataset that is merely
++        # named like a WorldSmall one is rejected there.
++        demand_scale = demand_scale_for_dataset(dataset_path.name)
++        if demand_scale != WORLDSMALL_DEMAND_SCALE:
++            raise DataValidationError(
++                f"{dataset_path.name}: not a WorldSmall dataset. This loader reads only "
++                f"data/raw/WorldSmall and will not combine other datasets with WorldSmall distances."
++            )
++        self._reject_foreign_location(dataset_path, "dataset")
++
++        with open(dataset_path, encoding="utf-8") as f:
++            data = json.load(f)
++
++        ports = [Port(**dict(p)) for p in data["ports"]]
++        services = []  # Services are generated at runtime
++        demands = [Demand(**dict(d)) for d in data["demands"]]
++
++        for d in demands:
++            d.weekly_teu *= demand_scale
++
++        name = dataset_path.name
++        if not ports or not demands:
++            raise DataValidationError(f"{name}: dataset has no ports or no demands")
++        foreign = sorted({p.id for p in ports} - self._worldsmall_port_ids())
++        if foreign:
++            raise DataValidationError(
++                f"{name}: {len(foreign)} port(s) are outside the WorldSmall port set "
++                f"(e.g. {foreign[:5]}); a non-WorldSmall dataset cannot be loaded as "
++                f"WorldSmall and is never combined with WorldSmall distances."
++            )
++
++        distance_matrix = self.load_distance_matrix()
++        self.validate_network(ports, demands, distance_matrix)
++        self._require_canonical_equivalence(name, ports, demands)
++
++        return Problem(
++            ports=ports,
++            services=services,
++            demands=demands,
++            distance_matrix=distance_matrix,
++            fleet=self.load_fleet(),  # WorldSmall fleet; never the legacy fleet_size=300
++        )
++
++    def _require_canonical_equivalence(self, source, ports, demands):
++        """An explicit dataset must reproduce the canonical WorldSmall numbers.
++
++        Port cost rates and per-OD quantities / gross revenue are compared with
++        the canonical CSV load. A dataset with a different unit basis (e.g. a
++        legacy x2 port cost, or revenue multiplied by the FFE->TEU factor) is
++        rejected instead of silently changing the economics.
++        """
++        canon_ports = {p.id: p for p in self.load_ports()}
++        canon_dem = {(d.origin, d.destination): d for d in self.load_demands()}
++        issues = []
++
++        for p in ports:
++            c = canon_ports[p.id]
++            for f in ("handling_cost", "port_call_cost", "transshipment_cost",
++                      "variable_port_call_cost"):
++                a, b = getattr(p, f), getattr(c, f)
++                if not math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9):
++                    issues.append(f"port {p.id} {f}: dataset {a} vs canonical {b}")
++
++        for d in demands:
++            c = canon_dem.get((d.origin, d.destination))
++            if c is None:
++                issues.append(f"demand {d.origin}->{d.destination} not in canonical source")
++                continue
++            if not math.isclose(d.weekly_teu, c.weekly_teu, rel_tol=1e-9, abs_tol=1e-9):
++                issues.append(
++                    f"demand {d.origin}->{d.destination} weekly_teu: "
++                    f"dataset {d.weekly_teu} vs canonical {c.weekly_teu}"
++                )
++            g, cg = d.weekly_teu * d.revenue_per_teu, c.weekly_teu * c.revenue_per_teu
++            if not math.isclose(g, cg, rel_tol=1e-9, abs_tol=1e-6):
++                issues.append(
++                    f"demand {d.origin}->{d.destination} gross revenue: "
++                    f"dataset {g} vs canonical {cg}"
++                )
++
++        if issues:
++            raise DataValidationError(
++                f"{source}: dataset disagrees with the canonical WorldSmall sources on "
++                f"{len(issues)} value(s); e.g. {issues[:3]}. Regenerate it from "
++                f"data/raw/WorldSmall or load the CSV sources directly."
++            )
+diff --git a/src/optimization/data.py b/src/optimization/data.py
+index 4eb9aba..1f89e02 100644
+--- a/src/optimization/data.py
++++ b/src/optimization/data.py
+@@ -1,9 +1,18 @@
+ from dataclasses import dataclass, field
+-from typing import List, Dict
++from typing import List, Dict, Optional
+ 
+ 
+ @dataclass
+ class Port:
++    """A port node. All monetary fields are USD; per-unit fields are per TEU.
++
++    Units (shared contract, see reports/task2_shared_contracts):
++        handling_cost            USD per TEU moved (one load OR one discharge)
++        port_call_cost           USD per vessel call (fixed)
++        transshipment_cost       USD per TEU transshipped
++        variable_port_call_cost  USD per TEU handled in a call
++        draft                    metres
++    """
+     id: str  # Changed from int to str to match JSON data
+     name: str
+     latitude: float
+@@ -17,6 +26,20 @@ class Port:
+ 
+ @dataclass
+ class Service:
++    """A candidate liner service.
++
++    Units / time basis (shared contract):
++        ports       ordered call sequence of Port ids
++        capacity    TEU carried by ONE vessel on ONE sailing
++        weekly_cost USD per week for ONE vessel deployed on this service
++        cycle_time  days for one vessel to complete the rotation
++        speed       knots
++        fuel_cost   USD per week (informational; optimisers recompute it)
++
++    A service has no frequency / vessel-count field: those are decision
++    variables carried in the optimiser chromosome ("frequencies"), expressed
++    as sailings per week.
++    """
+     id: str  # Globally unique service identifier (e.g., "asia_svc_001")
+     ports: List[str]  # Changed to str to match Port IDs
+     capacity: float
+@@ -34,6 +57,11 @@ class Service:
+ 
+ @dataclass
+ class Demand:
++    """Weekly OD demand in TEU with its revenue rate in USD per TEU.
++
++    The loader guarantees ``weekly_teu * revenue_per_teu`` equals the source
++    ``FFEPerWeek * Revenue_1`` (gross USD per week) for every OD pair.
++    """
+     origin: str  # Changed to str to match Port IDs
+     destination: str  # Changed to str
+     weekly_teu: float
+@@ -42,7 +70,16 @@ class Demand:
+ 
+ @dataclass
+ class FleetClass:
+-    """A single vessel class with quantity and specifications."""
++    """A single vessel class with quantity and specifications.
++
++    Units: capacity_teu [TEU/vessel], tc_rate_daily [USD/day/vessel],
++    draft [m], *_speed [knots], *_consumption_tons_per_day [metric t/day],
++    panama_fee / suez_fee [USD per transit].
++
++    ``panama_fee`` / ``suez_fee`` are ``None`` when the source cell is blank:
++    "no value given" is NOT the same as a confirmed fee of 0.0, and a blank
++    fee must never be read as free or as feasible transit.
++    """
+     vessel_class: str
+     quantity: int
+     capacity_teu: float = 0.0
+@@ -53,8 +90,8 @@ class FleetClass:
+     design_speed: float = 0.0
+     bunker_consumption_tons_per_day: float = 0.0
+     idle_consumption_tons_per_day: float = 0.0
+-    panama_fee: float = 0.0
+-    suez_fee: float = 0.0
++    panama_fee: Optional[float] = None
++    suez_fee: Optional[float] = None
+ 
+     @property
+     def total_vessels(self) -> int:
+diff --git a/src/utils/fuel_cost.py b/src/utils/fuel_cost.py
+index 2cc1943..4e87740 100644
+--- a/src/utils/fuel_cost.py
++++ b/src/utils/fuel_cost.py
+@@ -7,16 +7,55 @@ Implements voyage fuel cost based on:
+ - Bunker fuel prices
+ 
+ Based on industry standard consumption figures.
++
++Unit / time-basis contract
++--------------------------
++    distance           nautical miles (nm)
++    speed              knots (nm per hour)
++    consumption        metric tonnes of bunker per sailing day
++    price              USD per metric tonne
++    voyage cost        USD for sailing the given distance once
++    weekly cost        USD per week for ONE vessel sailing the given route as a
++                       rotation of ``cycle_time_days`` days
++
++The route is used exactly as given: consecutive ports are legs; the function
++does not add a closing leg, so a caller that models a rotation must include the
++return leg. A leg between two identical ports is a zero-length leg. A leg
++between two distinct ports with no entry in the distance matrix is an error
++(``MissingDistanceError``): no synthetic distance is ever substituted. An
++unknown vessel class is an error (``UnknownVesselClassError``): no substitute
++class is ever priced in its place. Idle (in-port) consumption is not modelled.
+ """
+ 
++import math
++import numbers
+ from typing import Dict
+ import logging
+ 
+ logger = logging.getLogger(__name__)
+ 
++
++class FuelCostError(ValueError):
++    """Invalid fuel-cost input. Subclasses ``ValueError`` so existing broad
++    handlers still observe it; it is never converted to a zero cost here."""
++
++
++class MissingDistanceError(FuelCostError):
++    """A leg between two distinct ports has no distance in the matrix."""
++
++
++class UnknownVesselClassError(FuelCostError):
++    """The vessel class has no consumption data in ``VESSEL_FUEL_CONSUMPTION``."""
++
+ # Industry standard fuel consumption by vessel class
+ # Based on 2024 maritime industry data
+ # Consumption in tons per day at service speed
++#
++# NOTE (documented defect D-FUEL-TABLE): this table is a second source of truth
++# that disagrees with data/raw/WorldSmall/fleet_data.csv (capacity for
++# Post_panamax/Super_panamax; t/day and speed for every class). The values are
++# kept unchanged here; tests/test_shared_contracts.py carries the strict-xfail
++# acceptance test for aligning them with the loaded fleet specification.
+ VESSEL_FUEL_CONSUMPTION = {
+     "Feeder_450": {
+         "capacity": 450,
+@@ -90,6 +129,28 @@ def _normalize_weather_speed_factor(value):
+         return WEATHER_SPEED_FACTOR_MAX
+     return fv
+ 
++def _require_non_negative_number(value, name: str) -> None:
++    ok = (
++        isinstance(value, numbers.Real)
++        and not isinstance(value, bool)
++        and math.isfinite(value)
++        and value >= 0
++    )
++    if not ok:
++        raise FuelCostError(f"{name} must be a finite number >= 0, got {value!r}")
++
++
++def _vessel_specs(vessel_class) -> dict:
++    """Consumption record for ``vessel_class``; never substitutes another class."""
++    try:
++        return VESSEL_FUEL_CONSUMPTION[vessel_class]
++    except (KeyError, TypeError):
++        raise UnknownVesselClassError(
++            f"unknown vessel class {vessel_class!r}; known classes: "
++            f"{sorted(VESSEL_FUEL_CONSUMPTION)}. No substitute class is assumed."
++        ) from None
++
++
+ def map_capacity_to_vessel_class(capacity: float) -> str:
+     """Map service capacity to closest vessel class"""
+ 
+@@ -131,13 +192,16 @@ def calculate_voyage_fuel_cost(
+ 
+     Returns:
+         Fuel cost in USD for the voyage
+-    """
+ 
+-    if vessel_class not in VESSEL_FUEL_CONSUMPTION:
+-        logger.warning(f"Unknown vessel class: {vessel_class}, using Post_panamax")
+-        vessel_class = "Post_panamax"
++    Raises:
++        UnknownVesselClassError: ``vessel_class`` is not in the table.
++        FuelCostError: ``distance_nm`` or ``bunker_price_per_ton`` is not a
++            finite number >= 0.
++    """
+ 
+-    specs = VESSEL_FUEL_CONSUMPTION[vessel_class]
++    _require_non_negative_number(distance_nm, "distance_nm")
++    _require_non_negative_number(bunker_price_per_ton, "bunker_price_per_ton")
++    specs = _vessel_specs(vessel_class)
+ 
+     # Calculate sailing days
+     # Assuming vessel operates at service speed 90% of time (accounting for port time)
+@@ -183,26 +247,44 @@ def calculate_weekly_fuel_cost(
+             :func:`calculate_voyage_fuel_cost` for semantics.
+ 
+     Returns:
+-        Weekly fuel cost in USD
++        Weekly fuel cost in USD for ONE vessel sailing ``service_route`` as a
++        rotation of ``cycle_time_days`` days. A route with fewer than two ports
++        has no legs and costs 0.0. The cost of N vessels / sailings per week is
++        the caller's multiplication; this function does not know it.
++
++    Raises:
++        MissingDistanceError: a leg between two distinct ports has no distance.
++        UnknownVesselClassError: ``vessel_class`` is not in the table.
++        FuelCostError: ``cycle_time_days`` is not a finite number > 0, or a
++            distance / price is invalid.
+     """
+ 
++    if (
++        not isinstance(cycle_time_days, numbers.Real)
++        or isinstance(cycle_time_days, bool)
++        or not math.isfinite(cycle_time_days)
++        or cycle_time_days <= 0
++    ):
++        raise FuelCostError(
++            f"cycle_time_days must be a finite number > 0, got {cycle_time_days!r}"
++        )
++
+     if len(service_route) < 2:
+         return 0.0
+ 
+-    # Calculate total distance for one cycle
++    # Total distance of one rotation as listed (no closing leg is added).
+     total_distance = 0.0
+ 
+-    for i in range(len(service_route) - 1):
+-        origin = service_route[i]
+-        dest = service_route[i + 1]
+-
+-        # Get distance from matrix
+-        if origin in distance_matrix and dest in distance_matrix[origin]:
++    for origin, dest in zip(service_route, service_route[1:]):
++        if origin == dest:
++            continue                      # same port twice in a row: no sailing
++        try:
+             total_distance += distance_matrix[origin][dest]
+-        else:
+-            logger.warning(f"No distance found for {origin} -> {dest}")
+-            # Use default distance if not found (500 nm for missing pairs)
+-            total_distance += 500.0
++        except (KeyError, TypeError):
++            raise MissingDistanceError(
++                f"no distance for leg {origin} -> {dest}; no synthetic distance is "
++                f"substituted (route {list(service_route)})"
++            ) from None
+ 
+     # Calculate fuel cost for one cycle
+     cycle_fuel_cost = calculate_voyage_fuel_cost(
+@@ -216,19 +298,15 @@ def calculate_weekly_fuel_cost(
+     return weekly_fuel_cost
+ 
+ def get_vessel_consumption_rate(vessel_class: str) -> float:
+-    """Get daily fuel consumption in tons for a vessel class"""
+-
+-    if vessel_class not in VESSEL_FUEL_CONSUMPTION:
+-        logger.warning(f"Unknown vessel class: {vessel_class}")
+-        return VESSEL_FUEL_CONSUMPTION["Post_panamax"]["consumption_tons_per_day"]
++    """Daily fuel consumption in metric tons for a vessel class.
+ 
+-    return VESSEL_FUEL_CONSUMPTION[vessel_class]["consumption_tons_per_day"]
++    Raises UnknownVesselClassError for a class that is not in the table.
++    """
++    return _vessel_specs(vessel_class)["consumption_tons_per_day"]
+ 
+ def get_vessel_speed(vessel_class: str) -> float:
+-    """Get service speed in knots for a vessel class"""
++    """Service speed in knots for a vessel class.
+ 
+-    if vessel_class not in VESSEL_FUEL_CONSUMPTION:
+-        logger.warning(f"Unknown vessel class: {vessel_class}")
+-        return VESSEL_FUEL_CONSUMPTION["Post_panamax"]["speed_knots"]
+-
+-    return VESSEL_FUEL_CONSUMPTION[vessel_class]["speed_knots"]
+\ No newline at end of file
++    Raises UnknownVesselClassError for a class that is not in the table.
++    """
++    return _vessel_specs(vessel_class)["speed_knots"]
+\ No newline at end of file
+diff --git a/tests/test_data_loader.py b/tests/test_data_loader.py
+index a2b906a..6ba74eb 100644
+--- a/tests/test_data_loader.py
++++ b/tests/test_data_loader.py
+@@ -28,9 +28,11 @@ def test_data_loader():
+     print(f"Demand lanes loaded: {len(demands)}")
+     print(f"Distance matrix size: {len(distance_matrix)}")
+ 
+-    assert len(ports) > 50
+-    assert len(demands) > len(ports)
+-    assert len(distance_matrix) >= len(ports)
++    # The loader's default dataset is WorldSmall (data/raw/WorldSmall); the
++    # earlier ``len(ports) > 50`` expectation described the WorldLarge defaults.
++    assert len(ports) == 47
++    assert len(demands) == 1764
++    assert len(distance_matrix) == len(ports)
+ 
+     print("\n✓ Data loader working")
+ 
+diff --git a/tests/test_economic_metric_documentation.py b/tests/test_economic_metric_documentation.py
+index babc0b8..0fbab43 100644
+--- a/tests/test_economic_metric_documentation.py
++++ b/tests/test_economic_metric_documentation.py
+@@ -222,9 +222,10 @@ def test_service_record_count_disagrees_with_headline(output):
+ def test_demand_file_is_byte_identical_to_rl_master():
+     """F-01: MA copies the LINERLIB demand file verbatim; distortion is downstream."""
+     import hashlib
+-    path = ROOT / "data" / "raw" / "demand_world_small.csv"
+-    if not path.exists():
+-        pytest.skip("WorldSmall demand file not present")
++    # Canonical WorldSmall demand file. The former flat path data/raw/demand_world_small.csv
++    # no longer exists; this file is byte-identical to it (same md5 pin below).
++    path = ROOT / "data" / "raw" / "WorldSmall" / "Demand_WorldSmall_Fixed_Sep.csv"
++    assert path.is_file(), f"canonical WorldSmall demand file missing: {path}"
+     digest = hashlib.md5(path.read_bytes()).hexdigest()
+     assert digest == "68f75334f57975c19b8a6b1a3da199ea", (
+         f"WorldSmall demand file changed (md5 {digest}); the dataset comparability "
+@@ -238,9 +239,8 @@ def test_revenue_is_four_times_the_raw_csv_product():
+     undocumented in every normative spec.
+     """
+     import csv
+-    path = ROOT / "data" / "raw" / "demand_world_small.csv"
+-    if not path.exists():
+-        pytest.skip("WorldSmall demand file not present")
++    path = ROOT / "data" / "raw" / "WorldSmall" / "Demand_WorldSmall_Fixed_Sep.csv"
++    assert path.is_file(), f"canonical WorldSmall demand file missing: {path}"
+     raw = 0.0
+     with open(path, encoding="utf-8-sig") as fh:
+         for row in csv.DictReader(fh, delimiter="\t"):
+diff --git a/tests/test_regional_agent.py b/tests/test_regional_agent.py
+index 6a47a47..e97eee4 100644
+--- a/tests/test_regional_agent.py
++++ b/tests/test_regional_agent.py
+@@ -2,7 +2,7 @@
+ Test Regional Agent
+ """
+ 
+-import json
++import math
+ import sys
+ from pathlib import Path
+ from src.data.network_loader import NetworkLoader
+@@ -10,22 +10,20 @@ from src.data.network_loader import NetworkLoader
+ sys.path.insert(0, str(Path(__file__).parent.parent))
+ 
+ from src.agents.regional_agent import RegionalAgent
+-from src.optimization.data import Problem, Port, Service, Demand
++from src.optimization.data import Problem
+ from src.utils.config import Config
+ 
+ 
+-def load_problem(filename):
++def load_problem():
++    """The canonical WorldSmall Problem (ports, demands, directed distances, fleet).
+ 
+-    with open(filename) as f:
+-        data = json.load(f)
+-
+-    ports = [Port(**p) for p in data["ports"]]
+-    services = [Service(**s) for s in data["services"]]
+-    demands = [Demand(**d) for d in data["demands"]]
+-    loader = NetworkLoader()
+-    distance_matrix = loader.load_distance_matrix()
+-
+-    return Problem(ports=ports, services=services, demands=demands, distance_matrix=distance_matrix)
++    This helper used to combine ``data/datasets/large_shipping_problem.json``
++    (WorldLarge ports and demands) with ``NetworkLoader().load_distance_matrix()``
++    -- which now returns the WorldSmall matrix -- so most legs were missing and
++    were silently priced at an invented 500 nm. A single, isolated dataset is
++    used instead.
++    """
++    return NetworkLoader().load_problem()
+ 
+ 
+ def test_regional_agent():
+@@ -40,7 +38,7 @@ def test_regional_agent():
+         model=Config.REGIONAL_MODEL
+     )
+ 
+-    problem = load_problem("data/datasets/large_shipping_problem.json")
++    problem = load_problem()
+ 
+     result = agent.process({"problem": problem})
+ 
+@@ -51,6 +49,14 @@ def test_regional_agent():
+     print(f"operating_cost: ${result['operating_cost']:,.0f}")
+     print(f"coverage: {result['coverage_percent']:.1f}%")
+ 
++    # Structural integrity only (the economics are audited elsewhere): the run
++    # produced a candidate pool, finite money fields and a coverage in [0, 100].
++    assert result["services_generated"] > 0
++    assert result["services_filtered"] <= result["services_generated"]
++    for key in ("weekly_profit", "operating_cost", "total_cost"):
++        assert math.isfinite(result[key]), key
++    assert 0.0 <= result["coverage_percent"] <= 100.0
++
+ 
+ if __name__ == "__main__":
+     test_regional_agent()
+diff --git a/tests/test_shared_contracts.py b/tests/test_shared_contracts.py
+new file mode 100644
+index 0000000..565c08b
+--- /dev/null
++++ b/tests/test_shared_contracts.py
+@@ -0,0 +1,302 @@
++"""Shared data / unit / economic contract tests (Task 2).
++
++Part A -- contracts that are ENFORCED today (fuel-cost guards and known values).
++Part B -- DOCUMENTED DEFECTS. Each test asserts the correct contract and is
++          marked ``xfail(strict=True, raises=...)``: it fails today for the stated
++          reason, and as soon as the defect is fixed it XPASSes, which strict mode
++          turns into a failure so the marker is removed deliberately. These are the
++          executable acceptance criteria for the next optimisation stage; none of
++          them is weakened to make a run green.
++
++Defect ids refer to reports/task2_shared_contracts/TASK2_SHARED_CONTRACT_REPORT.md.
++No LLM or network access; data comes from data/raw/WorldSmall or tiny hand-built
++instances whose expected numbers are worked out in the test.
++"""
++import math
++import random
++import sys
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.data.network_loader import NetworkLoader
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem, Service
++from src.utils import fuel_cost as fc
++from src.utils.fuel_cost import (
++    MissingDistanceError,
++    UnknownVesselClassError,
++    calculate_voyage_fuel_cost,
++    calculate_weekly_fuel_cost,
++)
++
++# Hand calculation used throughout: Feeder_450 = 15 t/day at 16 kn, USD 600/t,
++# sailing 90% of the time -> 1000 nm = 1000 / (16 * 24 * 0.9) days * 15 t * 600.
++FEEDER_1000NM = 1000.0 / (16 * 24 * 0.9) * 15 * 600.0     # 26,041.666...
++
++
++# ===========================================================================
++# Part A -- fuel cost contract
++# ===========================================================================
++class TestFuelCostContract:
++    def test_voyage_known_value(self):
++        assert calculate_voyage_fuel_cost(1000.0, "Feeder_450") == pytest.approx(FEEDER_1000NM, rel=1e-12)
++
++    def test_voyage_is_linear_in_distance_and_price(self):
++        base = calculate_voyage_fuel_cost(1000.0, "Post_panamax")
++        assert calculate_voyage_fuel_cost(2500.0, "Post_panamax") == pytest.approx(2.5 * base)
++        assert calculate_voyage_fuel_cost(1000.0, "Post_panamax", bunker_price_per_ton=300.0) == \
++            pytest.approx(base / 2.0)
++
++    def test_weekly_cost_is_cycle_cost_times_cycles_per_week(self):
++        dm = {"A": {"B": 1000.0}}
++        # one open leg, 14-day cycle -> half a cycle per week
++        assert calculate_weekly_fuel_cost(["A", "B"], dm, "Feeder_450", 14) == \
++            pytest.approx(FEEDER_1000NM * 7.0 / 14.0)
++        assert calculate_weekly_fuel_cost(["A", "B"], dm, "Feeder_450", 7) == \
++            pytest.approx(FEEDER_1000NM)
++
++    def test_weekly_cost_sums_every_consecutive_leg(self):
++        dm = {"A": {"B": 1000.0}, "B": {"C": 2000.0}}
++        assert calculate_weekly_fuel_cost(["A", "B", "C"], dm, "Feeder_450", 7) == \
++            pytest.approx(calculate_voyage_fuel_cost(3000.0, "Feeder_450"))
++
++    def test_same_port_consecutive_legs_are_zero_distance(self):
++        dm = {"A": {"B": 1000.0}}
++        assert calculate_weekly_fuel_cost(["A", "A", "B"], dm, "Feeder_450", 7) == \
++            pytest.approx(calculate_weekly_fuel_cost(["A", "B"], dm, "Feeder_450", 7))
++
++    def test_missing_distance_between_distinct_ports_raises_and_invents_nothing(self):
++        dm = {"A": {"B": 1000.0}}
++        with pytest.raises(MissingDistanceError, match="A -> Z"):
++            calculate_weekly_fuel_cost(["A", "Z"], dm, "Feeder_450", 7)
++        with pytest.raises(MissingDistanceError, match="B -> A"):      # directed: B->A not given
++            calculate_weekly_fuel_cost(["A", "B", "A"], dm, "Feeder_450", 14)
++
++    def test_unknown_vessel_class_raises_instead_of_pricing_as_post_panamax(self):
++        dm = {"A": {"B": 1000.0}}
++        with pytest.raises(UnknownVesselClassError, match="Nope"):
++            calculate_voyage_fuel_cost(1000.0, "Nope")
++        with pytest.raises(UnknownVesselClassError):
++            calculate_weekly_fuel_cost(["A", "B"], dm, "Nope", 7)
++        with pytest.raises(UnknownVesselClassError):
++            fc.get_vessel_consumption_rate("Nope")
++        with pytest.raises(UnknownVesselClassError):
++            fc.get_vessel_speed("Nope")
++
++    @pytest.mark.parametrize("cycle", [0, -7, float("nan")])
++    def test_non_positive_cycle_time_raises(self, cycle):
++        with pytest.raises(ValueError, match="cycle_time_days"):
++            calculate_weekly_fuel_cost(["A", "B"], {"A": {"B": 1.0}}, "Feeder_450", cycle)
++
++    @pytest.mark.parametrize("dist", [-1.0, float("nan"), float("inf")])
++    def test_invalid_distance_raises(self, dist):
++        with pytest.raises(ValueError, match="distance_nm"):
++            calculate_voyage_fuel_cost(dist, "Feeder_450")
++
++    def test_route_with_fewer_than_two_ports_has_no_legs_and_costs_nothing(self):
++        assert calculate_weekly_fuel_cost(["A"], {}, "Feeder_450", 7) == 0.0
++        assert calculate_weekly_fuel_cost([], {}, "Feeder_450", 7) == 0.0
++
++    def test_every_class_in_the_worldsmall_fleet_is_priced_by_the_table(self):
++        fleet = NetworkLoader().load_fleet()
++        for c in fleet.classes:
++            assert c.vessel_class in fc.VESSEL_FUEL_CONSUMPTION, c.vessel_class
++            assert calculate_voyage_fuel_cost(1000.0, c.vessel_class) > 0.0
++
++    def test_candidate_pool_contains_only_service_objects(self):
++        """generate_services is declared List[Service]; it must not leak plain dicts."""
++        from src.agents.service_generator_agent import ServiceGeneratorAgent
++
++        loader = NetworkLoader()
++        net = loader.load_network()
++        problem = Problem(ports=net["ports"], services=[], demands=net["demands"],
++                          distance_matrix=net["distance_matrix"], fleet=loader.load_fleet())
++        random.seed(2024)
++        np.random.seed(2024)
++        pool = ServiceGeneratorAgent(name="contract", model="none").generate_services(problem)
++        assert pool and all(isinstance(s, Service) for s in pool)
++        assert len({s.id for s in pool}) == len(pool)          # ids are unique
++        assert all(isinstance(s.ports, list) and len(s.ports) >= 2 for s in pool)
++        assert all(s.vessel_class in fc.VESSEL_FUEL_CONSUMPTION for s in pool)
++
++    def test_full_worldsmall_matrix_never_needs_a_fallback_distance(self):
++        net = NetworkLoader().load_network()
++        dm = net["distance_matrix"]
++        ids = [p.id for p in net["ports"]]
++        # every directed pair of distinct ports is present, so no route over WorldSmall
++        # ports can hit MissingDistanceError
++        assert all(b in dm[a] for a in ids for b in ids if a != b)
++
++
++# ===========================================================================
++# Part B -- documented defects (strict xfail = executable acceptance criteria)
++# ===========================================================================
++@pytest.fixture(scope="module")
++def ws_problem_and_candidates():
++    """WorldSmall problem plus the production candidate pool (deterministic seed)."""
++    from src.agents.service_generator_agent import ServiceGeneratorAgent
++    from src.utils.fuel_cost import map_capacity_to_vessel_class
++
++    loader = NetworkLoader()
++    net = loader.load_network()
++    fleet = loader.load_fleet()
++    problem = Problem(ports=net["ports"], services=[], demands=net["demands"],
++                      distance_matrix=net["distance_matrix"], fleet=fleet)
++    random.seed(12345)
++    np.random.seed(12345)
++    raw = ServiceGeneratorAgent(name="contract_audit", model="none").generate_services(problem)
++    services = []
++    for i, s in enumerate(raw):                     # normalise exactly as RegionalAgent does
++        if isinstance(s, Service):
++            services.append(s)
++        else:
++            cap = s.get("capacity", 5000)
++            services.append(Service(
++                id=i, ports=s["ports"], capacity=cap,
++                weekly_cost=s.get("weekly_cost", 150_000), cycle_time=s.get("cycle_time", 14),
++                vessel_class=s.get("vessel_class", map_capacity_to_vessel_class(cap)),
++            ))
++    return problem, services
++
++
++class TestDocumentedDefects:
++    # --- D-FUEL-TABLE -------------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-FUEL-TABLE: hard-coded fuel table disagrees with fleet_data.csv "
++                              "(capacity, t/day at design speed, speed) -- two sources of truth")
++    def test_fuel_table_matches_the_fleet_specification(self):
++        fleet = NetworkLoader().load_fleet()
++        for c in fleet.classes:
++            t = fc.VESSEL_FUEL_CONSUMPTION[c.vessel_class]
++            assert t["capacity"] == c.capacity_teu, c.vessel_class
++            assert t["consumption_tons_per_day"] == pytest.approx(c.bunker_consumption_tons_per_day), c.vessel_class
++            assert t["speed_knots"] == pytest.approx(c.design_speed), c.vessel_class
++
++    # --- D-SVC-CAP ----------------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-SVC-CAP: candidate services carry capacities (10,000-14,000 TEU in the "
++                              "seeded pool) that no vessel in the WorldSmall fleet (max 7,500) can provide")
++    def test_candidate_capacity_never_exceeds_the_largest_fleet_vessel(self, ws_problem_and_candidates):
++        problem, services = ws_problem_and_candidates
++        biggest = max(c.capacity_teu for c in problem.fleet.classes)
++        assert max(s.capacity for s in services) <= biggest
++
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-SVC-CAP: Service.capacity is a size bucket, not the capacity of the "
++                              "fleet class named in Service.vessel_class")
++    def test_candidate_capacity_equals_its_vessel_class_capacity(self, ws_problem_and_candidates):
++        problem, services = ws_problem_and_candidates
++        cap = {c.vessel_class: c.capacity_teu for c in problem.fleet.classes}
++        assert all(s.capacity == cap[s.vessel_class] for s in services)
++
++    # --- D-SVC-CYCLE --------------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-SVC-CYCLE: cycle_time is a hard-coded 7/14/21 days, not derived from "
++                              "route distance and speed; most rotations cannot be sailed in that time")
++    def test_cycle_time_covers_the_sailing_time_of_the_rotation(self, ws_problem_and_candidates):
++        problem, services = ws_problem_and_candidates
++        spec = {c.vessel_class: c for c in problem.fleet.classes}
++        dm = problem.distance_matrix
++        for s in services:
++            legs = list(zip(s.ports, s.ports[1:]))
++            if s.ports[0] != s.ports[-1]:
++                legs.append((s.ports[-1], s.ports[0]))           # a rotation returns to its start
++            nm = sum(dm[a][b] for a, b in legs if a != b)
++            assert nm / (spec[s.vessel_class].max_speed * 24.0) <= s.cycle_time, s.id
++
++    # --- D-CAP-FREQ ---------------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-CAP-FREQ: HubMILP/FrequencyGA multiply weekly capacity by 7/cycle_time "
++                              "while the fleet check treats frequency as sailings/week")
++    def test_weekly_capacity_is_capacity_times_sailings_per_week(self):
++        from src.optimization.hub_milp import HubMILP
++
++        # 1,000 TEU of demand; one vessel type of 1,000 TEU; a 14-day rotation sailed
++        # once a week (needs 2 vessels). Weekly capacity must be 1,000 x 1 = 1,000.
++        problem = _tiny_problem(
++            services=[Service(id="s", ports=["A", "B"], capacity=1000.0, weekly_cost=1.0,
++                              cycle_time=14, vessel_class="Feeder_450")],
++            demands=[Demand("A", "B", 1000.0, 1000.0)],
++        )
++        res = HubMILP(problem, {"services": [1], "frequencies": [1]}, time_limit=30).solve()
++        assert res["status"] == "Optimal"
++        assert res["satisfied_demand"] == pytest.approx(1000.0, rel=1e-6)
++
++    # --- D-ACCT-PROFIT ------------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-ACCT-PROFIT: HubMILP 'profit' is the augmented solver objective "
++                              "(unserved penalty + coverage reward), not revenue - total_cost")
++    def test_reported_profit_is_revenue_minus_total_cost(self):
++        from src.optimization.hub_milp import HubMILP
++
++        # Capacity 40 TEU vs 100 TEU demand at USD 1000/TEU, cycle 7 days, 1 sailing/wk:
++        #   revenue 40,000; vessel 10,000; fuel 26,041.67; handling 10/TEU at both ports = 800
++        #   accounting profit = 40,000 - 36,841.67 = 3,158.33
++        ports = [Port("A", "A", 0, 0, handling_cost=10.0), Port("B", "B", 0, 0, handling_cost=10.0)]
++        problem = _tiny_problem(
++            ports=ports,
++            services=[Service(id="s", ports=["A", "B"], capacity=40.0, weekly_cost=10_000.0,
++                              cycle_time=7, vessel_class="Feeder_450")],
++            demands=[Demand("A", "B", 100.0, 1000.0)],
++            dist={"A": {"B": 1000.0}, "B": {"A": 1000.0}},
++        )
++        res = HubMILP(problem, {"services": [1], "frequencies": [1]}, time_limit=30).solve()
++        assert res["status"] == "Optimal"
++        assert res["total_cost"] == pytest.approx(10_000.0 + FEEDER_1000NM + 800.0, rel=1e-9)
++        assert res["profit"] == pytest.approx(40_000.0 - res["total_cost"], rel=1e-9)
++
++    # --- D-ACCT-TRANSSHIP ---------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=AssertionError,
++                       reason="D-ACCT-TRANSSHIP: reported transship_cost uses the flat default "
++                              "(80/TEU) while the objective prices port-specific rates")
++    def test_reported_transshipment_cost_uses_the_rate_the_objective_used(self):
++        from src.optimization.hub_milp import HubMILP
++
++        ports = [Port(p, p, 0, 0, transshipment_cost=10.0, handling_cost=1.0) for p in "ABC"]
++        problem = _tiny_problem(
++            ports=ports,
++            services=[
++                Service(id="s1", ports=["A", "B"], capacity=1000.0, weekly_cost=1000.0,
++                        cycle_time=7, vessel_class="Feeder_450"),
++                Service(id="s2", ports=["B", "C"], capacity=1000.0, weekly_cost=1000.0,
++                        cycle_time=7, vessel_class="Feeder_450"),
++            ],
++            demands=[Demand("A", "C", 100.0, 1000.0)],
++            dist={"A": {"B": 100.0, "C": 200.0}, "B": {"A": 100.0, "C": 100.0},
++                  "C": {"A": 200.0, "B": 100.0}},
++        )
++        res = HubMILP(problem, {"services": [1, 1], "frequencies": [1, 1]}, time_limit=30).solve()
++        assert res["status"] == "Optimal"
++        assert res["transship_demand"] == pytest.approx(100.0)
++        assert res["transship_cost"] == pytest.approx(100.0 * 10.0)
++
++    # --- D-MILP-FLEET -------------------------------------------------------
++    @pytest.mark.xfail(strict=True, raises=TypeError,
++                       reason="D-MILP-FLEET: a chromosome that needs more vessels than the fleet "
++                              "crashes the MILP (PuLP: 'A False object cannot be passed as a "
++                              "constraint') instead of returning an explicit infeasible status")
++    def test_fleet_infeasible_chromosome_returns_an_explicit_status(self):
++        from src.optimization.hub_milp import HubMILP
++
++        problem = _tiny_problem(
++            services=[Service(id="s", ports=["A", "B"], capacity=1000.0, weekly_cost=1.0,
++                              cycle_time=28, vessel_class="Feeder_450")],
++            demands=[Demand("A", "B", 10.0, 1000.0)],
++        )
++        # 28-day rotation at 3 sailings/week needs 12 vessels; the fleet has 5.
++        milp = HubMILP(problem, {"services": [1], "frequencies": [3]}, fleet_size=5, time_limit=30)
++        res = milp.solve()                                   # raises TypeError today
++        assert res["status"] != "Optimal"
++
++
++# ---------------------------------------------------------------------------
++# helpers
++# ---------------------------------------------------------------------------
++def _tiny_problem(services, demands, ports=None, dist=None):
++    ports = ports or [Port("A", "A", 0, 0), Port("B", "B", 0, 0)]
++    dist = dist or {"A": {"B": 100.0}, "B": {"A": 100.0}}
++    fleet = Fleet(classes=[FleetClass(vessel_class="Feeder_450", quantity=300, capacity_teu=1000.0)])
++    return Problem(ports=ports, services=services, demands=demands, distance_matrix=dist, fleet=fleet)
+diff --git a/tests/test_worldsmall_integration.py b/tests/test_worldsmall_integration.py
+index 8ba85dc..62bb9f5 100644
+--- a/tests/test_worldsmall_integration.py
++++ b/tests/test_worldsmall_integration.py
+@@ -4,6 +4,12 @@ WorldSmall runtime integration tests.
+ Verifies that the WorldSmall benchmark instance loads correctly through
+ the existing runtime architecture without requiring artificial demand
+ scaling or hardcoded fleet limits.
++
++Dataset policy: the only real dataset read here is ``data/raw/WorldSmall``
++(plus the legacy WorldSmall JSON artifact, which is asserted to be *rejected*).
++Dataset isolation is verified with SYNTHETIC foreign-identifier fixtures built
++in ``tmp_path``; no WorldLarge raw file, WorldLarge JSON artifact or any other
++dataset is opened by this module.
+ """
+ 
+ import csv
+@@ -15,14 +21,41 @@ import pytest
+ 
+ sys.path.insert(0, str(Path(__file__).parent.parent))
+ 
+-from src.data.network_loader import NetworkLoader
++from src.data import network_loader as nl
++from src.data.network_loader import DataValidationError, NetworkLoader
+ from src.optimization.data import Problem, Fleet
+ 
+ 
+ BASE = Path(__file__).parent.parent
+ WS_CSV_DIR = BASE / "data" / "raw" / "WorldSmall"
+ WS_JSON = BASE / "data" / "datasets" / "worldsmall_shipping_problem.json"
+-WL_JSON = BASE / "data" / "datasets" / "large_shipping_problem.json"
++
++# SYNTHETIC foreign identifiers: not WorldSmall ports and not real UN/LOCODEs.
++# They stand in for "ports of some other dataset" without reading that dataset.
++FOREIGN_IDS = ("ZZFO1", "ZZFO2")
++
++PORT_HEADER = ["UNLocode", "name", "Country", "Longitude", "Latitude", "Draft",
++               "CostPerFULL", "CostPerFULLTrnsf", "PortCallCostFixed", "PortCallCostPerFFE"]
++DEMAND_HEADER = ["Origin", "Destination", "FFEPerWeek", "Revenue_1", "TransitTime"]
++DIST_HEADER = ["fromUNLOCODe", "ToUNLOCODE", "Distance", "Draft", "IsPanama", "IsSuez"]
++
++
++def _raw_rows(path):
++    """Independent tab-separated read of a raw file (no NetworkLoader involved)."""
++    with open(path, newline="", encoding="utf-8-sig") as fh:
++        return list(csv.DictReader(fh, delimiter="\t"))
++
++
++def _write_tsv(path, header, rows):
++    path.write_text(
++        "\n".join("\t".join(str(c) for c in r) for r in [header] + rows) + "\n",
++        encoding="utf-8",
++    )
++    return path
++
++
++def _port_row(pid):
++    return [pid, f"Port {pid}", "X", 10.0, 20.0, 12, 100, 50, 1000, 5]
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -97,20 +130,19 @@ class TestDemandIntegrity:
+         assert sample.weekly_teu == 2.0, f"Expected 2.0, got {sample.weekly_teu}"
+         assert sample.revenue_per_teu == 4580.0, f"Expected 4580.0, got {sample.revenue_per_teu}"
+ 
+-    def test_worldlarge_still_scales_by_6(self):
+-        """WorldLarge JSON path must retain DEMAND_SCALE=6."""
+-        from tests.test_orchestrator import load_problem
+-        problem = load_problem(str(WL_JSON))
+-        sample = next(
+-            (d for d in problem.demands
+-             if d.origin == "AEJEA" and d.destination == "AOLAD"),
+-            None,
+-        )
+-        assert sample is not None
+-        # Raw WL CSV: FFEPerWeek=141, Revenue_1=2370
+-        # JSON pre-scaled by x2: weekly_teu=282.0
+-        # DEMAND_SCALE=6 applied: 282 * 6 = 1692
+-        assert sample.weekly_teu == 1692.0, f"Expected 1692.0, got {sample.weekly_teu}"
++    def test_worldsmall_total_teu_is_unscaled(self):
++        """No legacy demand multiplier is applied to WorldSmall.
++
++        Total TEU is the raw FFE total times the lane factors (1.85-2.1). The
++        legacy x6 multiplier (a WorldLarge-only convention) would give ~12x.
++        Both sides are read from WorldSmall; the raw side bypasses the loader.
++        """
++        path = WS_CSV_DIR / "Demand_WorldSmall_Fixed_Sep.csv"
++        raw_ffe = sum(float(r["FFEPerWeek"]) for r in _raw_rows(path))
++        teu = sum(d.weekly_teu for d in NetworkLoader().load_demands(path))
++        assert raw_ffe == 138247
++        assert teu == pytest.approx(276_446.8, abs=0.5)
++        assert 1.85 <= teu / raw_ffe <= 2.1, f"TEU/FFE = {teu / raw_ffe:.3f}"
+ 
+     def test_csv_path_no_scaling(self):
+         """CSV loader path should not apply any DEMAND_SCALE."""
+@@ -213,26 +245,129 @@ class TestNoWorldLargeLeakage:
+         ports = loader.load_ports(WS_CSV_DIR / "ports.csv")
+         assert len(ports) == 47
+ 
+-    def test_worldsmall_port_ids_not_in_worldlarge_only(self):
+-        """All WorldSmall port IDs should exist in the WorldSmall CSV subset."""
++    def test_loaded_port_ids_equal_independent_worldsmall_raw_read(self):
++        """The loaded port set is exactly the WorldSmall file's identifier set.
++
++        Replaces a check that compared WorldSmall with the WorldLarge port file;
++        the identity is now established against WorldSmall's own raw rows, and
++        the synthetic foreign identifiers are asserted to be outside that set.
++        """
+         loader = NetworkLoader()
+-        ws_ports = loader.load_ports(WS_CSV_DIR / "ports.csv")
+-        wl_ports = loader.load_ports()  # Loads full 435-port file
+-        ws_ids = {p.id for p in ws_ports}
+-        wl_ids = {p.id for p in wl_ports}
+-        # Every WS port should be a subset of WL ports
+-        assert ws_ids.issubset(wl_ids), "WorldSmall contains ports not in WorldLarge"
+-
+-    def test_distance_not_from_worldlarge_file(self):
+-        """Distance matrix should come from WorldSmall dist_dense.csv."""
++        raw_ids = {r["UNLocode"].strip() for r in _raw_rows(WS_CSV_DIR / "ports.csv")}
++        assert len(raw_ids) == 47
++        assert {p.id for p in loader.load_ports(WS_CSV_DIR / "ports.csv")} == raw_ids
++        # no-argument default resolves to the same WorldSmall file
++        assert {p.id for p in loader.load_ports()} == raw_ids
++        assert not raw_ids & set(FOREIGN_IDS), "fixture ids must not be WorldSmall ports"
++
++    def test_distance_matrix_equals_independent_worldsmall_raw_read(self):
++        """Every directed pair comes from WorldSmall dist_dense.csv, unaltered."""
+         loader = NetworkLoader()
+-        ws_dist = loader.load_distance_matrix(WS_CSV_DIR / "dist_dense.csv")
+-        wl_dist = loader.load_distance_matrix()
+-        # WorldSmall should have fewer entries than WorldLarge
+-        ws_total = sum(len(v) for v in ws_dist.values())
+-        wl_total = sum(len(v) for v in wl_dist.values())
+-        assert ws_total == 2162
+-        assert ws_total < wl_total
++        raw = _raw_rows(WS_CSV_DIR / "dist_dense.csv")
++        assert len(raw) == 2162
++        default_dist = loader.load_distance_matrix()
++        assert default_dist == loader.load_distance_matrix(WS_CSV_DIR / "dist_dense.csv")
++        assert sum(len(v) for v in default_dist.values()) == len(raw)
++        for r in raw:
++            o, d = r["fromUNLOCODe"].strip(), r["ToUNLOCODE"].strip()
++            assert default_dist[o][d] == pytest.approx(float(r["Distance"])), (o, d)
++
++    def test_default_sources_are_the_canonical_worldsmall_files(self):
++        """Selected configuration, source identity and loaded data are consistent."""
++        loader = NetworkLoader()
++        problem = loader.load_problem()
++        report = loader.validation_report
++        expected = {
++            ("ports", "source"): WS_CSV_DIR / "ports.csv",
++            ("demands", "source"): WS_CSV_DIR / "Demand_WorldSmall_Fixed_Sep.csv",
++            ("distances", "source"): WS_CSV_DIR / "dist_dense.csv",
++            ("fleet", "quantity_source"): WS_CSV_DIR / "fleet_WorldSmall.csv",
++            ("fleet", "specification_source"): WS_CSV_DIR / "fleet_data.csv",
++        }
++        for (section, key), path in expected.items():
++            assert Path(report[section][key]).resolve() == path.resolve(), (section, key)
++        # ...and what was loaded is what those sources contain.
++        assert len(problem.ports) == report["ports"]["loaded"] == 47
++        assert len(problem.demands) == 1764
++        assert problem.fleet.total_vessels == 263
++        ids = {p.id for p in problem.ports}
++        assert all(d.origin in ids and d.destination in ids for d in problem.demands)
++
++    def test_synthetic_foreign_ids_mixed_into_any_input_file_are_rejected(self, tmp_path):
++        """A file that mixes WorldSmall and foreign identifiers is a different
++        dataset presented as WorldSmall; it is refused for every input role."""
++        loader = NetworkLoader()
++        ws = sorted(p.id for p in loader.load_ports())[:3]
++        mixed = list(ws) + list(FOREIGN_IDS)
++
++        ports = _write_tsv(tmp_path / "ports.csv", PORT_HEADER, [_port_row(i) for i in mixed])
++        with pytest.raises(DataValidationError, match="mixes 3 WorldSmall port ids with 2"):
++            loader.load_ports(ports)
++
++        demand = _write_tsv(tmp_path / "Demand_WorldSmall_Fixed_Sep.csv", DEMAND_HEADER,
++                            [[ws[0], ws[1], 1, 100, 1], [ws[0], FOREIGN_IDS[0], 1, 100, 1]])
++        with pytest.raises(DataValidationError, match="demand file mixes"):
++            loader.load_demands(demand)
++
++        dist = _write_tsv(tmp_path / "dist_dense.csv", DIST_HEADER,
++                          [[ws[0], ws[1], 100, "", 0, 0], [ws[0], FOREIGN_IDS[0], 100, "", 0, 0]])
++        with pytest.raises(DataValidationError, match="distance file mixes"):
++            loader.load_distance_matrix(dist)
++
++    def test_fully_synthetic_dataset_is_never_combined_with_worldsmall_distances(self, tmp_path):
++        """An isolated all-foreign fixture may be unit-tested at file level, but
++        it cannot become a Problem: that would pair it with WorldSmall distances."""
++        loader = NetworkLoader()
++        ports = _write_tsv(tmp_path / "fixture_ports.csv", PORT_HEADER,
++                           [_port_row(i) for i in FOREIGN_IDS])
++        assert {p.id for p in loader.load_ports(ports)} == set(FOREIGN_IDS)   # isolated: ok
++
++        dataset = tmp_path / "worldsmall_synthetic_foreign.json"             # passes the name gate
++        dataset.write_text(json.dumps({
++            "ports": [{"id": i, "name": i, "latitude": 1.0, "longitude": 1.0} for i in FOREIGN_IDS],
++            "demands": [{"origin": FOREIGN_IDS[0], "destination": FOREIGN_IDS[1],
++                         "weekly_teu": 1.0, "revenue_per_teu": 100.0}],
++        }), encoding="utf-8")
++        with pytest.raises(DataValidationError, match="outside the WorldSmall port set"):
++            loader.load_problem(dataset)
++
++    def test_non_worldsmall_raw_location_is_rejected_before_any_table_is_read(
++            self, tmp_path, monkeypatch):
++        """Location, not content or name, decides - and nothing is parsed first.
++
++        A stand-in raw tree is built in tmp_path so that no real foreign file is
++        involved; ``_read_table`` is replaced by a tripwire to prove that the
++        rejection happens before the file is loaded.
++        """
++        raw = tmp_path / "raw"
++        (raw / "WorldSmall").mkdir(parents=True)
++        (raw / "OtherDataset").mkdir()
++        monkeypatch.setattr(nl, "RAW_DATA_DIR", raw)
++        monkeypatch.setattr(nl, "WORLDSMALL_DIR", raw / "WorldSmall")
++
++        def tripwire(*args, **kwargs):
++            raise AssertionError("a foreign-location file was parsed before being rejected")
++
++        monkeypatch.setattr(nl, "_read_table", tripwire)
++
++        loader = NetworkLoader()
++        files = {
++            "ports": (raw / "OtherDataset" / "ports.csv", loader.load_ports),
++            "demand": (raw / "OtherDataset" / "Demand_WorldSmall_Fixed_Sep.csv", loader.load_demands),
++            "distance": (raw / "OtherDataset" / "dist_dense.csv", loader.load_distance_matrix),
++        }
++        for role, (path, load) in files.items():
++            path.write_text("not parsed\n", encoding="utf-8")
++            with pytest.raises(DataValidationError, match="reads only WorldSmall"):
++                load(path)
++
++    def test_legacy_worldsmall_json_artifact_is_not_loadable_as_production_input(self):
++        """data/datasets/worldsmall_shipping_problem.json is a stale generated
++        artifact (x2 revenue and port costs). The loader refuses it rather than
++        letting it feed the optimizer with different economics than the CSVs."""
++        assert WS_JSON.exists(), "legacy artifact expected for this characterization"
++        with pytest.raises(DataValidationError, match="disagrees with the canonical"):
++            NetworkLoader().load_problem(WS_JSON)
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -298,44 +433,30 @@ class TestServiceGeneration:
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# Test 7 — WorldLarge regression
++# Test 7 — WorldSmall-only workflow (replaces the WorldLarge regression class)
++#
++# The former tests read WorldLarge raw files and the WorldLarge JSON artifact to
++# assert properties of WorldLarge itself. The workflow is WorldSmall-only, so
++# what remains - and is asserted here against WorldSmall's own raw rows - is
++# that the no-argument defaults select WorldSmall and nothing else.
+ # ---------------------------------------------------------------------------
+-class TestWorldLargeRegression:
+-    def test_worldlarge_json_unchanged(self):
+-        """The large_shipping_problem.json file must not be modified."""
+-        import hashlib
+-        with open(WL_JSON, "rb") as f:
+-            h = hashlib.sha256(f.read()).hexdigest()
+-        # This hash will change if the file is modified
+-        # We just verify it loads correctly
+-        assert WL_JSON.exists()
+-
+-    def test_worldlarge_loads_correctly(self):
+-        """WorldLarge JSON path should still work with DEMAND_SCALE=6."""
+-        from tests.test_orchestrator import load_problem
+-        problem = load_problem(str(WL_JSON))
+-        assert len(problem.ports) == 333
+-        assert len(problem.demands) == 9622
+-        # DEMAND_SCALE=6 verified in TestDemandIntegrity.test_worldlarge_still_scales_by_6
+-
+-    def test_worldlarge_csv_path_unchanged(self):
+-        """NetworkLoader default paths should still load WorldLarge data."""
++class TestWorldSmallOnlyWorkflow:
++    def test_loader_defaults_are_worldsmall(self):
+         loader = NetworkLoader()
+-        ports = loader.load_ports()
+-        demands = loader.load_demands()
+-        dist = loader.load_distance_matrix()
+-        # Actual counts from the raw CSV files (not the JSON which has 333 filtered ports)
+-        assert len(ports) == 333
+-        assert len(demands) == 9622
+-        total_dist = sum(len(v) for v in dist.values())
+-        assert total_dist == 43056
+-
+-    def test_worldlarge_fleet_loads(self):
+-        """WorldLarge fleet should load (without spec data)."""
+-        loader = NetworkLoader()
+-        fleet = loader.load_fleet()
+-        assert fleet.total_vessels == 501
++        assert len(loader.load_ports()) == 47
++        assert len(loader.load_demands()) == 1764
++        assert sum(len(v) for v in loader.load_distance_matrix().values()) == 2162
++
++    def test_default_fleet_matches_independent_raw_read(self):
++        """Inventory is the WorldSmall file's own Quantity column (not a constant)."""
++        raw = {r["Vessel class"].strip(): int(r["Quantity"])
++               for r in _raw_rows(WS_CSV_DIR / "fleet_WorldSmall.csv")}
++        assert len(raw) == 6 and sum(raw.values()) == 263
++
++        fleet = NetworkLoader().load_fleet()
++        assert fleet.total_vessels == 263
+         assert len(fleet.classes) == 6
++        assert {c.vessel_class: c.quantity for c in fleet.classes} == raw
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/tests/test_worldsmall_loader.py b/tests/test_worldsmall_loader.py
+new file mode 100644
+index 0000000..cad500d
+--- /dev/null
++++ b/tests/test_worldsmall_loader.py
+@@ -0,0 +1,794 @@
++"""
++WorldSmall data-loader regression tests.
++
++Covers the loader data contract only: explicit WorldSmall paths, delimiter and
++header normalization, FFE -> TEU conversion (revenue preserving), fleet units,
++and strict validation. Canonical source files are read from data/raw/WorldSmall
++and compared against an independent ``csv`` read of the same file; malformed
++input uses small synthetic fixtures in tmp_path. No other dataset is read.
++"""
++
++import csv
++import logging
++import math
++import sys
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.data import network_loader as nl
++from src.data.network_loader import (
++    DataValidationError,
++    NetworkLoader,
++    WORLDSMALL_DIR,
++    WORLDSMALL_FILES,
++    _strip_columns,
++    demand_scale_for_dataset,
++    ffe_to_teu_factor,
++)
++from src.optimization.data import Problem
++
++# Audited WorldSmall baseline (verified against the canonical files).
++WS_PORTS = 47
++WS_DEMAND_ROWS = 1764
++WS_DIRECTED_PAIRS = 47 * 46
++WS_FLEET_TOTAL = 263
++WS_RAW_FFE = 138247
++WS_RAW_GROSS_REVENUE = 264_870_100.0
++WS_TEU = 276_446.8
++WS_FLEET = {
++    "Feeder_450": 24,
++    "Feeder_800": 29,
++    "Panamax_1200": 68,
++    "Panamax_2400": 74,
++    "Post_panamax": 58,
++    "Super_panamax": 10,
++}
++
++# SYNTHETIC foreign identifiers: not WorldSmall ports and not real UN/LOCODEs. They stand
++# in for "ports belonging to another dataset" so isolation can be tested without reading
++# any other dataset (see TestDatasetSeparation.test_synthetic_foreign_ids_are_not_worldsmall_ports).
++FOREIGN_IDS = ("ZZFO1", "ZZFO2")
++
++
++# ---------------------------------------------------------------------------
++# Helpers
++# ---------------------------------------------------------------------------
++def read_raw(path):
++    """Independent tab-separated read of a canonical source (no loader code)."""
++    with open(path, newline="", encoding="utf-8-sig") as fh:
++        return list(csv.DictReader(fh, delimiter="\t"))
++
++
++def write_tsv(path, header, rows):
++    path.write_text(
++        "\n".join("\t".join(str(c) for c in r) for r in [header] + rows) + "\n",
++        encoding="utf-8",
++    )
++    return path
++
++
++PORT_HEADER = ["UNLocode", "name", "Country", "Longitude", "Latitude", "Draft",
++               "CostPerFULL", "CostPerFULLTrnsf", "PortCallCostFixed", "PortCallCostPerFFE"]
++DEMAND_HEADER = ["Origin", "Destination", "FFEPerWeek", "Revenue_1", "TransitTime"]
++DIST_HEADER = ["fromUNLOCODe", "ToUNLOCODE", "Distance", "Draft", "IsPanama", "IsSuez"]
++QTY_HEADER = ["Vessel class", "Quantity"]
++SPEC_HEADER = ["Vessel class", "Capacity FFE", "TC rate daily (fixed Cost)", "draft", "minSpeed",
++               "maxSpeed", "designSpeed", "Bunker ton per day at designSpeed",
++               "Idle Consumption ton/day", "panamaFee", "suezFee"]
++
++
++def port_row(pid, lat=20.0, lon=10.0, **over):
++    row = {"UNLocode": pid, "name": f"Port {pid}", "Country": "X", "Longitude": lon,
++           "Latitude": lat, "Draft": 12, "CostPerFULL": 100, "CostPerFULLTrnsf": 50,
++           "PortCallCostFixed": 1000, "PortCallCostPerFFE": 5}
++    row.update(over)
++    return [row[h] for h in PORT_HEADER]
++
++
++def spec_row(cls, capacity=1000, **over):
++    row = {"Vessel class": cls, "Capacity FFE": capacity, "TC rate daily (fixed Cost)": 8000,
++           "draft": 10, "minSpeed": 10, "maxSpeed": 20, "designSpeed": 15,
++           "Bunker ton per day at designSpeed": 30, "Idle Consumption ton/day": 3,
++           "panamaFee": 1000, "suezFee": 2000}
++    row.update(over)
++    return [row[h] for h in SPEC_HEADER]
++
++
++@pytest.fixture
++def loader():
++    return NetworkLoader()
++
++
++# ---------------------------------------------------------------------------
++# 1-3. Explicit WorldSmall paths, missing files, no fallback
++# ---------------------------------------------------------------------------
++class TestPaths:
++    def test_default_paths_are_the_canonical_worldsmall_files(self):
++        expected = {
++            "ports": "ports.csv",
++            "demand": "Demand_WorldSmall_Fixed_Sep.csv",
++            "distance": "dist_dense.csv",
++            "fleet": "fleet_WorldSmall.csv",
++            "fleet_data": "fleet_data.csv",
++        }
++        assert set(WORLDSMALL_FILES) == set(expected)
++        for key, name in expected.items():
++            path = WORLDSMALL_FILES[key]
++            assert path == WORLDSMALL_DIR / name
++            assert path.parent.name == "WorldSmall"
++            assert path.is_file(), f"canonical WorldSmall file missing: {path}"
++            assert "worldlarge" not in str(path).lower()
++
++    def test_loader_reports_the_canonical_sources(self, loader):
++        loader.load_network()
++        loader.load_fleet()
++        report = loader.validation_report
++        assert Path(report["ports"]["source"]) == WORLDSMALL_FILES["ports"]
++        assert Path(report["demands"]["source"]) == WORLDSMALL_FILES["demand"]
++        assert Path(report["distances"]["source"]) == WORLDSMALL_FILES["distance"]
++        assert Path(report["fleet"]["quantity_source"]) == WORLDSMALL_FILES["fleet"]
++        assert Path(report["fleet"]["specification_source"]) == WORLDSMALL_FILES["fleet_data"]
++
++
++class TestMissingFilesAndNoFallback:
++    @pytest.mark.parametrize("key, call", [
++        ("ports", lambda ld: ld.load_ports()),
++        ("demand", lambda ld: ld.load_demands()),
++        ("distance", lambda ld: ld.load_distance_matrix()),
++        ("fleet", lambda ld: ld.load_fleet()),
++        ("fleet_data", lambda ld: ld.load_fleet()),
++    ])
++    def test_missing_default_file_raises_and_does_not_fall_back(
++        self, key, call, loader, monkeypatch, tmp_path
++    ):
++        # Decoys with plausible names sit next to the missing file; none may be used.
++        for decoy in ("demand_world_small.csv", "fleet_world_small.csv", "ports.csv",
++                      "Demand_WorldSmall_Fixed_Sep.csv", "dist_dense.csv", "distance_dense.csv"):
++            (tmp_path / decoy).write_text("not,used\n", encoding="utf-8")
++        missing = tmp_path / "missing_required_file.csv"
++        patched = dict(WORLDSMALL_FILES)
++        patched[key] = missing
++        monkeypatch.setattr(nl, "WORLDSMALL_FILES", patched)
++
++        with pytest.raises(FileNotFoundError) as exc:
++            call(loader)
++        assert str(missing) in str(exc.value)
++        assert "No fallback" in str(exc.value)
++
++    def test_missing_explicit_path_raises(self, loader, tmp_path):
++        with pytest.raises(FileNotFoundError):
++            loader.load_demands(tmp_path / "nope.csv")
++
++    def test_fleet_specifications_are_required(self, loader, tmp_path):
++        qty = write_tsv(tmp_path / "q.csv", QTY_HEADER, [["A", 1]])
++        with pytest.raises(FileNotFoundError):
++            loader.load_fleet(qty, tmp_path / "no_specs.csv")
++
++
++# ---------------------------------------------------------------------------
++# 4-6. Delimiter and header normalization
++# ---------------------------------------------------------------------------
++class TestDelimiterAndHeaders:
++    def test_canonical_demand_is_tab_separated_and_parses(self, loader):
++        header = WORLDSMALL_FILES["demand"].read_text(encoding="utf-8").splitlines()[0]
++        assert "\t" in header and "," not in header
++        assert len(loader.load_demands()) == WS_DEMAND_ROWS
++
++    def test_comma_separated_file_is_rejected_with_hint(self, loader, tmp_path):
++        p = tmp_path / "comma.csv"
++        p.write_text("Origin,Destination,FFEPerWeek,Revenue_1\nA,B,1,100\n", encoding="utf-8")
++        with pytest.raises(DataValidationError, match="tab-separated"):
++            loader.load_demands(p)
++
++    def test_quoted_and_padded_headers_are_normalized(self, loader, tmp_path):
++        p = tmp_path / "demand.csv"
++        p.write_text(
++            "\"Origin\"\t'Destination'\t FFEPerWeek \t\"  Revenue_1 \"\tTransitTime\n"
++            "AAAAA\tBBBBB\t 10 \t2100\t5\n",
++            encoding="utf-8",
++        )
++        demands = loader.load_demands(p)
++        assert len(demands) == 1
++        assert (demands[0].origin, demands[0].destination) == ("AAAAA", "BBBBB")
++
++    def test_bom_header_is_normalized(self, loader, tmp_path):
++        p = tmp_path / "demand.csv"
++        p.write_bytes("﻿Origin\tDestination\tFFEPerWeek\tRevenue_1\nA\tB\t1\t100\n".encode("utf-8"))
++        assert len(loader.load_demands(p)) == 1
++
++    def test_internal_spaces_and_punctuation_in_names_are_preserved(self):
++        cols = _strip_columns([" 'TC rate daily (fixed Cost)' ", '"Idle Consumption ton/day"'], "x")
++        assert cols == ["TC rate daily (fixed Cost)", "Idle Consumption ton/day"]
++
++    @pytest.mark.parametrize("header", [
++        'Origin\t"Origin"\tFFEPerWeek\tRevenue_1',
++        "Origin\t Origin \tFFEPerWeek\tRevenue_1",
++        "Origin\tOrigin\tFFEPerWeek\tRevenue_1",
++    ])
++    def test_duplicate_normalized_headers_are_rejected(self, header, loader, tmp_path):
++        p = tmp_path / "demand.csv"
++        p.write_text(header + "\nA\tB\t1\t100\n", encoding="utf-8")
++        with pytest.raises(DataValidationError, match="duplicate column names"):
++            loader.load_demands(p)
++
++    def test_case_collision_is_rejected_where_headers_are_lowercased(self, loader, tmp_path):
++        header = PORT_HEADER + ["latitude"]
++        p = write_tsv(tmp_path / "ports.csv", header, [port_row("AAAAA") + [1]])
++        with pytest.raises(DataValidationError, match="duplicate column names"):
++            loader.load_ports(p)
++
++    def test_missing_required_column_is_reported_with_file_and_column(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "demand.csv", ["Origin", "Destination", "FFEPerWeek"], [["A", "B", 1]])
++        with pytest.raises(DataValidationError) as exc:
++            loader.load_demands(p)
++        assert "demand.csv" in str(exc.value) and "Revenue_1" in str(exc.value)
++
++
++# ---------------------------------------------------------------------------
++# 7-9. FFE -> TEU conversion preserves revenue; no WorldLarge scaling
++# ---------------------------------------------------------------------------
++class TestRevenuePreservation:
++    def test_audited_baseline_totals(self, loader):
++        demands = loader.load_demands()
++        raw = read_raw(WORLDSMALL_FILES["demand"])
++        assert len(raw) == WS_DEMAND_ROWS
++        assert sum(float(r["FFEPerWeek"]) for r in raw) == WS_RAW_FFE
++        assert sum(d.weekly_teu for d in demands) == pytest.approx(WS_TEU, rel=1e-9)
++        report = loader.validation_report["demands"]
++        assert report["raw_weekly_ffe"] == WS_RAW_FFE
++        assert report["raw_gross_revenue_usd_per_week"] == WS_RAW_GROSS_REVENUE
++
++    def test_aggregate_gross_revenue_is_preserved(self, loader):
++        demands = loader.load_demands()
++        raw = read_raw(WORLDSMALL_FILES["demand"])
++        raw_gross = sum(float(r["FFEPerWeek"]) * float(r["Revenue_1"]) for r in raw)
++        converted_gross = sum(d.weekly_teu * d.revenue_per_teu for d in demands)
++        assert raw_gross == WS_RAW_GROSS_REVENUE
++        assert converted_gross == pytest.approx(raw_gross, rel=1e-12)
++
++    def test_per_od_revenue_is_preserved(self, loader):
++        demands = {(d.origin, d.destination): d for d in loader.load_demands()}
++        for r in read_raw(WORLDSMALL_FILES["demand"]):
++            o, dst = r["Origin"].strip(), r["Destination"].strip()
++            ffe, rev = float(r["FFEPerWeek"]), float(r["Revenue_1"])
++            d = demands[(o, dst)]
++            k = ffe_to_teu_factor(o, dst)
++            assert d.weekly_teu == pytest.approx(ffe * k, rel=1e-12)
++            assert d.revenue_per_teu == pytest.approx(rev / k, rel=1e-12)
++            assert d.weekly_teu * d.revenue_per_teu == pytest.approx(ffe * rev, rel=1e-12), (o, dst)
++
++    def test_revenue_is_divided_not_multiplied_by_the_factor(self, loader, tmp_path):
++        # Both ends of the lane are WorldSmall ports (AEJEA->NLRTM is in the
++        # canonical data with lane factor 2.1), so the fixture is a valid
++        # WorldSmall-identity file.
++        p = write_tsv(tmp_path / "d.csv", DEMAND_HEADER, [
++            ["AEJEA", "NLRTM", 10, 2100, 5],   # lane factor 2.1
++            ["AOLAD", "AEJEA", 1, 2290, 5],    # default factor 2.0
++        ])
++        by_od = {(d.origin, d.destination): d for d in loader.load_demands(p)}
++        lane = by_od[("AEJEA", "NLRTM")]
++        assert lane.weekly_teu == pytest.approx(21.0)
++        assert lane.revenue_per_teu == pytest.approx(1000.0)
++        default = by_od[("AOLAD", "AEJEA")]
++        assert default.weekly_teu == 2.0
++        assert default.revenue_per_teu == 1145.0   # not 4580.0
++
++    def test_no_worldlarge_demand_scale_on_worldsmall(self, loader):
++        demands = loader.load_demands()
++        ratio = sum(d.weekly_teu for d in demands) / WS_RAW_FFE
++        assert 1.99 <= ratio <= 2.01, f"TEU/FFE ratio {ratio}; x6 scaling would give ~12"
++        assert loader.validation_report["demands"]["demand_scale"] == 1
++        assert demand_scale_for_dataset("worldsmall_shipping_problem.json") == 1
++        # load_problem() must not apply any extra multiplier on top of load_demands().
++        base = {(d.origin, d.destination): d.weekly_teu for d in loader.load_demands()}
++        problem = loader.load_problem()
++        assert {(d.origin, d.destination): d.weekly_teu for d in problem.demands} == base
++
++
++# ---------------------------------------------------------------------------
++# 10-12. Fleet
++# ---------------------------------------------------------------------------
++class TestFleet:
++    def test_capacity_is_not_doubled(self, loader):
++        fleet = loader.load_fleet()
++        raw = {r["Vessel class"].strip(): float(r["Capacity FFE"])
++               for r in read_raw(WORLDSMALL_FILES["fleet_data"])}
++        for c in fleet.classes:
++            assert c.capacity_teu == raw[c.vessel_class], c.vessel_class
++        assert fleet.get_class("Post_panamax").capacity_teu == 4200.0
++
++    def test_six_classes_and_canonical_inventory(self, loader):
++        fleet = loader.load_fleet()
++        assert len(fleet.classes) == 6
++        assert fleet.total_vessels == WS_FLEET_TOTAL
++        assert {c.vessel_class: c.quantity for c in fleet.classes} == WS_FLEET
++        for c in fleet.classes:
++            assert c.design_speed > 0 and c.bunker_consumption_tons_per_day > 0
++
++    def test_inventory_comes_from_the_file_not_a_constant(self, loader, tmp_path):
++        q = write_tsv(tmp_path / "q.csv", QTY_HEADER, [["A", 7], ["B", 5]])
++        s = write_tsv(tmp_path / "s.csv", SPEC_HEADER, [spec_row("A"), spec_row("B", 2000)])
++        fleet = loader.load_fleet(q, s)
++        assert fleet.total_vessels == 12
++        assert fleet.get_class("B").capacity_teu == 2000.0
++
++    def test_blank_fees_are_unknown_not_zero_and_other_blanks_are_rejected(self, loader, tmp_path):
++        # Task 2 contract: a blank canal fee is "no value given" (None). It is not
++        # a confirmed 0.0 fee and not evidence about transit feasibility, so it
++        # must never be readable as "free". (Previously asserted == 0.0.)
++        q = write_tsv(tmp_path / "q.csv", QTY_HEADER, [["A", 1]])
++        s = write_tsv(tmp_path / "s.csv", SPEC_HEADER, [spec_row("A", panamaFee="")])
++        cls = loader.load_fleet(q, s).get_class("A")
++        assert cls.panama_fee is None
++        assert cls.suez_fee == 2000.0            # a given value is kept as-is
++        s = write_tsv(tmp_path / "s2.csv", SPEC_HEADER, [spec_row("A", designSpeed="")])
++        with pytest.raises(DataValidationError, match="designSpeed"):
++            loader.load_fleet(q, s)
++
++    @pytest.mark.parametrize("qty_rows, spec_rows, match", [
++        ([["A", 1], ["B", 1]], [["A"]], "without specifications"),
++        ([["A", 1]], [["A"], ["B"]], "without quantities"),
++        ([["A", 1], ["A", 2]], [["A"]], "duplicate vessel class"),
++        ([["A", 1]], [["A"], ["A"]], "duplicate vessel class"),
++        ([["A", -1]], [["A"]], "negative"),
++        ([["A", 2.5]], [["A"]], "not an integer"),
++        ([["A", "x"]], [["A"]], "non-numeric"),
++        ([["A", "nan"]], [["A"]], "non-finite"),
++    ])
++    def test_class_and_quantity_validation(self, qty_rows, spec_rows, match, loader, tmp_path):
++        q = write_tsv(tmp_path / "q.csv", QTY_HEADER, qty_rows)
++        s = write_tsv(tmp_path / "s.csv", SPEC_HEADER, [spec_row(r[0]) for r in spec_rows])
++        with pytest.raises(DataValidationError, match=match):
++            loader.load_fleet(q, s)
++
++    @pytest.mark.parametrize("over, match", [
++        ({"capacity": 0}, "must be > 0"),
++        ({"capacity": -450}, "negative"),
++        ({"capacity": "inf"}, "non-finite"),
++        ({"capacity": "n/a"}, "non-numeric"),
++        ({"minSpeed": 20, "maxSpeed": 10}, "minSpeed <= designSpeed <= maxSpeed"),
++        ({"suezFee": -1}, "negative"),
++    ])
++    def test_specification_validation(self, over, match, loader, tmp_path):
++        q = write_tsv(tmp_path / "q.csv", QTY_HEADER, [["A", 1]])
++        s = write_tsv(tmp_path / "s.csv", SPEC_HEADER, [spec_row("A", **over)])
++        with pytest.raises(DataValidationError, match=match):
++            loader.load_fleet(q, s)
++
++
++# ---------------------------------------------------------------------------
++# 13. Ports and coordinates
++# ---------------------------------------------------------------------------
++class TestPorts:
++    def test_canonical_ports(self, loader):
++        ports = loader.load_ports()
++        raw = read_raw(WORLDSMALL_FILES["ports"])
++        assert len(ports) == WS_PORTS == len(raw)
++        ids = [p.id for p in ports]
++        assert len(set(ids)) == WS_PORTS
++        assert loader.validation_report["ports"]["excluded"] == []
++        assert all(-90 <= p.latitude <= 90 and -180 <= p.longitude <= 180 for p in ports)
++        by_id = {p.id: p for p in ports}
++        jea = next(r for r in raw if r["UNLocode"] == "AEJEA")
++        assert by_id["AEJEA"].latitude == float(jea["Latitude"])
++        assert by_id["AEJEA"].longitude == float(jea["Longitude"])
++
++    def test_duplicate_port_identifier_is_rejected(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "ports.csv", PORT_HEADER,
++                      [port_row("AAAAA"), port_row("BBBBB"), port_row("AAAAA", lat=1.0)])
++        with pytest.raises(DataValidationError, match="duplicate port identifier 'AAAAA'"):
++            loader.load_ports(p)
++
++    def test_blank_port_identifier_is_rejected(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "ports.csv", PORT_HEADER, [port_row("")])
++        with pytest.raises(DataValidationError, match="blank identifier"):
++            loader.load_ports(p)
++
++    @pytest.mark.parametrize("over", [
++        {"lat": ""}, {"lon": ""}, {"lat": "abc"}, {"lat": "nan"},
++        {"lat": 91.0}, {"lat": -90.5}, {"lon": 180.5}, {"lon": -181},
++    ])
++    def test_unusable_coordinates_are_excluded_visibly(self, over, loader, tmp_path, caplog):
++        p = write_tsv(tmp_path / "ports.csv", PORT_HEADER,
++                      [port_row("AAAAA"), port_row("BADCO", **{
++                          "Latitude": over.get("lat", 20.0), "Longitude": over.get("lon", 10.0)})])
++        with caplog.at_level(logging.WARNING, logger="src.data.network_loader"):
++            ports = loader.load_ports(p)
++        assert [x.id for x in ports] == ["AAAAA"]
++        excluded = loader.validation_report["ports"]["excluded"]
++        assert [e["id"] for e in excluded] == ["BADCO"] and excluded[0]["reason"]
++        assert any("BADCO" in r.getMessage() for r in caplog.records)
++
++    @pytest.mark.parametrize("col, val, match", [
++        ("CostPerFULL", "abc", "non-numeric"),
++        ("CostPerFULL", "", "non-numeric"),
++        ("PortCallCostFixed", -5, "negative"),
++        ("Draft", "inf", "non-finite"),
++    ])
++    def test_invalid_port_numerics_are_rejected(self, col, val, match, loader, tmp_path):
++        p = write_tsv(tmp_path / "ports.csv", PORT_HEADER, [port_row("AAAAA", **{col: val})])
++        with pytest.raises(DataValidationError, match=match):
++            loader.load_ports(p)
++
++
++# ---------------------------------------------------------------------------
++# 14-15. Distances
++# ---------------------------------------------------------------------------
++class TestDistances:
++    def test_canonical_distances_use_the_worldsmall_source_and_nm(self, loader):
++        dist = loader.load_distance_matrix()
++        raw = read_raw(WORLDSMALL_FILES["distance"])
++        assert sum(len(v) for v in dist.values()) == WS_DIRECTED_PAIRS == len(raw)
++        for r in raw:
++            assert dist[r["fromUNLOCODe"].strip()][r["ToUNLOCODE"].strip()] == float(r["Distance"])
++        assert dist["AEJEA"]["AOLAD"] == 6439.0
++        assert loader.validation_report["distances"]["unit"] == "nautical miles"
++
++    def test_all_references_are_within_the_worldsmall_port_set(self, loader):
++        net = loader.load_network()
++        ids = {p.id for p in net["ports"]}
++        assert ids == {r["UNLocode"].strip() for r in read_raw(WORLDSMALL_FILES["ports"])}
++        assert {i for d in net["demands"] for i in (d.origin, d.destination)} <= ids
++        assert set(net["distance_matrix"]) == ids
++        assert all(set(row) <= ids for row in net["distance_matrix"].values())
++
++    def test_directed_distances_are_not_symmetrized(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "d.csv", DIST_HEADER,
++                      [["AAAAA", "BBBBB", 100, "", 0, 0], ["BBBBB", "AAAAA", 120, "", 0, 0]])
++        dist = loader.load_distance_matrix(p)
++        assert dist["AAAAA"]["BBBBB"] == 100.0 and dist["BBBBB"]["AAAAA"] == 120.0
++
++    @pytest.mark.parametrize("rows, match", [
++        ([["A", "B", 100], ["A", "B", 100]], "repeated distance"),
++        ([["A", "B", 100], ["A", "B", 101]], "conflicting distance"),
++        ([["A", "B", -1]], "negative"),
++        ([["A", "B", "inf"]], "non-finite"),
++        ([["A", "B", "nan"]], "non-finite"),
++        ([["A", "B", "far"]], "non-numeric"),
++        ([["A", "B", 0]], "zero distance"),
++        ([["", "B", 5]], "blank identifier"),
++    ])
++    def test_invalid_distance_records_are_rejected(self, rows, match, loader, tmp_path):
++        p = write_tsv(tmp_path / "d.csv", DIST_HEADER, [r + ["", 0, 0] for r in rows])
++        with pytest.raises(DataValidationError, match=match):
++            loader.load_distance_matrix(p)
++
++    def test_missing_directed_pair_fails_without_synthetic_distance(self, loader, tmp_path):
++        ports = loader.load_ports(write_tsv(tmp_path / "p.csv", PORT_HEADER,
++                                            [port_row("AAAAA"), port_row("BBBBB")]))
++        dist = loader.load_distance_matrix(
++            write_tsv(tmp_path / "d.csv", DIST_HEADER, [["AAAAA", "BBBBB", 100, "", 0, 0]]))
++        with pytest.raises(DataValidationError, match="no distance"):
++            loader.validate_network(ports, [], dist)
++        assert dist.get("BBBBB", {}).get("AAAAA") is None  # nothing was invented
++
++    def test_unknown_ports_in_demand_or_distance_are_rejected(self, loader, tmp_path):
++        ports = loader.load_ports(write_tsv(tmp_path / "p.csv", PORT_HEADER,
++                                            [port_row("AAAAA"), port_row("BBBBB")]))
++        full = {"AAAAA": {"BBBBB": 1.0}, "BBBBB": {"AAAAA": 1.0}}
++        bad_demand = loader.load_demands(write_tsv(tmp_path / "d.csv", DEMAND_HEADER,
++                                                   [["AAAAA", "ZZZZZ", 1, 100, 1]]))
++        with pytest.raises(DataValidationError, match="demand references ports"):
++            loader.validate_network(ports, bad_demand, full)
++        with pytest.raises(DataValidationError, match="distance matrix references ports"):
++            loader.validate_network(ports, [], {**full, "ZZZZZ": {"AAAAA": 1.0}})
++
++
++# ---------------------------------------------------------------------------
++# 16. Invalid demand numerics / structure
++# ---------------------------------------------------------------------------
++class TestDemandValidation:
++    @pytest.mark.parametrize("ffe, rev, match", [
++        ("abc", 100, "non-numeric"),
++        ("", 100, "non-numeric"),
++        ("nan", 100, "non-finite"),
++        ("inf", 100, "non-finite"),
++        (-1, 100, "negative"),
++        (1, -100, "negative"),
++        (1, "n/a", "non-numeric"),
++    ])
++    def test_invalid_numeric_demand_is_rejected(self, ffe, rev, match, loader, tmp_path):
++        p = write_tsv(tmp_path / "d.csv", DEMAND_HEADER, [["AAAAA", "BBBBB", ffe, rev, 1]])
++        with pytest.raises(DataValidationError, match=match) as exc:
++            loader.load_demands(p)
++        assert "d.csv" in str(exc.value) and "AAAAA->BBBBB" in str(exc.value)
++
++    def test_duplicate_od_pair_is_rejected(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "d.csv", DEMAND_HEADER,
++                      [["AAAAA", "BBBBB", 1, 100, 1], ["AAAAA", "BBBBB", 2, 100, 1]])
++        with pytest.raises(DataValidationError, match="duplicate OD pair"):
++            loader.load_demands(p)
++
++    def test_self_loops_are_skipped_and_reported(self, loader, tmp_path, caplog):
++        p = write_tsv(tmp_path / "d.csv", DEMAND_HEADER,
++                      [["AAAAA", "AAAAA", 5, 100, 0], ["AAAAA", "BBBBB", 1, 100, 1]])
++        with caplog.at_level(logging.WARNING, logger="src.data.network_loader"):
++            demands = loader.load_demands(p)
++        assert len(demands) == 1
++        assert loader.validation_report["demands"]["self_loops_skipped"] == 1
++        assert any("AAAAA->AAAAA" in r.getMessage() for r in caplog.records)
++
++    def test_empty_file_is_rejected(self, loader, tmp_path):
++        p = tmp_path / "d.csv"
++        p.write_text("", encoding="utf-8")
++        with pytest.raises(DataValidationError, match="empty"):
++            loader.load_demands(p)
++        write_tsv(p, DEMAND_HEADER, [])
++        with pytest.raises(DataValidationError, match="no data rows"):
++            loader.load_demands(p)
++
++
++# ---------------------------------------------------------------------------
++# 17. WorldLarge separation (names and scale constants only; no WorldLarge file is read)
++# ---------------------------------------------------------------------------
++class TestDatasetSeparation:
++    def test_worldlarge_legacy_scale_is_preserved_and_kept_separate(self):
++        assert nl.LEGACY_WORLDLARGE_DEMAND_SCALE == 6
++        assert demand_scale_for_dataset("large_shipping_problem.json") == 6
++        assert nl.WORLDSMALL_DEMAND_SCALE == 1
++        assert demand_scale_for_dataset("worldsmall_shipping_problem.json") == 1
++
++    def test_synthetic_foreign_ids_are_not_worldsmall_ports(self):
++        """Guard for every isolation fixture below: the foreign ids really are foreign."""
++        ws_ids = {r["UNLocode"].strip() for r in read_raw(WORLDSMALL_FILES["ports"])}
++        assert len(FOREIGN_IDS) == 2 and not ws_ids & set(FOREIGN_IDS)
++
++    def test_non_worldsmall_dataset_is_not_mixed_with_worldsmall_distances(self, loader, tmp_path):
++        p = tmp_path / "large_shipping_problem.json"
++        p.write_text('{"ports": [], "demands": []}', encoding="utf-8")
++        with pytest.raises(DataValidationError, match="not a WorldSmall dataset"):
++            loader.load_problem(p)
++
++    def test_load_problem_default_is_worldsmall_with_fleet(self, loader):
++        problem = loader.load_problem()
++        assert isinstance(problem, Problem)
++        assert len(problem.ports) == WS_PORTS
++        assert len(problem.demands) == WS_DEMAND_ROWS
++        assert problem.fleet.total_vessels == WS_FLEET_TOTAL
++        assert problem.services == []
++
++
++# ---------------------------------------------------------------------------
++# 19. Port-cost unit basis (USD/FFE -> USD/TEU is a DIVISION by 2.0)
++# ---------------------------------------------------------------------------
++class TestPortCostBasis:
++    def test_per_ffe_rates_are_divided_and_fixed_cost_is_not(self, loader):
++        ports = {p.id: p for p in loader.load_ports()}
++        raw = read_raw(WORLDSMALL_FILES["ports"])
++        assert len(raw) == WS_PORTS
++        for r in raw:
++            p = ports[r["UNLocode"].strip()]
++            assert p.handling_cost == pytest.approx(float(r["CostPerFULL"]) / 2.0, rel=1e-12)
++            assert p.transshipment_cost == pytest.approx(float(r["CostPerFULLTrnsf"]) / 2.0, rel=1e-12)
++            assert p.variable_port_call_cost == pytest.approx(float(r["PortCallCostPerFFE"]) / 2.0, rel=1e-12)
++            assert p.port_call_cost == float(r["PortCallCostFixed"])          # USD per call
++
++    def test_cost_to_move_one_ffe_is_preserved(self, loader):
++        """Same invariant as revenue: TEU flow x USD/TEU == FFE flow x USD/FFE."""
++        ports = {p.id: p for p in loader.load_ports()}
++        for r in read_raw(WORLDSMALL_FILES["ports"]):
++            p = ports[r["UNLocode"].strip()]
++            one_ffe_in_teu = 2.0
++            assert one_ffe_in_teu * p.handling_cost == pytest.approx(float(r["CostPerFULL"]), rel=1e-12)
++            assert one_ffe_in_teu * p.variable_port_call_cost == pytest.approx(
++                float(r["PortCallCostPerFFE"]), rel=1e-12)
++
++    def test_port_cost_conversion_is_not_lane_dependent(self, loader, tmp_path):
++        # Port costs belong to the port, not to a trade lane: the lane-specific
++        # revenue factors (e.g. 2.1) must not leak into the cost conversion.
++        rows = [port_row("AAAAA", CostPerFULL=210, CostPerFULLTrnsf=84, PortCallCostPerFFE=10)]
++        p = loader.load_ports(write_tsv(tmp_path / "p.csv", PORT_HEADER, rows))[0]
++        assert (p.handling_cost, p.transshipment_cost, p.variable_port_call_cost) == (105.0, 42.0, 5.0)
++
++    def test_report_states_the_basis(self, loader):
++        loader.load_ports()
++        assert "divided by 2.0" in loader.validation_report["ports"]["cost_basis"]
++
++
++# ---------------------------------------------------------------------------
++# 20. Canal fees: blank is unknown, not zero
++# ---------------------------------------------------------------------------
++class TestCanalFees:
++    def test_canonical_blank_fees_are_unknown_and_reported(self, loader):
++        raw = {r["Vessel class"].strip(): r for r in read_raw(WORLDSMALL_FILES["fleet_data"])}
++        fleet = loader.load_fleet()
++        blanks = {}
++        for c in fleet.classes:
++            for col, val in (("panamaFee", c.panama_fee), ("suezFee", c.suez_fee)):
++                cell = raw[c.vessel_class][col].strip()
++                if cell == "":
++                    assert val is None, (c.vessel_class, col)
++                    blanks.setdefault(c.vessel_class, []).append(col)
++                else:
++                    assert val == float(cell), (c.vessel_class, col)
++        assert blanks, "the canonical file is expected to contain blank panamaFee cells"
++        assert loader.validation_report["fleet"]["canal_fee_blank"] == blanks
++
++    def test_confirmed_zero_stays_zero_and_blank_is_none(self, loader, tmp_path):
++        q = write_tsv(tmp_path / "q.csv", QTY_HEADER, [["A", 1], ["B", 1]])
++        s = write_tsv(tmp_path / "s.csv", SPEC_HEADER,
++                      [spec_row("A", panamaFee=0, suezFee=0), spec_row("B", panamaFee="", suezFee="")])
++        fleet = loader.load_fleet(q, s)
++        assert (fleet.get_class("A").panama_fee, fleet.get_class("A").suez_fee) == (0.0, 0.0)
++        assert (fleet.get_class("B").panama_fee, fleet.get_class("B").suez_fee) == (None, None)
++
++    def test_default_fleet_class_fees_are_unknown(self):
++        from src.optimization.data import FleetClass
++        c = FleetClass(vessel_class="X", quantity=1)
++        assert c.panama_fee is None and c.suez_fee is None
++
++
++# ---------------------------------------------------------------------------
++# 21. Explicit-path dataset boundary (location + content, never the file name)
++# ---------------------------------------------------------------------------
++class TestExplicitPathBoundary:
++    @pytest.fixture
++    def raw_tree(self, tmp_path, monkeypatch):
++        """A stand-in raw-data tree that mirrors the repo layout, including
++        WorldSmall-looking file names inside the WorldLarge directory."""
++        raw = tmp_path / "raw"
++        (raw / "WorldSmall").mkdir(parents=True)
++        (raw / "WorldLarge").mkdir()
++        monkeypatch.setattr(nl, "RAW_DATA_DIR", raw)
++        monkeypatch.setattr(nl, "WORLDSMALL_DIR", raw / "WorldSmall")
++        return raw
++
++    def test_misleading_name_inside_worldlarge_directory_is_rejected(self, loader, raw_tree):
++        p = write_tsv(raw_tree / "WorldLarge" / "ports_world_small.csv", PORT_HEADER, [port_row("AAAAA")])
++        with pytest.raises(DataValidationError, match="reads only WorldSmall"):
++            loader.load_ports(p)
++        d = write_tsv(raw_tree / "WorldLarge" / "Demand_WorldSmall_Fixed_Sep.csv", DEMAND_HEADER,
++                      [["AAAAA", "BBBBB", 1, 100, 1]])
++        with pytest.raises(DataValidationError, match="reads only WorldSmall"):
++            loader.load_demands(d)
++
++    def test_any_non_worldsmall_location_in_the_raw_tree_is_rejected(self, loader, raw_tree):
++        (raw_tree / "Other").mkdir()
++        p = write_tsv(raw_tree / "Other" / "ports.csv", PORT_HEADER, [port_row("AAAAA")])
++        with pytest.raises(DataValidationError, match="reads only WorldSmall"):
++            loader.load_ports(p)
++
++    def test_file_inside_the_worldsmall_directory_is_accepted(self, loader, raw_tree):
++        p = write_tsv(raw_tree / "WorldSmall" / "ports.csv", PORT_HEADER, [port_row("AAAAA")])
++        assert [x.id for x in loader.load_ports(p)] == ["AAAAA"]
++
++    def test_isolated_fixture_outside_the_raw_tree_is_accepted(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "fixture_ports.csv", PORT_HEADER, [port_row("ZZZ01"), port_row("ZZZ02")])
++        assert len(loader.load_ports(p)) == 2
++
++    def test_worldsmall_subset_fixture_is_accepted(self, loader, tmp_path):
++        p = write_tsv(tmp_path / "subset.csv", PORT_HEADER, [port_row("AEJEA"), port_row("NLRTM")])
++        assert {x.id for x in loader.load_ports(p)} == {"AEJEA", "NLRTM"}
++
++    def test_ports_file_mixing_worldsmall_and_foreign_ids_is_rejected(self, loader, tmp_path):
++        # Named like the canonical file, living outside the raw tree: only the
++        # content can reveal that it is a different (larger) dataset.
++        rows = [port_row(r["UNLocode"].strip()) for r in read_raw(WORLDSMALL_FILES["ports"])]
++        rows += [port_row(i) for i in FOREIGN_IDS]         # synthetic foreign ports
++        p = write_tsv(tmp_path / "ports.csv", PORT_HEADER, rows)
++        with pytest.raises(DataValidationError, match="mixes 47 WorldSmall port ids with 2"):
++            loader.load_ports(p)
++
++    def test_demand_and_distance_files_mixing_datasets_are_rejected(self, loader, tmp_path):
++        d = write_tsv(tmp_path / "Demand_WorldSmall_Fixed_Sep.csv", DEMAND_HEADER,
++                      [["AEJEA", "NLRTM", 1, 100, 1], ["AEJEA", FOREIGN_IDS[0], 1, 100, 1]])
++        with pytest.raises(DataValidationError, match="demand file mixes"):
++            loader.load_demands(d)
++        m = write_tsv(tmp_path / "dist_dense.csv", DIST_HEADER,
++                      [["AEJEA", "NLRTM", 100, "", 0, 0], ["AEJEA", FOREIGN_IDS[0], 100, "", 0, 0]])
++        with pytest.raises(DataValidationError, match="distance file mixes"):
++            loader.load_distance_matrix(m)
++
++    def test_file_role_is_enforced_by_schema(self, loader):
++        with pytest.raises(DataValidationError, match="missing required column"):
++            loader.load_ports(WORLDSMALL_FILES["demand"])
++        with pytest.raises(DataValidationError, match="missing required column"):
++            loader.load_demands(WORLDSMALL_FILES["distance"])
++        with pytest.raises(DataValidationError, match="missing required column"):
++            loader.load_distance_matrix(WORLDSMALL_FILES["ports"])
++
++    def test_canonical_files_pass_when_given_explicitly(self, loader):
++        assert len(loader.load_ports(WORLDSMALL_FILES["ports"])) == WS_PORTS
++        assert len(loader.load_demands(WORLDSMALL_FILES["demand"])) == WS_DEMAND_ROWS
++        assert sum(len(v) for v in loader.load_distance_matrix(WORLDSMALL_FILES["distance"]).values()) == WS_DIRECTED_PAIRS
++        assert loader.load_fleet(WORLDSMALL_FILES["fleet"], WORLDSMALL_FILES["fleet_data"]).total_vessels == WS_FLEET_TOTAL
++
++    def test_default_is_never_a_worldlarge_file(self, loader):
++        loader.load_network()
++        loader.load_fleet()
++        report = loader.validation_report
++        for section in ("ports", "demands", "distances"):
++            assert Path(report[section]["source"]).parent.name == "WorldSmall", section
++        for key in ("quantity_source", "specification_source"):
++            assert Path(report["fleet"][key]).parent.name == "WorldSmall", key
++        assert report["ports"]["loaded"] == WS_PORTS
++
++
++# ---------------------------------------------------------------------------
++# 22. Explicit JSON dataset: identity from content, equivalence to canonical
++# ---------------------------------------------------------------------------
++def _canonical_json(loader, *, port_cost_factor=1.0, revenue_factor=1.0, qty_factor=1.0, extra_ports=()):
++    import dataclasses
++    ports = []
++    for p in loader.load_ports():
++        d = dataclasses.asdict(p)
++        for f in ("handling_cost", "transshipment_cost", "variable_port_call_cost"):
++            d[f] *= port_cost_factor
++        ports.append(d)
++    for pid in extra_ports:
++        ports.append({"id": pid, "name": pid, "latitude": 1.0, "longitude": 1.0})
++    demands = []
++    for dm in loader.load_demands():
++        d = dataclasses.asdict(dm)
++        d["weekly_teu"] *= qty_factor
++        d["revenue_per_teu"] *= revenue_factor
++        demands.append(d)
++    return {"ports": ports, "demands": demands}
++
++
++class TestExplicitJsonDataset:
++    def test_canonical_equivalent_dataset_loads_with_the_worldsmall_fleet(self, loader, tmp_path):
++        import json
++        p = tmp_path / "worldsmall_fixture.json"
++        p.write_text(json.dumps(_canonical_json(loader)), encoding="utf-8")
++        problem = loader.load_problem(p)
++        assert len(problem.ports) == WS_PORTS and len(problem.demands) == WS_DEMAND_ROWS
++        assert problem.fleet is not None and problem.fleet.total_vessels == WS_FLEET_TOTAL
++
++    def test_worldlarge_content_under_a_worldsmall_name_is_rejected(self, loader, tmp_path):
++        import json
++        data = _canonical_json(loader, extra_ports=FOREIGN_IDS)          # synthetic foreign ports
++        p = tmp_path / "worldsmall_shipping_problem.json"      # passes the name gate
++        p.write_text(json.dumps(data), encoding="utf-8")
++        with pytest.raises(DataValidationError, match="outside the WorldSmall port set"):
++            loader.load_problem(p)
++
++    def test_empty_dataset_with_a_worldsmall_name_is_rejected(self, loader, tmp_path):
++        p = tmp_path / "worldsmall_empty.json"
++        p.write_text('{"ports": [], "demands": []}', encoding="utf-8")
++        with pytest.raises(DataValidationError, match="no ports or no demands"):
++            loader.load_problem(p)
++
++    @pytest.mark.parametrize("kwargs, needle", [
++        ({"revenue_factor": 2.0, "qty_factor": 1.0}, "gross revenue"),     # revenue x k bug
++        ({"qty_factor": 6.0}, "weekly_teu"),                                # WorldLarge x6 scale
++        ({"port_cost_factor": 4.0}, "handling_cost"),                       # legacy x2 vs /2 basis
++    ])
++    def test_dataset_with_a_different_unit_basis_is_rejected(self, loader, tmp_path, kwargs, needle):
++        import json
++        p = tmp_path / "worldsmall_variant.json"
++        p.write_text(json.dumps(_canonical_json(loader, **kwargs)), encoding="utf-8")
++        with pytest.raises(DataValidationError, match="disagrees with the canonical") as exc:
++            loader.load_problem(p)
++        assert needle in str(exc.value)
++
++    def test_dataset_inside_the_worldlarge_directory_is_rejected(self, loader, tmp_path, monkeypatch):
++        import json
++        raw = tmp_path / "raw"
++        (raw / "WorldSmall").mkdir(parents=True)
++        (raw / "WorldLarge").mkdir()
++        monkeypatch.setattr(nl, "RAW_DATA_DIR", raw)
++        monkeypatch.setattr(nl, "WORLDSMALL_DIR", raw / "WorldSmall")
++        p = raw / "WorldLarge" / "worldsmall_shipping_problem.json"
++        p.write_text(json.dumps(_canonical_json(loader)), encoding="utf-8")
++        with pytest.raises(DataValidationError, match="reads only WorldSmall"):
++            loader.load_problem(p)
++
++
++# ---------------------------------------------------------------------------
++# 18. Determinism
++# ---------------------------------------------------------------------------
++class TestDeterminism:
++    def test_repeated_loading_is_identical(self):
++        a, b = NetworkLoader(), NetworkLoader()
++        na, nb = a.load_network(), b.load_network()
++        assert na["ports"] == nb["ports"]
++        assert na["demands"] == nb["demands"]
++        assert na["distance_matrix"] == nb["distance_matrix"]
++        assert a.load_fleet() == b.load_fleet()
++        # Same instance, second call.
++        assert a.load_demands() == na["demands"]
++        assert a.validation_report["demands"] == b.validation_report["demands"]

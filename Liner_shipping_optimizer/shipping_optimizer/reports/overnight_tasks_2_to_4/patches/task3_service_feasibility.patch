@@ -1,0 +1,1211 @@
+diff --git a/src/agents/regional_agent.py b/src/agents/regional_agent.py
+index d37aa6c..b23a4dc 100644
+--- a/src/agents/regional_agent.py
++++ b/src/agents/regional_agent.py
+@@ -263,15 +263,14 @@ class RegionalAgent(BaseAgent):
+             if isinstance(s, Service):
+                 norm.append(s)
+             else:
+-                capacity = s.get("capacity", 5000)
+-                vessel_class = s.get("vessel_class", map_capacity_to_vessel_class(capacity))
+-                norm.append(Service(
+-                    id=s.get("id", i), ports=s["ports"],
+-                    capacity=capacity,
+-                    weekly_cost=s.get("weekly_cost", 150_000),
+-                    cycle_time=s.get("cycle_time", 14),
+-                    vessel_class=vessel_class
+-                ))
++                # The generator screens every candidate and returns Service objects.
++                # A bare record would need an invented capacity / cost / cycle time
++                # (the former 5000 / 150000 / 14 defaults); refuse it instead.
++                raise TypeError(
++                    f"candidate #{i} is a {type(s).__name__}, not a screened Service: "
++                    f"unscreened records cannot enter the optimisation pool "
++                    f"(no capacity, cost or cycle time is assumed)"
++                )
+         # Namespace service IDs with region prefix to avoid global collisions
+         for idx, s in enumerate(norm):
+             s.id = f"{region_prefix}_svc_{idx:03d}"
+diff --git a/src/agents/service_generator_agent.py b/src/agents/service_generator_agent.py
+index 75e4f9b..bfb0ce4 100644
+--- a/src/agents/service_generator_agent.py
++++ b/src/agents/service_generator_agent.py
+@@ -9,6 +9,10 @@ from src.services.hub_detector                import HubDetector
+ from src.services.candidate_service_generator import CandidateServiceGenerator
+ from src.optimization.data                    import Problem, Service
+ from src.utils.fuel_cost                      import map_capacity_to_vessel_class
++from src.services.service_feasibility         import (
++    CandidateReport, DEFAULT_PORT_TIME, ServiceFeasibilityError,
++    evaluate_rotation, rank_vessel_classes,
++)
+ from src.validation.archetype_validator       import validate_archetype_params, DEFAULT_ARCHETYPE_PARAMS
+ from src.llm.actuation                        import actuation_ledger
+ from src.llm.client                           import llm_client
+@@ -27,6 +31,8 @@ class ServiceGeneratorAgent(BaseAgent):
+             "validator_executed": 0,
+             "fallback_count": 0,
+         }
++        # Filled by generate_services(): what was generated / accepted / rejected.
++        self.last_candidate_report = CandidateReport()
+ 
+     def get_system_prompt(self) -> str:
+         return (
+@@ -54,6 +60,69 @@ class ServiceGeneratorAgent(BaseAgent):
+         services: List[Service] = []
+         sid = 0
+ 
++        # ── Feasibility screening (physical service model) ─────────────────
++        # Every candidate is a closed rotation sailed by ONE class of the
++        # canonical fleet. Capacity, speed, vessel cost and the cycle time are
++        # derived from that class and the route's directed distances; a
++        # candidate that cannot be evaluated is rejected with a reason and never
++        # enters the pool. No default fleet, class, distance or capacity exists.
++        fleet = getattr(problem, "fleet", None)
++        if fleet is None or not getattr(fleet, "classes", None):
++            raise ServiceFeasibilityError(
++                "problem.fleet is required to generate candidate services "
++                "(load it with NetworkLoader.load_fleet / load_problem); no default "
++                "fleet or vessel class is assumed"
++            )
++        port_time = DEFAULT_PORT_TIME
++        known_ports = set(problem.distance_matrix)
++        unit_status = getattr(fleet, "capacity_unit_status", "provisional")
++        report = CandidateReport(capacity_unit_status=unit_status,
++                                 port_time_basis=port_time.basis)
++
++        def _emit(route, target_capacity, section, legacy_cycle, vessel=None):
++            """Evaluate one candidate rotation and append it only if feasible."""
++            nonlocal sid
++
++            def _eval(v):
++                return evaluate_rotation(
++                    route, v, problem.distance_matrix,
++                    known_ports=known_ports, port_time=port_time,
++                    capacity_unit_status=unit_status,
++                )
++
++            if vessel is not None:
++                feas = _eval(vessel)               # class named by the caller
++            else:
++                # Nearest-capacity class first; if the rotation is not locally
++                # feasible with it (e.g. it needs more vessels than the class owns)
++                # the next-nearest class is tried. The first failure is reported
++                # if none works.
++                feas = None
++                for rank, cand in enumerate(rank_vessel_classes(target_capacity, fleet)):
++                    trial = _eval(cand)
++                    if feas is None:
++                        feas = trial
++                    if trial.feasible:
++                        if rank > 0:
++                            report.class_fallbacks += 1
++                        feas = trial
++                        break
++            report.record(section, feas, legacy_declared=legacy_cycle)
++            if not feas.feasible:
++                return None
++            svc = Service(
++                id=sid, ports=list(route),
++                capacity=feas.capacity_teu, weekly_cost=feas.weekly_vessel_cost,
++                cycle_time=feas.cycle_time_days, speed=feas.speed_knots,
++                vessel_class=feas.vessel_class,
++                distance_nm=feas.distance_nm,
++                required_vessels=feas.required_vessels_one_departure,
++                capacity_unit_status=feas.capacity_unit_status,
++            )
++            services.append(svc)
++            sid += 1
++            return svc
++
+         # ── Apply archetype params to influence generation mix ─────────
+         params = archetype_params or {}
+         arch_mix = params.get("archetype_mix", {})
+@@ -118,21 +187,13 @@ class ServiceGeneratorAgent(BaseAgent):
+             demand_teu = d.weekly_teu
+             target_capacity = max(1000, demand_teu * 1.2)  # Min 1000 TEU, 20% buffer
+ 
+-            # Round to nearest standard vessel size
++            # Sizing target: nearest standard size. The vessel class is the fleet
++            # class nearest to it; its OWN capacity, speed and cost are then used.
+             standard_sizes = [1000, 2000, 4500, 8000, 12000, 16000]
+             closest_size = min(standard_sizes, key=lambda x: abs(x - target_capacity))
+ 
+-            vessel_class = map_capacity_to_vessel_class(closest_size)
+-            # Scale cost proportionally
+-            weekly_cost = 150_000 * (closest_size / 8000)
+-
+-            services.append(Service(
+-                id=sid, ports=[d.origin, d.destination],
+-                capacity=closest_size, weekly_cost=weekly_cost, cycle_time=14,
+-                vessel_class=vessel_class
+-            ))
+-            sid += 1
+-        logger.info("direct_services_added", count=n_direct)
++            _emit([d.origin, d.destination], closest_size, "direct", 14)
++        logger.info("direct_services_added", count=report.accepted_by_section.get("direct", 0))
+ 
+         # ── B: Multi-port regional loop services via each hub ───────────
+         # Each loop visits the hub + its top-N spoke ports.
+@@ -170,39 +231,25 @@ class ServiceGeneratorAgent(BaseAgent):
+                     if all(p in route for p in [d.origin, d.destination])
+                 )
+ 
+-                # Size based on actual demand
++                # Sizing target from actual demand; the vessel class is the fleet
++                # class nearest to it and supplies capacity, speed and cost.
+                 if loop_demand > 8000:
+-                    capacity = 14000
+-                    weekly_cost = 280_000
++                    target = 14000
+                 elif loop_demand > 4000:
+-                    capacity = 10000
+-                    weekly_cost = 180_000
++                    target = 10000
+                 else:
+-                    capacity = 8000
+-                    weekly_cost = 150_000
+-
+-                vessel_class = map_capacity_to_vessel_class(capacity)
+-                services.append(Service(
+-                    id=sid, ports=route,
+-                    capacity=capacity, weekly_cost=weekly_cost, cycle_time=21,
+-                    vessel_class=vessel_class
+-                ))
+-                sid += 1
+-                loop_count += 1
++                    target = 8000
++
++                if _emit(route, target, "hub_loop", 21) is not None:
++                    loop_count += 1
+         logger.info("hub_loop_services_added", count=loop_count)
+ 
+         # ── C: Hub-to-hub trunk routes ──────────────────────────────────
+         trunk_count = 0
+         for i in range(len(top10_hubs)):
+             for j in range(i + 1, len(top10_hubs)):
+-                vessel_class = map_capacity_to_vessel_class(12000)
+-                services.append(Service(
+-                    id=sid, ports=[top10_hubs[i], top10_hubs[j]],
+-                    capacity=12000, weekly_cost=200_000, cycle_time=14,
+-                    vessel_class=vessel_class
+-                ))
+-                sid += 1
+-                trunk_count += 1
++                if _emit([top10_hubs[i], top10_hubs[j]], 12000, "trunk", 14) is not None:
++                    trunk_count += 1
+         logger.info("trunk_services_added", count=trunk_count)
+ 
+         # ── D: Feeder services — every spoke to best hub ────────────────
+@@ -252,17 +299,8 @@ class ServiceGeneratorAgent(BaseAgent):
+ 
+                 closest_size = min(standard_sizes, key=lambda x: abs(x - target_capacity))
+ 
+-                vessel_class = map_capacity_to_vessel_class(closest_size)
+-                # Scale cost proportionally
+-                weekly_cost = 70_000 * (closest_size / 4000)
+-
+-                services.append(Service(
+-                    id=sid, ports=[spoke, best_hub],
+-                    capacity=closest_size, weekly_cost=weekly_cost, cycle_time=7,
+-                    vessel_class=vessel_class
+-                ))
+-                sid += 1
+-                feeder_count += 1
++                if _emit([spoke, best_hub], closest_size, "feeder", 7) is not None:
++                    feeder_count += 1
+         logger.info("feeder_services_added", count=feeder_count)
+ 
+         # ── E: Heuristic base candidate pool ───────────────────────────
+@@ -271,22 +309,30 @@ class ServiceGeneratorAgent(BaseAgent):
+         generator = CandidateServiceGenerator(problem)
+         generator._service_id_counter = sid
+         base_services = generator.generate_services(num_services=heuristic_limit)
+-        # CandidateServiceGenerator yields plain {"ports": [...]} records. They are
+-        # converted here so the pool honours the declared ``List[Service]`` contract
+-        # (optimisers read ``.ports`` / ``.capacity`` attributes). The defaults are
+-        # exactly the ones RegionalAgent applied downstream, so values are unchanged.
++        # CandidateServiceGenerator yields plain {"ports": [...]} records. They go
++        # through the same screening as every other candidate and are converted to
++        # ``Service`` objects (optimisers read ``.ports`` / ``.capacity``). A record
++        # that names its own vessel class is evaluated with that class; an unknown
++        # name is a rejection, not a substitution.
+         for rec in base_services:
+-            cap = rec.get("capacity", 5000)
+-            services.append(Service(
+-                id=sid, ports=rec["ports"], capacity=cap,
+-                weekly_cost=rec.get("weekly_cost", 150_000),
+-                cycle_time=rec.get("cycle_time", 14),
+-                vessel_class=rec.get("vessel_class", map_capacity_to_vessel_class(cap)),
+-            ))
+-            sid += 1
+-        logger.info("heuristic_services_added", count=len(base_services))
++            named = rec.get("vessel_class")
++            vessel = fleet.get_class(named) if named else None
++            if named and vessel is None:
++                feas = evaluate_rotation(rec["ports"], None, problem.distance_matrix,
++                                         known_ports=known_ports, port_time=port_time,
++                                         capacity_unit_status=unit_status)
++                feas.vessel_class = str(named)
++                report.record("heuristic", feas, legacy_declared=rec.get("cycle_time", 14))
++                continue
++            _emit(rec["ports"], rec.get("capacity", 5000), "heuristic",
++                  rec.get("cycle_time", 14), vessel=vessel)
++        logger.info("heuristic_services_added", count=report.accepted_by_section.get("heuristic", 0))
+ 
+-        logger.info("candidate_services_generated", num_services=len(services))
++        self.last_candidate_report = report
++        logger.info(
++            "candidate_services_generated | accepted=%d rejected=%d generated=%d",
++            report.accepted, report.rejected, report.generated,
++        )
+         return services
+ 
+     # ------------------------------------------------------------------
+@@ -449,6 +495,7 @@ class ServiceGeneratorAgent(BaseAgent):
+             "services_generated": len(services),
+             "services":           services,
+             "archetype_params":   archetype_params,
++            "candidate_feasibility": self.last_candidate_report.to_dict(),
+             "llm_runtime_metrics": dict(self._metrics),
+             "llm_actuation":      act.to_dict(),
+         }
+\ No newline at end of file
+diff --git a/src/optimization/data.py b/src/optimization/data.py
+index 12c04e1..deaf635 100644
+--- a/src/optimization/data.py
++++ b/src/optimization/data.py
+@@ -48,6 +48,10 @@ class Service:
+     speed: float = 18
+     fuel_cost: float = 0
+     vessel_class: str = ""  # Added for fuel cost calculation
++    # Filled by the feasibility-screened generator (None for hand-built services):
++    distance_nm: Optional[float] = None       # closed rotation, return leg included once
++    required_vessels: Optional[int] = None    # vessels for ONE departure per week
++    capacity_unit_status: str = "provisional" # status of the Capacity FFE -> TEU reading
+ 
+     def __post_init__(self):
+         # Backward-compat: accept int IDs by stringifying them.
+diff --git a/src/services/candidate_service_generator.py b/src/services/candidate_service_generator.py
+index 7cbb36d..0935ece 100644
+--- a/src/services/candidate_service_generator.py
++++ b/src/services/candidate_service_generator.py
+@@ -53,14 +53,20 @@ class CandidateServiceGenerator:
+                 hub_prob = 0.15  # Only 15% hub insertion for major corridors
+ 
+             if random.random() < hub_prob:
+-                # Prefer actual major hubs over random ports
++                # Prefer actual major hubs over random ports. The inserted hub must be
++                # a third port: a hub equal to the origin or destination would make a
++                # rotation that visits a port twice (a zero-length leg).
+                 major_hubs = ['HKG', 'SIN', 'ROT', 'NYC', 'SHA', 'CNXHG', 'SGSIN', 'NLRTM', 'USLAX', 'DEBRV']
+-                available_hubs = [h for h in major_hubs if h in self.problem.distance_matrix]
++                ends = (origin, destination)
++                available_hubs = [h for h in major_hubs
++                                  if h in self.problem.distance_matrix and h not in ends]
+                 if available_hubs:
+                     hub = random.choice(available_hubs)
+                 else:
+-                    hub = random.choice(list(self.problem.distance_matrix.keys()))
+-                route.append(hub)
++                    others = [p for p in self.problem.distance_matrix if p not in ends]
++                    hub = random.choice(others) if others else None
++                if hub is not None:
++                    route.append(hub)
+ 
+             route.append(destination)
+ 
+diff --git a/src/services/service_feasibility.py b/src/services/service_feasibility.py
+new file mode 100644
+index 0000000..907f6c4
+--- /dev/null
++++ b/src/services/service_feasibility.py
+@@ -0,0 +1,396 @@
++"""Physical feasibility of candidate liner services.
++
++A candidate is a closed rotation: an ordered sequence of distinct ports, sailed with
++one vessel class, returning to its first port. This module derives everything that
++follows from the route and the vessel class -- and nothing is invented:
++
++    legs            consecutive ports plus the closing leg, each exactly once
++    sailing time    distance [nm] / (speed [kn] * 24)  [days], speed = class designSpeed
++    port time       calls * port_stay_hours / 24        [days]  (EXPLICIT ASSUMPTION)
++    cycle time      sailing + port                      [days]; declared = ceil()
++    vessels         ceil(cycle_time_days * weekly_frequency / 7)
++    capacity        the selected vessel class capacity (``Capacity FFE``, PROVISIONAL unit)
++
++Route representation. ``Service.ports`` may be an open list ``[a, b, c]`` (closure
++implied) or an explicitly closed list ``[a, b, c, a]``; both denote the same
++rotation and :func:`rotation_legs` yields the closing leg exactly once.
++
++Rejected candidates are returned with structured reasons; callers must not pass
++them to the optimisers. Missing distances, unknown classes or invalid speeds are
++rejections -- never replaced by a default.
++"""
++
++from __future__ import annotations
++
++import math
++from collections import Counter
++from dataclasses import dataclass, field
++from typing import Dict, Iterable, List, Optional, Sequence, Tuple
++
++HOURS_PER_DAY = 24.0
++DAYS_PER_WEEK = 7.0
++_EPS = 1e-9
++
++# ---- stable rejection identifiers -------------------------------------------------
++R_TOO_FEW_PORTS = "fewer_than_two_distinct_ports"
++R_REPEATED_PORT = "repeated_port_in_rotation"
++R_UNKNOWN_PORT = "unknown_port"
++R_MISSING_DISTANCE = "missing_directed_distance"
++R_INVALID_DISTANCE = "invalid_distance"
++R_UNKNOWN_CLASS = "unknown_vessel_class"
++R_NO_VESSELS = "vessel_class_has_no_vessels"
++R_INVALID_SPEED = "invalid_vessel_speed"
++R_INVALID_CAPACITY = "invalid_vessel_capacity"
++R_IMPOSSIBLE_AT_MAX_SPEED = "declared_cycle_time_impossible_at_max_speed"
++R_DECLARED_TOO_SHORT = "declared_cycle_time_shorter_than_required"
++R_EXCEEDS_INVENTORY = "required_vessels_exceed_class_inventory"
++
++ALL_REASONS = (
++    R_TOO_FEW_PORTS, R_REPEATED_PORT, R_UNKNOWN_PORT, R_MISSING_DISTANCE,
++    R_INVALID_DISTANCE, R_UNKNOWN_CLASS, R_NO_VESSELS, R_INVALID_SPEED,
++    R_INVALID_CAPACITY, R_IMPOSSIBLE_AT_MAX_SPEED, R_DECLARED_TOO_SHORT,
++    R_EXCEEDS_INVENTORY,
++)
++
++
++class ServiceFeasibilityError(ValueError):
++    """A required input (fleet, class, frequency, ...) is missing or invalid."""
++
++
++def _finite(x) -> bool:
++    return (isinstance(x, (int, float)) and not isinstance(x, bool)
++            and math.isfinite(x))
++
++
++@dataclass(frozen=True)
++class PortTimeAssumptions:
++    """Time spent in port per call. NOT measured data: the canonical WorldSmall files
++    carry no port-time column, so this is an explicit, configurable assumption."""
++
++    port_stay_hours: float = 24.0
++    basis: str = (
++        "assumed: LINERLIB benchmark documentation states a minimum port stay of "
++        "24 hours for all ports; no port-time column exists in the canonical files. "
++        "Cargo-handling time is not modelled (no source)."
++    )
++
++    def __post_init__(self):
++        if not _finite(self.port_stay_hours) or self.port_stay_hours < 0:
++            raise ServiceFeasibilityError(
++                f"port_stay_hours must be a finite number >= 0, got {self.port_stay_hours!r}"
++            )
++
++
++DEFAULT_PORT_TIME = PortTimeAssumptions()
++
++
++# =====================================================================================
++# Route helpers
++# =====================================================================================
++def rotation_ports(route: Sequence) -> List:
++    """Unique port sequence of a rotation (a trailing return to the first port dropped)."""
++    ports = list(route)
++    if len(ports) >= 2 and ports[0] == ports[-1]:
++        ports = ports[:-1]
++    return ports
++
++
++def rotation_legs(route: Sequence) -> List[Tuple]:
++    """Directed legs of the closed rotation, the closing leg included exactly once.
++
++    ``[a, b]`` -> ``[(a, b), (b, a)]``; ``[a, b, c]`` and ``[a, b, c, a]`` ->
++    ``[(a, b), (b, c), (c, a)]``. Fewer than two distinct ports have no legs.
++    """
++    ports = rotation_ports(route)
++    n = len(ports)
++    if n < 2:
++        return []
++    return [(ports[i], ports[(i + 1) % n]) for i in range(n)]
++
++
++def required_vessels(cycle_time_days: float, weekly_frequency: int) -> int:
++    """Vessels needed to keep ``weekly_frequency`` departures per week:
++    ``ceil(cycle_time_days * weekly_frequency / 7)``. Zero frequency needs zero vessels."""
++    if not _finite(cycle_time_days) or cycle_time_days <= 0:
++        raise ServiceFeasibilityError(
++            f"cycle_time_days must be a finite number > 0, got {cycle_time_days!r}"
++        )
++    if (not _finite(weekly_frequency) or weekly_frequency < 0
++            or weekly_frequency != int(weekly_frequency)):
++        raise ServiceFeasibilityError(
++            f"weekly_frequency must be a whole number >= 0, got {weekly_frequency!r}"
++        )
++    if weekly_frequency == 0:
++        return 0
++    return int(math.ceil(round(cycle_time_days * weekly_frequency / DAYS_PER_WEEK, 9)))
++
++
++# =====================================================================================
++# Evaluation result
++# =====================================================================================
++@dataclass
++class ServiceFeasibility:
++    ports: List                       # unique rotation order (closing leg implied)
++    vessel_class: str = ""
++    legs: List[Tuple] = field(default_factory=list)       # (from, to, nm)
++    capacity_teu: Optional[float] = None
++    speed_knots: Optional[float] = None
++    weekly_vessel_cost: Optional[float] = None            # tc_rate_daily * 7, per vessel
++    distance_nm: Optional[float] = None
++    sailing_days: Optional[float] = None
++    port_days: Optional[float] = None
++    cycle_days: Optional[float] = None                    # exact, design speed
++    cycle_days_at_max_speed: Optional[float] = None
++    cycle_time_days: Optional[int] = None                 # declared = ceil(cycle_days)
++    required_vessels_one_departure: Optional[int] = None  # at 1 departure / week
++    class_inventory: Optional[int] = None
++    declared_cycle_time_days: Optional[float] = None
++    capacity_unit_status: str = "provisional"
++    port_time_basis: str = ""
++    reasons: List[str] = field(default_factory=list)
++    details: List[str] = field(default_factory=list)
++
++    @property
++    def feasible(self) -> bool:
++        return not self.reasons
++
++    def required_vessels(self, weekly_frequency: int) -> int:
++        if self.cycle_time_days is None:
++            raise ServiceFeasibilityError("cycle time is undefined for an infeasible candidate")
++        return required_vessels(self.cycle_time_days, weekly_frequency)
++
++    def to_dict(self) -> Dict:
++        d = dict(self.__dict__)
++        d["feasible"] = self.feasible
++        return d
++
++
++# =====================================================================================
++# Evaluation
++# =====================================================================================
++def evaluate_rotation(
++    route: Sequence,
++    vessel,
++    distance_matrix: Dict,
++    *,
++    known_ports: Optional[Iterable] = None,
++    port_time: PortTimeAssumptions = DEFAULT_PORT_TIME,
++    declared_cycle_time_days: Optional[float] = None,
++    capacity_unit_status: str = "provisional",
++) -> ServiceFeasibility:
++    """Derive and validate the physical properties of one candidate rotation.
++
++    ``vessel`` is a ``FleetClass`` (``None`` -> unknown class). ``distance_matrix`` is
++    ``{from: {to: nautical miles}}``. If ``declared_cycle_time_days`` is given it is
++    CHECKED against the derived requirement (rejected if too short); callers that
++    recalculate simply omit it.
++    """
++    ports = rotation_ports(route)
++    out = ServiceFeasibility(
++        ports=list(ports),
++        vessel_class=getattr(vessel, "vessel_class", "") or "",
++        declared_cycle_time_days=declared_cycle_time_days,
++        capacity_unit_status=capacity_unit_status,
++        port_time_basis=port_time.basis,
++    )
++    bad = out.reasons.append
++    note = out.details.append
++
++    # ---- route -------------------------------------------------------------------
++    if len(ports) < 2:
++        bad(R_TOO_FEW_PORTS)
++        note(f"route {list(route)!r} has {len(ports)} distinct port(s)")
++    if len(set(ports)) != len(ports):
++        bad(R_REPEATED_PORT)
++        dup = sorted({p for p in ports if ports.count(p) > 1}, key=str)
++        note(f"ports visited more than once per rotation: {dup}")
++    if known_ports is not None:
++        known = set(known_ports)
++        unknown = [p for p in ports if p not in known]
++        if unknown:
++            bad(R_UNKNOWN_PORT)
++            note(f"ports not in the network: {unknown}")
++
++    # ---- vessel ------------------------------------------------------------------
++    speed = capacity = None
++    if vessel is None:
++        bad(R_UNKNOWN_CLASS)
++        note("vessel class is not in the fleet specification")
++    else:
++        qty = getattr(vessel, "quantity", 0)
++        if not _finite(qty) or qty <= 0:
++            bad(R_NO_VESSELS)
++            note(f"class {out.vessel_class!r} has no vessels (quantity={qty!r})")
++        out.class_inventory = int(qty) if _finite(qty) else None
++        speed = getattr(vessel, "design_speed", None)
++        lo, hi = getattr(vessel, "min_speed", None), getattr(vessel, "max_speed", None)
++        if not (_finite(speed) and speed > 0 and _finite(lo) and _finite(hi)
++                and 0 < lo <= speed <= hi):
++            bad(R_INVALID_SPEED)
++            note(f"speeds must satisfy 0 < min <= design <= max; got "
++                 f"min={lo!r} design={speed!r} max={hi!r}")
++            speed = None
++        capacity = getattr(vessel, "capacity_teu", None)
++        if not (_finite(capacity) and capacity > 0):
++            bad(R_INVALID_CAPACITY)
++            note(f"capacity must be a finite number > 0, got {capacity!r}")
++            capacity = None
++        rate = getattr(vessel, "tc_rate_daily", None)
++        if _finite(rate) and rate >= 0:
++            out.weekly_vessel_cost = float(rate) * DAYS_PER_WEEK
++
++    # ---- legs / distances (never a substitute value) ----------------------------
++    legs, total_nm, legs_ok = [], 0.0, len(ports) >= 2
++    for a, b in rotation_legs(ports):
++        row = distance_matrix.get(a) if isinstance(distance_matrix, dict) else None
++        d = row.get(b) if isinstance(row, dict) else None
++        if d is None:
++            bad(R_MISSING_DISTANCE)
++            note(f"no directed distance {a} -> {b}")
++            legs_ok = False
++        elif not (_finite(d) and d > 0):
++            bad(R_INVALID_DISTANCE)
++            note(f"invalid distance {a} -> {b}: {d!r}")
++            legs_ok = False
++        else:
++            legs.append((a, b, float(d)))
++            total_nm += float(d)
++    if legs_ok:
++        out.legs = legs
++        out.distance_nm = total_nm
++
++    # ---- time and vessels ---------------------------------------------------------
++    if legs_ok and speed is not None:
++        out.speed_knots = float(speed)
++        out.capacity_teu = float(capacity) if capacity is not None else None
++        out.sailing_days = total_nm / (speed * HOURS_PER_DAY)
++        out.port_days = len(ports) * port_time.port_stay_hours / HOURS_PER_DAY
++        out.cycle_days = out.sailing_days + out.port_days
++        max_speed = float(vessel.max_speed)
++        out.cycle_days_at_max_speed = total_nm / (max_speed * HOURS_PER_DAY) + out.port_days
++        out.cycle_time_days = int(math.ceil(round(out.cycle_days, 9)))
++        out.required_vessels_one_departure = required_vessels(out.cycle_time_days, 1)
++
++        if declared_cycle_time_days is not None:
++            dct = declared_cycle_time_days
++            if not (_finite(dct) and dct > 0):
++                bad(R_DECLARED_TOO_SHORT)
++                note(f"declared cycle time must be a finite number > 0, got {dct!r}")
++            elif dct + _EPS < out.cycle_days_at_max_speed:
++                bad(R_IMPOSSIBLE_AT_MAX_SPEED)
++                note(f"declared {dct} d < {out.cycle_days_at_max_speed:.3f} d "
++                     f"needed even at max speed")
++            elif dct + _EPS < out.cycle_days:
++                bad(R_DECLARED_TOO_SHORT)
++                note(f"declared {dct} d < {out.cycle_days:.3f} d needed at design speed")
++
++        inv = out.class_inventory
++        if inv is not None and inv > 0 and out.required_vessels_one_departure > inv:
++            bad(R_EXCEEDS_INVENTORY)
++            note(f"needs {out.required_vessels_one_departure} vessels for one weekly "
++                 f"departure; class {out.vessel_class!r} has {inv}")
++    return out
++
++
++# =====================================================================================
++# Vessel-class choice and re-assignment
++# =====================================================================================
++def choose_vessel_class(target_capacity_teu: float, fleet):
++    """Fleet class whose capacity is nearest to ``target_capacity_teu`` (ties -> the
++    smaller vessel). Classes without vessels are not eligible. This is a sizing
++    heuristic, not source data; the chosen class's own inputs are then used as-is."""
++    return rank_vessel_classes(target_capacity_teu, fleet)[0]
++
++
++def rank_vessel_classes(target_capacity_teu: float, fleet) -> List:
++    """Eligible fleet classes ordered by closeness of capacity to the target
++    (ties -> smaller vessel first)."""
++    if fleet is None or not getattr(fleet, "classes", None):
++        raise ServiceFeasibilityError(
++            "no fleet specification: candidate services need the canonical fleet "
++            "(problem.fleet); no default vessel class or capacity is assumed"
++        )
++    if not _finite(target_capacity_teu) or target_capacity_teu <= 0:
++        raise ServiceFeasibilityError(
++            f"target capacity must be a finite number > 0, got {target_capacity_teu!r}"
++        )
++    eligible = [c for c in fleet.classes
++                if _finite(c.quantity) and c.quantity > 0
++                and _finite(c.capacity_teu) and c.capacity_teu > 0]
++    if not eligible:
++        raise ServiceFeasibilityError("fleet has no vessel class with vessels and capacity")
++    return sorted(eligible, key=lambda c: (abs(c.capacity_teu - target_capacity_teu), c.capacity_teu))
++
++
++def reassign_vessel_class(feasibility: ServiceFeasibility, new_class: str, fleet,
++                          distance_matrix: Dict, **kwargs) -> ServiceFeasibility:
++    """Change a candidate's vessel class and RECOMPUTE everything that depends on it
++    (speed, sailing and cycle time, capacity, vessel cost, inventory check). The old
++    derived values are never carried over."""
++    vessel = fleet.get_class(new_class) if fleet is not None else None
++    return evaluate_rotation(feasibility.ports, vessel, distance_matrix, **kwargs)
++
++
++# =====================================================================================
++# Pool-level report
++# =====================================================================================
++@dataclass
++class CandidateReport:
++    """What the generator produced, accepted and rejected -- with reasons."""
++
++    capacity_unit_status: str = "provisional"
++    port_time_basis: str = ""
++    generated: int = 0
++    accepted: int = 0
++    rejected: int = 0
++    rejections_by_reason: Counter = field(default_factory=Counter)
++    generated_by_section: Counter = field(default_factory=Counter)
++    accepted_by_section: Counter = field(default_factory=Counter)
++    accepted_by_class: Counter = field(default_factory=Counter)
++    # candidates whose nearest-capacity class was infeasible but a further class was not
++    class_fallbacks: int = 0
++    # legacy hard-coded cycle times (7/14/21 d) that cannot cover the derived requirement
++    legacy_cycle_inconsistent: int = 0
++    legacy_cycle_checked: int = 0
++    rejected_samples: List[Dict] = field(default_factory=list)
++    max_samples: int = 25
++
++    def record(self, section: str, feas: ServiceFeasibility, *, legacy_declared: Optional[float] = None):
++        self.generated += 1
++        self.generated_by_section[section] += 1
++        if legacy_declared is not None and feas.cycle_days is not None:
++            self.legacy_cycle_checked += 1
++            if legacy_declared + _EPS < feas.cycle_days:
++                self.legacy_cycle_inconsistent += 1
++        if feas.feasible:
++            self.accepted += 1
++            self.accepted_by_section[section] += 1
++            self.accepted_by_class[feas.vessel_class] += 1
++        else:
++            self.rejected += 1
++            for r in feas.reasons:
++                self.rejections_by_reason[r] += 1
++            if len(self.rejected_samples) < self.max_samples:
++                self.rejected_samples.append({
++                    "section": section, "ports": feas.ports,
++                    "vessel_class": feas.vessel_class,
++                    "reasons": list(feas.reasons), "details": list(feas.details),
++                })
++
++    def to_dict(self) -> Dict:
++        return {
++            "capacity_unit_status": self.capacity_unit_status,
++            "capacity_feasibility_is_conditional": self.capacity_unit_status != "verified",
++            "port_time_basis": self.port_time_basis,
++            "generated": self.generated,
++            "accepted": self.accepted,
++            "rejected": self.rejected,
++            "rejections_by_reason": dict(self.rejections_by_reason),
++            "generated_by_section": dict(self.generated_by_section),
++            "accepted_by_section": dict(self.accepted_by_section),
++            "accepted_by_class": dict(self.accepted_by_class),
++            "class_fallbacks": self.class_fallbacks,
++            "legacy_cycle_time_checked": self.legacy_cycle_checked,
++            "legacy_cycle_time_inconsistent": self.legacy_cycle_inconsistent,
++            "rejected_samples": self.rejected_samples,
++        }
+diff --git a/tests/test_economic_metric_documentation.py b/tests/test_economic_metric_documentation.py
+index 0fbab43..ef8f94a 100644
+--- a/tests/test_economic_metric_documentation.py
++++ b/tests/test_economic_metric_documentation.py
+@@ -366,6 +366,9 @@ def test_fleet_cost_fields_are_unread_outside_the_loader(field):
+     If any of these fields has gained a reader outside the loader, the cost
+     model has changed and F-04 must be re-derived.
+     """
++    # Deliberate repairs: modules that are SANCTIONED to read a field. Task 3 prices a
++    # candidate's vessel cost from the class's TC rate in the feasibility module.
++    sanctioned = {"tc_rate_daily": {"src/services/service_feasibility.py"}}
+     offenders = []
+     for path in (ROOT / "src").rglob("*.py"):
+         rel = path.relative_to(ROOT).as_posix()
+@@ -373,6 +376,8 @@ def test_fleet_cost_fields_are_unread_outside_the_loader(field):
+             continue
+         if "__pycache__" in rel:
+             continue
++        if rel in sanctioned.get(field, ()):
++            continue
+         if field in path.read_text(encoding="utf-8", errors="replace"):
+             offenders.append(rel)
+     assert not offenders, (
+diff --git a/tests/test_service_feasibility.py b/tests/test_service_feasibility.py
+new file mode 100644
+index 0000000..3f50747
+--- /dev/null
++++ b/tests/test_service_feasibility.py
+@@ -0,0 +1,403 @@
++"""
++Candidate-service feasibility (Task 3).
++
++Part A -- the feasibility model on SYNTHETIC fixtures with hand-computed expected values
++          (vessel "V12": 12 kn design, 10-14 kn range, 1,000 TEU, USD 8,000/day, 5 vessels).
++Part B -- the production candidate pool on the canonical WorldSmall data, re-derived
++          independently of the module under test.
++No LLM or network access.
++"""
++import math
++import random
++import sys
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.data.network_loader import NetworkLoader
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem, Service
++from src.services import service_feasibility as sf
++from src.services.service_feasibility import (
++    CandidateReport,
++    PortTimeAssumptions,
++    ServiceFeasibilityError,
++    choose_vessel_class,
++    evaluate_rotation,
++    reassign_vessel_class,
++    required_vessels,
++    rotation_legs,
++    rotation_ports,
++)
++
++
++# ---------------------------------------------------------------------------
++# SYNTHETIC fixtures (not data)
++# ---------------------------------------------------------------------------
++def V(name="V12", qty=5, cap=1000.0, tc=8000.0, lo=10.0, design=12.0, hi=14.0):
++    return FleetClass(vessel_class=name, quantity=qty, capacity_teu=cap, tc_rate_daily=tc,
++                      min_speed=lo, design_speed=design, max_speed=hi)
++
++
++DM2 = {"A": {"B": 1000.0}, "B": {"A": 1200.0}}                      # asymmetric, directed
++DM3 = {"A": {"B": 500.0}, "B": {"C": 700.0}, "C": {"A": 900.0}}
++
++
++# ===========================================================================
++# A. Route closure and legs
++# ===========================================================================
++class TestClosedRotation:
++    def test_open_and_explicitly_closed_forms_are_the_same_rotation(self):
++        assert rotation_ports(["A", "B", "C"]) == ["A", "B", "C"]
++        assert rotation_ports(["A", "B", "C", "A"]) == ["A", "B", "C"]
++
++    def test_return_leg_is_included_exactly_once(self):
++        expected = [("A", "B"), ("B", "C"), ("C", "A")]
++        assert rotation_legs(["A", "B", "C"]) == expected
++        assert rotation_legs(["A", "B", "C", "A"]) == expected
++
++    def test_two_port_service_sails_each_direction_once(self):
++        assert rotation_legs(["A", "B"]) == [("A", "B"), ("B", "A")]
++        assert rotation_legs(["A", "B", "A"]) == [("A", "B"), ("B", "A")]
++
++    def test_fewer_than_two_ports_have_no_legs(self):
++        assert rotation_legs(["A"]) == [] and rotation_legs([]) == []
++        assert rotation_legs(["A", "A"]) == []
++
++    def test_distance_is_the_sum_of_directed_legs_including_the_return(self):
++        f = evaluate_rotation(["A", "B"], V(), DM2)
++        assert f.feasible and f.distance_nm == 2200.0            # 1000 + 1200, not 1000 or 2000
++        assert f.legs == [("A", "B", 1000.0), ("B", "A", 1200.0)]
++        g = evaluate_rotation(["A", "B", "C", "A"], V(), DM3)
++        assert g.distance_nm == 2100.0 and len(g.legs) == 3
++
++
++# ===========================================================================
++# B. Time, cycle and vessels
++# ===========================================================================
++class TestCycleTime:
++    def test_sailing_port_and_cycle_time_two_ports(self):
++        f = evaluate_rotation(["A", "B"], V(), DM2)
++        assert f.sailing_days == pytest.approx(2200.0 / (12.0 * 24.0))        # 7.6389
++        assert f.port_days == pytest.approx(2.0)                              # 2 calls x 24 h
++        assert f.cycle_days == pytest.approx(2200.0 / 288.0 + 2.0)            # 9.6389
++        assert f.cycle_time_days == 10                                        # declared = ceil
++        assert f.cycle_days_at_max_speed == pytest.approx(2200.0 / (14.0 * 24.0) + 2.0)
++
++    def test_three_ports(self):
++        f = evaluate_rotation(["A", "B", "C"], V(), DM3)
++        assert f.sailing_days == pytest.approx(2100.0 / 288.0)
++        assert f.port_days == pytest.approx(3.0)
++        assert f.cycle_time_days == 11                                        # 10.2917 -> 11
++
++    def test_port_time_assumption_is_explicit_and_configurable(self):
++        base = evaluate_rotation(["A", "B"], V(), DM2)
++        slow = evaluate_rotation(["A", "B"], V(), DM2, port_time=PortTimeAssumptions(48.0))
++        assert slow.port_days == pytest.approx(4.0)
++        assert slow.cycle_days == pytest.approx(base.cycle_days + 2.0)
++        assert "assumed" in base.port_time_basis                              # not source data
++        zero = evaluate_rotation(["A", "B"], V(), DM2, port_time=PortTimeAssumptions(0.0))
++        assert zero.port_days == 0.0
++
++    @pytest.mark.parametrize("hours", [-1.0, float("nan"), float("inf")])
++    def test_invalid_port_time_is_rejected(self, hours):
++        with pytest.raises(ServiceFeasibilityError):
++            PortTimeAssumptions(hours)
++
++    def test_speed_comes_from_the_vessel_class(self):
++        fast = evaluate_rotation(["A", "B"], V(design=14.0), DM2)
++        assert fast.sailing_days == pytest.approx(2200.0 / (14.0 * 24.0))
++        assert fast.speed_knots == 14.0
++
++
++class TestVesselRequirement:
++    def test_ceiling_formula_examples(self):
++        assert required_vessels(21, 1) == 3
++        assert required_vessels(21, 2) == 6
++        assert required_vessels(22, 1) == 4          # 22/7 = 3.14 -> 4
++        assert required_vessels(7, 1) == 1
++        assert required_vessels(1, 1) == 1
++
++    def test_zero_frequency_needs_zero_vessels_not_one(self):
++        assert required_vessels(21, 0) == 0
++
++    @pytest.mark.parametrize("cycle", [0, -7, float("nan"), float("inf")])
++    def test_invalid_cycle_time_raises(self, cycle):
++        with pytest.raises(ServiceFeasibilityError):
++            required_vessels(cycle, 1)
++
++    @pytest.mark.parametrize("freq", [-1, 1.5, float("nan"), True])
++    def test_invalid_frequency_raises(self, freq):
++        with pytest.raises(ServiceFeasibilityError):
++            required_vessels(14, freq)
++
++    def test_candidate_vessel_requirements(self):
++        f = evaluate_rotation(["A", "B"], V(), DM2)            # cycle 10 d
++        assert f.required_vessels_one_departure == 2
++        assert [f.required_vessels(k) for k in (0, 1, 2, 3)] == [0, 2, 3, 5]
++        g = evaluate_rotation(["A", "B", "C"], V(), DM3)       # cycle 11 d
++        assert [g.required_vessels(k) for k in (1, 2, 3)] == [2, 4, 5]
++
++    def test_class_inventory_is_a_local_necessary_condition(self):
++        ok = evaluate_rotation(["A", "B"], V(qty=2), DM2)       # needs 2, has 2
++        assert ok.feasible
++        bad = evaluate_rotation(["A", "B"], V(qty=1), DM2)      # needs 2, has 1
++        assert not bad.feasible and bad.reasons == [sf.R_EXCEEDS_INVENTORY]
++
++
++# ===========================================================================
++# C. Rejections: explicit reasons, no substituted values
++# ===========================================================================
++class TestRejections:
++    def test_missing_directed_distance(self):
++        dm = {"A": {"B": 1000.0}}                               # B -> A absent
++        f = evaluate_rotation(["A", "B"], V(), dm)
++        assert not f.feasible and f.reasons == [sf.R_MISSING_DISTANCE]
++        assert "B -> A" in " ".join(f.details)
++        # nothing is invented: no distance, no time, no cycle
++        assert f.distance_nm is None and f.cycle_days is None and f.cycle_time_days is None
++        assert f.legs == []
++
++    @pytest.mark.parametrize("bad", [0.0, -5.0, float("nan"), float("inf"), "far"])
++    def test_invalid_distance(self, bad):
++        f = evaluate_rotation(["A", "B"], V(), {"A": {"B": 1000.0}, "B": {"A": bad}})
++        assert f.reasons == [sf.R_INVALID_DISTANCE]
++
++    def test_unknown_port(self):
++        f = evaluate_rotation(["A", "Z"], V(), DM2, known_ports={"A", "B"})
++        assert sf.R_UNKNOWN_PORT in f.reasons and not f.feasible
++
++    def test_too_few_and_repeated_ports(self):
++        assert evaluate_rotation(["A"], V(), DM2).reasons == [sf.R_TOO_FEW_PORTS]
++        assert evaluate_rotation(["A", "A"], V(), DM2).reasons == [sf.R_TOO_FEW_PORTS]
++        f = evaluate_rotation(["A", "B", "A", "B"], V(), DM2)
++        assert sf.R_REPEATED_PORT in f.reasons
++
++    def test_unknown_vessel_class_is_not_replaced_by_a_default(self):
++        f = evaluate_rotation(["A", "B"], None, DM2)
++        assert f.reasons == [sf.R_UNKNOWN_CLASS] and f.cycle_time_days is None
++
++    @pytest.mark.parametrize("kw", [
++        dict(design=0.0), dict(design=15.0), dict(lo=13.0), dict(design=float("nan")),
++    ])
++    def test_invalid_speed(self, kw):
++        f = evaluate_rotation(["A", "B"], V(**kw), DM2)
++        assert sf.R_INVALID_SPEED in f.reasons and f.cycle_time_days is None
++
++    def test_invalid_capacity_and_empty_class(self):
++        assert sf.R_INVALID_CAPACITY in evaluate_rotation(["A", "B"], V(cap=0.0), DM2).reasons
++        assert sf.R_NO_VESSELS in evaluate_rotation(["A", "B"], V(qty=0), DM2).reasons
++
++
++class TestDeclaredCycleTime:
++    """Cycle needed: 9.639 d at design speed, 8.548 d even at max speed."""
++
++    def test_sufficient_declared_time_is_accepted(self):
++        assert evaluate_rotation(["A", "B"], V(), DM2, declared_cycle_time_days=10).feasible
++
++    def test_shorter_than_required_is_rejected(self):
++        f = evaluate_rotation(["A", "B"], V(), DM2, declared_cycle_time_days=9)
++        assert f.reasons == [sf.R_DECLARED_TOO_SHORT]
++
++    def test_impossible_even_at_maximum_speed_is_rejected(self):
++        f = evaluate_rotation(["A", "B"], V(), DM2, declared_cycle_time_days=8)
++        assert f.reasons == [sf.R_IMPOSSIBLE_AT_MAX_SPEED]
++
++    @pytest.mark.parametrize("bad", [0, -3, float("nan")])
++    def test_malformed_declared_time_is_rejected(self, bad):
++        f = evaluate_rotation(["A", "B"], V(), DM2, declared_cycle_time_days=bad)
++        assert not f.feasible
++
++
++# ===========================================================================
++# D. Vessel-class selection and re-assignment
++# ===========================================================================
++class TestVesselClass:
++    @pytest.fixture(scope="class")
++    def fleet(self):
++        return NetworkLoader().load_fleet()
++
++    @pytest.mark.parametrize("target, expected", [
++        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
++        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
++        (8000, "Super_panamax"), (14000, "Super_panamax"),
++    ])
++    def test_nearest_capacity_class(self, fleet, target, expected):
++        assert choose_vessel_class(target, fleet).vessel_class == expected
++
++    def test_classes_without_vessels_are_not_eligible(self):
++        fleet = Fleet(classes=[V("A", qty=0, cap=1000.0), V("B", qty=3, cap=5000.0)])
++        assert choose_vessel_class(900, fleet).vessel_class == "B"
++
++    def test_no_fleet_is_an_error_not_a_default(self):
++        with pytest.raises(ServiceFeasibilityError):
++            choose_vessel_class(1000, None)
++        with pytest.raises(ServiceFeasibilityError):
++            choose_vessel_class(1000, Fleet(classes=[]))
++        with pytest.raises(ServiceFeasibilityError):
++            choose_vessel_class(0, Fleet(classes=[V()]))
++
++    def test_class_change_recomputes_everything_derived(self):
++        fleet = Fleet(classes=[V("V12"), V("V20", cap=3000.0, tc=20000.0, lo=12.0, design=20.0, hi=22.0)])
++        before = evaluate_rotation(["A", "B"], fleet.get_class("V12"), DM2)
++        after = reassign_vessel_class(before, "V20", fleet, DM2)
++        assert after.feasible and after.vessel_class == "V20"
++        assert after.capacity_teu == 3000.0 and before.capacity_teu == 1000.0
++        assert after.weekly_vessel_cost == 140000.0 and before.weekly_vessel_cost == 56000.0
++        assert after.sailing_days == pytest.approx(2200.0 / (20.0 * 24.0))
++        assert after.cycle_time_days == 7 and before.cycle_time_days == 10
++        assert after.required_vessels_one_departure == 1 and before.required_vessels_one_departure == 2
++
++    def test_reassignment_to_an_unknown_class_is_a_rejection(self):
++        fleet = Fleet(classes=[V("V12")])
++        before = evaluate_rotation(["A", "B"], fleet.get_class("V12"), DM2)
++        after = reassign_vessel_class(before, "Nope", fleet, DM2)
++        assert after.reasons == [sf.R_UNKNOWN_CLASS]
++
++    def test_capacity_unit_status_is_propagated(self):
++        assert evaluate_rotation(["A", "B"], V(), DM2).capacity_unit_status == "provisional"
++        assert evaluate_rotation(["A", "B"], V(), DM2,
++                                 capacity_unit_status="verified").capacity_unit_status == "verified"
++
++
++class TestReport:
++    def test_counts_reasons_and_legacy_cycle_consistency(self):
++        r = CandidateReport()
++        ok = evaluate_rotation(["A", "B"], V(), DM2)                     # cycle 9.64 d
++        bad = evaluate_rotation(["A", "B"], V(), {"A": {"B": 1.0}})
++        r.record("direct", ok, legacy_declared=7)                       # 7 < 9.64 -> inconsistent
++        r.record("direct", ok, legacy_declared=14)                      # 14 >= 9.64 -> consistent
++        r.record("feeder", bad, legacy_declared=7)
++        d = r.to_dict()
++        assert (d["generated"], d["accepted"], d["rejected"]) == (3, 2, 1)
++        assert d["rejections_by_reason"] == {sf.R_MISSING_DISTANCE: 1}
++        assert d["generated_by_section"] == {"direct": 2, "feeder": 1}
++        assert d["accepted_by_class"] == {"V12": 2}
++        assert d["legacy_cycle_time_checked"] == 2 and d["legacy_cycle_time_inconsistent"] == 1
++        assert d["capacity_feasibility_is_conditional"] is True
++        assert len(d["rejected_samples"]) == 1
++
++
++# ===========================================================================
++# E. Production pool on the canonical WorldSmall data
++# ===========================================================================
++@pytest.fixture(scope="module")
++def ws():
++    from src.agents.service_generator_agent import ServiceGeneratorAgent
++    loader = NetworkLoader()
++    net = loader.load_network()
++    fleet = loader.load_fleet()
++    problem = Problem(ports=net["ports"], services=[], demands=net["demands"],
++                      distance_matrix=net["distance_matrix"], fleet=fleet)
++    random.seed(12345)
++    np.random.seed(12345)
++    agent = ServiceGeneratorAgent(name="t3", model="none")
++    pool = agent.generate_services(problem)
++    return problem, pool, agent.last_candidate_report
++
++
++class TestWorldSmallPool:
++    def test_pool_is_service_objects_with_unique_ids(self, ws):
++        _, pool, _ = ws
++        assert pool and all(isinstance(s, Service) for s in pool)
++        assert len({s.id for s in pool}) == len(pool)
++
++    def test_capacity_and_class_come_from_the_fleet(self, ws):
++        problem, pool, _ = ws
++        cap = {c.vessel_class: c.capacity_teu for c in problem.fleet.classes}
++        assert all(s.vessel_class in cap for s in pool)
++        assert all(s.capacity == cap[s.vessel_class] for s in pool)
++        assert max(s.capacity for s in pool) <= max(cap.values())
++
++    def test_every_service_is_independently_consistent(self, ws):
++        """Re-derive route closure, time, cycle and vessels without the module under test."""
++        problem, pool, _ = ws
++        spec = {c.vessel_class: c for c in problem.fleet.classes}
++        dm = problem.distance_matrix
++        for s in pool:
++            ports = list(s.ports[:-1] if len(s.ports) > 1 and s.ports[0] == s.ports[-1] else s.ports)
++            assert len(ports) >= 2 and len(set(ports)) == len(ports), s.id
++            nm = sum(dm[ports[i]][ports[(i + 1) % len(ports)]] for i in range(len(ports)))
++            c = spec[s.vessel_class]
++            cycle = nm / (c.design_speed * 24.0) + len(ports) * 1.0       # 24 h per call
++            assert s.distance_nm == pytest.approx(nm), s.id
++            assert s.cycle_time == math.ceil(round(cycle, 9)), s.id
++            assert s.cycle_time + 1e-9 >= nm / (c.max_speed * 24.0), s.id  # sailable at max speed
++            assert s.required_vessels == math.ceil(s.cycle_time / 7.0), s.id
++            assert s.required_vessels <= c.quantity, s.id                   # one departure/week
++            assert s.weekly_cost == c.tc_rate_daily * 7.0, s.id
++            assert s.speed == c.design_speed, s.id
++            assert s.capacity_unit_status == "provisional", s.id
++
++    def test_report_is_arithmetically_consistent(self, ws):
++        _, pool, rep = ws
++        d = rep.to_dict()
++        assert d["generated"] == d["accepted"] + d["rejected"]
++        assert d["accepted"] == len(pool)
++        assert sum(d["generated_by_section"].values()) == d["generated"]
++        assert sum(d["accepted_by_section"].values()) == d["accepted"]
++        assert sum(d["accepted_by_class"].values()) == d["accepted"]
++        assert all(d["accepted_by_section"].get(k, 0) <= v for k, v in d["generated_by_section"].items())
++        # (the rejection paths themselves are exercised by the synthetic tests above)
++        assert sum(d["rejections_by_reason"].values()) >= d["rejected"]
++        assert set(d["rejections_by_reason"]) <= set(sf.ALL_REASONS)
++        assert d["capacity_unit_status"] == "provisional"
++        assert d["capacity_feasibility_is_conditional"] is True
++
++    def test_long_loops_fall_back_to_a_class_with_enough_vessels(self, ws):
++        """A loop needing more vessels than the nearest-capacity class owns is re-tried
++        with the next-nearest class instead of being dropped."""
++        _, pool, rep = ws
++        assert rep.class_fallbacks > 0
++        assert rep.accepted_by_section["hub_loop"] == rep.generated_by_section["hub_loop"]
++        # nothing in the pool needs more vessels than its class owns, fallback or not
++        spec = {c.vessel_class: c.quantity for c in ws[0].fleet.classes}
++        assert all(s.required_vessels <= spec[s.vessel_class] for s in pool)
++
++    def test_legacy_declared_cycle_times_were_mostly_too_short(self, ws):
++        """The 7/14/21-day constants cannot cover the derived requirement for most routes."""
++        _, _, rep = ws
++        d = rep.to_dict()
++        assert d["legacy_cycle_time_checked"] > 0
++        assert d["legacy_cycle_time_inconsistent"] / d["legacy_cycle_time_checked"] > 0.5
++
++    def test_generation_is_deterministic_for_a_seed(self, ws):
++        from src.agents.service_generator_agent import ServiceGeneratorAgent
++        problem, pool, _ = ws
++        random.seed(12345)
++        np.random.seed(12345)
++        again = ServiceGeneratorAgent(name="t3b", model="none").generate_services(problem)
++        key = lambda p: [(s.ports, s.vessel_class, s.cycle_time, s.capacity) for s in p]
++        assert key(again) == key(pool)
++
++
++class TestGeneratorInputs:
++    def test_fleetless_problem_is_an_explicit_error(self):
++        from src.agents.service_generator_agent import ServiceGeneratorAgent
++        p = Problem(ports=[Port("A", "A", 0, 0), Port("B", "B", 0, 0)], services=[],
++                    demands=[Demand("A", "B", 10.0, 100.0)], distance_matrix=DM2)
++        with pytest.raises(ServiceFeasibilityError, match="fleet"):
++            ServiceGeneratorAgent(name="t3c", model="none").generate_services(p)
++
++    def test_missing_distance_in_a_synthetic_network_rejects_not_invents(self):
++        """SYNTHETIC 4-port network where the directed pair P4 -> P1 does not exist."""
++        from src.agents.service_generator_agent import ServiceGeneratorAgent
++        ids = ["P1", "P2", "P3", "P4"]
++        dm = {a: {b: 100.0 for b in ids if b != a} for a in ids}
++        del dm["P4"]["P1"]
++        demands = [Demand("P1", "P4", 5000.0, 100.0), Demand("P1", "P2", 800.0, 100.0),
++                   Demand("P2", "P3", 700.0, 100.0), Demand("P3", "P1", 600.0, 100.0)]
++        fleet = Fleet(classes=[V("S_small", qty=50, cap=1500.0), V("S_big", qty=20, cap=6000.0)])
++        p = Problem(ports=[Port(i, i, 0.0, 0.0) for i in ids], services=[],
++                    demands=demands, distance_matrix=dm, fleet=fleet)
++        random.seed(1)
++        agent = ServiceGeneratorAgent(name="t3d", model="none")
++        pool = agent.generate_services(p)
++        rep = agent.last_candidate_report.to_dict()
++        assert rep["rejections_by_reason"].get(sf.R_MISSING_DISTANCE, 0) >= 1
++        assert pool, "services that do not need the missing pair must still be generated"
++        for s in pool:                       # every accepted rotation uses only existing legs
++            for a, b in rotation_legs(s.ports):
++                assert b in dm[a], (s.id, a, b)
+diff --git a/tests/test_service_generator_activation.py b/tests/test_service_generator_activation.py
+index 4c0dac4..da856e9 100644
+--- a/tests/test_service_generator_activation.py
++++ b/tests/test_service_generator_activation.py
+@@ -30,6 +30,7 @@ from src.validation.archetype_validator import (
+     VALID_VESSEL_BIASES,
+ )
+ from src.agents.service_generator_agent import ServiceGeneratorAgent
++from src.data.network_loader import NetworkLoader
+ from src.optimization.data import Problem, Port, Service, Demand
+ from src.utils.logger import logger
+ 
+@@ -95,11 +96,14 @@ def create_minimal_problem(
+         distance_matrix[d.origin].setdefault(d.destination, 100.0)
+         distance_matrix[d.destination].setdefault(d.origin, 100.0)
+ 
++    # The network above is synthetic; the fleet is the REAL canonical WorldSmall fleet.
++    # Candidate generation requires a fleet (no default vessel class exists).
+     return Problem(
+         ports=ports,
+         services=[],
+         demands=demands,
+         distance_matrix=distance_matrix,
++        fleet=NetworkLoader().load_fleet(),
+     )
+ 
+ 
+diff --git a/tests/test_shared_contracts.py b/tests/test_shared_contracts.py
+index 565c08b..8015231 100644
+--- a/tests/test_shared_contracts.py
++++ b/tests/test_shared_contracts.py
+@@ -175,27 +175,18 @@ class TestDocumentedDefects:
+             assert t["consumption_tons_per_day"] == pytest.approx(c.bunker_consumption_tons_per_day), c.vessel_class
+             assert t["speed_knots"] == pytest.approx(c.design_speed), c.vessel_class
+ 
+-    # --- D-SVC-CAP ----------------------------------------------------------
+-    @pytest.mark.xfail(strict=True, raises=AssertionError,
+-                       reason="D-SVC-CAP: candidate services carry capacities (10,000-14,000 TEU in the "
+-                              "seeded pool) that no vessel in the WorldSmall fleet (max 7,500) can provide")
++    # --- D-SVC-CAP (RESOLVED in Task 3: now an enforced contract) -----------
+     def test_candidate_capacity_never_exceeds_the_largest_fleet_vessel(self, ws_problem_and_candidates):
+         problem, services = ws_problem_and_candidates
+         biggest = max(c.capacity_teu for c in problem.fleet.classes)
+         assert max(s.capacity for s in services) <= biggest
+ 
+-    @pytest.mark.xfail(strict=True, raises=AssertionError,
+-                       reason="D-SVC-CAP: Service.capacity is a size bucket, not the capacity of the "
+-                              "fleet class named in Service.vessel_class")
+     def test_candidate_capacity_equals_its_vessel_class_capacity(self, ws_problem_and_candidates):
+         problem, services = ws_problem_and_candidates
+         cap = {c.vessel_class: c.capacity_teu for c in problem.fleet.classes}
+         assert all(s.capacity == cap[s.vessel_class] for s in services)
+ 
+-    # --- D-SVC-CYCLE --------------------------------------------------------
+-    @pytest.mark.xfail(strict=True, raises=AssertionError,
+-                       reason="D-SVC-CYCLE: cycle_time is a hard-coded 7/14/21 days, not derived from "
+-                              "route distance and speed; most rotations cannot be sailed in that time")
++    # --- D-SVC-CYCLE (RESOLVED in Task 3: now an enforced contract) ---------
+     def test_cycle_time_covers_the_sailing_time_of_the_rotation(self, ws_problem_and_candidates):
+         problem, services = ws_problem_and_candidates
+         spec = {c.vessel_class: c for c in problem.fleet.classes}

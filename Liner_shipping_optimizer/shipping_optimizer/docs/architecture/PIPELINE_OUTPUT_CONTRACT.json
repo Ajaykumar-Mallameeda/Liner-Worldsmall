@@ -1,0 +1,365 @@
+{
+  "$schema_note": "Canonical Phase-0 snapshot of the pipeline_output.json external contract. Types are JSON types as serialized. 'required' = present in every successful run produced by tests/test_orchestrator.py (the production runner). Compatibility rule: existing keys are FROZEN (no rename, no removal, no type change); future additions must be NEW keys (additive-only, IP-5 pattern).",
+  "artifact": "pipeline_output.json",
+  "producer": "tests/test_orchestrator.py __main__ -> OrchestratorAgent.process() return dict + test_scorecard",
+  "consumers": [
+    "backend/server.py (loaded at import; REST slices + /ws/pipeline replay)",
+    "frontend/src/runtime/runtimeAdapter.js via fetch('/pipeline_output.json')",
+    "frontend/src/hooks/useOptimizationState.js",
+    "tests/test_orchestrator.py certification assertions",
+    "tests/test_iteration_selection.py live-artifact consistency checks"
+  ],
+  "baseline_commit": "a44b987",
+  "snapshot_date": "2026-08-26",
+  "top_level_keys": {
+    "orchestrator": {
+      "type": "string",
+      "required": true,
+      "description": "Orchestrator agent name",
+      "consumer": "dashboard header"
+    },
+    "status": {
+      "type": "string",
+      "required": true,
+      "description": "'complete' only when the final network plan was independently verified (network_ledger.verified); 'incomplete_accounting' otherwise (never a silent success)",
+      "compatibility": "value domain widened additively: {'complete','incomplete_accounting'}"
+    },
+    "problem_analysis": {
+      "type": "string",
+      "required": true,
+      "description": "Narrative problem analysis (LLM or deterministic fallback)"
+    },
+    "regional_results": {
+      "type": "array",
+      "required": true,
+      "description": "5 regional result dicts (one per region)",
+      "items_ref": "#/regional_result_item"
+    },
+    "decision_output": {
+      "type": "object",
+      "required": true,
+      "description": "Coordinator decisions for final iteration",
+      "keys": [
+        "agent",
+        "iteration",
+        "status",
+        "global_metrics",
+        "evaluation",
+        "conflicts",
+        "resolution_log",
+        "decisions",
+        "feedback",
+        "llm_runtime_metrics",
+        "llm_actuation"
+      ]
+    },
+    "executive_summary": {
+      "type": "string",
+      "required": true,
+      "description": "Deterministic f-string summary (orchestrator_agent.py:1027-1043)"
+    },
+    "summary_metrics": {
+      "type": "object",
+      "required": true,
+      "description": "Global KPIs; coverage is canonical gdwc (T0-3)",
+      "keys_frozen": [
+        "weekly_profit",
+        "annual_profit",
+        "revenue",
+        "operating_cost",
+        "transship_cost",
+        "port_cost",
+        "fuel_cost",
+        "total_cost",
+        "cost",
+        "total_services",
+        "satisfied_demand",
+        "unserved_demand",
+        "coverage",
+        "total_runtime"
+      ],
+      "note": "total_runtime is runtime-variable; all others are structural"
+    },
+    "iteration_audit": {
+      "type": "array",
+      "required": true,
+      "description": "Per-iteration audit rows; length MUST be 3 (MIN=MAX_ITERATIONS)"
+    },
+    "iterations_run": {
+      "type": "integer",
+      "required": true,
+      "description": "== 3 enforced by certification"
+    },
+    "selected_services": {
+      "type": "array",
+      "required": true,
+      "description": "Services of the SELECTED iteration (rebuilt from best_snapshot)",
+      "items_ref": "#/selected_service_item"
+    },
+    "all_selected_services": {
+      "type": "array",
+      "required": true,
+      "description": "Union of services across iterations"
+    },
+    "iteration_results": {
+      "type": "array",
+      "required": true,
+      "description": "3 immutable iteration snapshots (deep copies)",
+      "items_keys": [
+        "iteration",
+        "status",
+        "metrics",
+        "regional_results",
+        "weights_used",
+        "consensus_result",
+        "feedback",
+        "decision_output",
+        "shared_context",
+        "selected_services",
+        "candidate_quality"
+      ]
+    },
+    "iteration_selection": {
+      "type": "object",
+      "required": true,
+      "description": "Selector output; selected_iteration is deterministic-authoritative",
+      "keys_frozen": [
+        "candidate_iterations",
+        "pareto_optimal_iterations",
+        "selected_iteration",
+        "selection_method",
+        "confidence",
+        "reasoning",
+        "fallback_used",
+        "llm_selection",
+        "scorecards",
+        "llm_actuation"
+      ]
+    },
+    "best_iteration": {
+      "type": "integer",
+      "required": true,
+      "description": "Selected iteration index"
+    },
+    "final_selected_iteration": {
+      "type": "integer",
+      "required": true,
+      "description": "== best_iteration (deterministic authority invariant)"
+    },
+    "health_status": {
+      "type": "object",
+      "required": true,
+      "description": "Health tracker status"
+    },
+    "consensus_result": {
+      "type": "object",
+      "required": true,
+      "description": "Final ConsensusEngine reconciliation record"
+    },
+    "shared_context": {
+      "type": "object",
+      "required": true,
+      "description": "Hub-overlap telemetry snapshot"
+    },
+    "llm_runtime_metrics": {
+      "type": "object",
+      "required": true,
+      "description": "Aggregate LLM call metrics"
+    },
+    "llm_runtime_aggregate": {
+      "type": "object",
+      "required": true,
+      "description": "Provider/model usage + router telemetry + actuation ledger",
+      "keys": [
+        "providers_used",
+        "models_used",
+        "coordinator",
+        "iteration_selector",
+        "service_generator",
+        "provider_telemetry",
+        "actuation_ledger"
+      ]
+    },
+    "network_ledger": {
+      "type": "object",
+      "required": true,
+      "description": "Verified network plan (services, weekly departures, routed flows) with the independently recomputed weekly economics, fleet use per class, demand conservation, stated time/price assumptions, MILP-vs-ledger reconciliation and violations",
+      "keys": [
+        "verified",
+        "status",
+        "iteration",
+        "method",
+        "weekly_usd",
+        "demand_teu_per_week",
+        "fleet_by_class",
+        "services",
+        "reconciliation",
+        "plan",
+        "optimality",
+        "path_model",
+        "violations",
+        "assumptions",
+        "runtime_sec"
+      ],
+      "note": "when no verified ledger was produced the block carries verified=false, status and message instead"
+    },
+    "test_scorecard": {
+      "type": "object",
+      "required": false,
+      "description": "Added by the runner wrapper (not by OrchestratorAgent itself): assertions_passed/failed/total/warnings/score"
+    }
+  },
+  "regional_result_item": {
+    "keys_frozen": [
+      "agent",
+      "region",
+      "status",
+      "services_generated",
+      "services_filtered",
+      "services_selected",
+      "weekly_profit",
+      "annual_profit",
+      "operating_cost",
+      "fuel_cost",
+      "transship_cost",
+      "port_cost",
+      "total_cost",
+      "coverage_percent",
+      "satisfied_demand",
+      "unserved_demand",
+      "total_demand",
+      "profit_margin_pct",
+      "profit_per_service",
+      "cost_per_service",
+      "uncovered_teu",
+      "hub_ports",
+      "archetype_params",
+      "regional_policy",
+      "strategy",
+      "explanation",
+      "selected_services",
+      "elapsed_sec",
+      "llm_actuation"
+    ]
+  },
+  "selected_service_item": {
+    "keys_frozen": [
+      "id",
+      "ports",
+      "load",
+      "capacity",
+      "vessel_class",
+      "vessel_cost",
+      "fuel_cost",
+      "port_cost",
+      "revenue",
+      "cost",
+      "weekly_profit",
+      "margin_pct",
+      "region",
+      "frequency_per_week",
+      "vessels",
+      "cycle_time_days"
+    ],
+    "note": "WorldMap.jsx consumes id/ports/region; fleetStats.js derives fleet stats from these records client-side. frequency_per_week / vessels / cycle_time_days were added (additive, network-economics redesign): departures per week, vessels tied up = ceil(cycle_time_days * frequency / 7), and the declared rotation time in days derived from distance, class design speed and port stay."
+  },
+  "structural_expectations": {
+    "description": "Must hold in EVERY successful run. Enforced by certification suite and/or schema tests.",
+    "rules": [
+      "top-level key SET equals the 21 required keys (the original 20 + network_ledger; +test_scorecard when produced via runner)",
+      "len(regional_results) == 5",
+      "len(iteration_audit) == len(iteration_results) == iterations_run == 3",
+      "final_selected_iteration == best_iteration == iteration_selection.selected_iteration",
+      "summary_metrics.coverage == coordinator global_demand_weighted_coverage",
+      "exactly one iteration_audit row has selected_as_final == true",
+      "iteration_selection.selection_method startswith 'deterministic' OR llm agreed with deterministic winner",
+      "every regional_result_item / selected_service_item contains its frozen key set",
+      "types match this document"
+    ]
+  },
+  "runtime_variable_values": {
+    "description": "Legitimately change between runs; never hard-code as expectations.",
+    "fields": [
+      "summary_metrics.total_runtime",
+      "weekly_profit and all monetary values",
+      "coverage percentage",
+      "selected iteration INDEX",
+      "selected_services count",
+      "llm telemetry counters",
+      "provider used / fallback counts",
+      "scorecards values",
+      "reasoning text"
+    ]
+  },
+  "future_additions": {
+    "rule": "Maritime intelligence adds ONE new optional top-level key 'maritime_intelligence' (IP-5). Existing consumers ignore unknown keys (verified runtimeAdapter ??-chain tolerance). No other additive surface is sanctioned without CHANGE_CONTROL entry. SANCTIONED ADDITION (network-economics redesign, see MIGRATION_NOTE_NETWORK_ECONOMICS.md): required top-level key 'network_ledger' (the verified network plan and its independent recomputation), three additive fields on selected_service_item, and the 'status' value domain widened from {'complete'} to {'complete','incomplete_accounting'} so that an unverified network is never reported as a success.",
+    "forbidden": [
+      "renaming any key above",
+      "changing JSON types",
+      "removing keys",
+      "nesting existing data differently",
+      "changing units or scales of existing fields"
+    ]
+  },
+  "addenda": [
+    {
+      "date": "2026-10-11",
+      "change": "Tasks 8A / 8B / 9 / 10 (see docs/architecture/MIGRATION_NOTE_NETWORK_ECONOMICS.md section 7)",
+      "compatibility": "additive only; no key renamed, removed or re-typed; the frozen key sets above are unchanged",
+      "additions": {
+        "decision_output.global_metrics": {
+          "total_cost": "semantics corrected: ALL-IN weekly cost (hire + fuel + port + handling + transshipment); it was the vessel-hire component only (F-15)",
+          "profit_margin_pct": "semantics corrected: 100 * profit / revenue on the all-in cost; null when the accounting is not verified or revenue <= 0",
+          "new_keys": [
+            "revenue",
+            "vessel_hire_cost",
+            "accounting_status",
+            "accounting_verified",
+            "accounting_basis",
+            "accounting_issues"
+          ]
+        },
+        "iteration_results[].metrics": {
+          "new_keys": [
+            "revenue",
+            "vessel_hire_cost",
+            "accounting_status",
+            "accounting_verified",
+            "accounting_basis"
+          ],
+          "note": "operating_cost keeps its component meaning (vessel hire); total_cost is the all-in cost iteration selection compares"
+        },
+        "iteration_selection.scorecards[]": {
+          "new_keys": [
+            "accounting_verified",
+            "invalid_reason"
+          ],
+          "selection_status_new_value": "unverified_accounting"
+        },
+        "network_ledger.assumptions": {
+          "new_keys": [
+            "fuel_pricing",
+            "candidate_generation"
+          ],
+          "bunker_price_usd_per_t": "uniform legacy price, or the snapshot's reference price in regional_snapshot mode (see fuel_pricing.mode)"
+        },
+        "network_ledger.plan.services[]": {
+          "new_keys": [
+            "fuel_price_usd_per_t",
+            "fuel_price_basis",
+            "bunkering_port",
+            "price_observed_on"
+          ]
+        },
+        "network_ledger.services": {
+          "new_keys": [
+            "modelled_by_n_ports",
+            "modelled_by_class",
+            "operated_by_n_ports"
+          ]
+        },
+        "status": "unchanged domain {complete, incomplete_accounting}"
+      }
+    }
+  ]
+}
