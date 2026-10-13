@@ -138,7 +138,7 @@ export default function RouteTable({ optimizationState }) {
               { label: 'Route', value: selectedService.ports?.join(' → ') || '—', color: '#00d4ff' },
               { label: 'Vessel Class', value: selectedService.vessel_class || '—', color: '#8b5cf6' },
               { label: 'Load / Capacity', value: `${fmtNum(selectedService.load)} / ${fmtNum(selectedService.capacity)} TEU`, color: '#10b981' },
-              { label: 'Utilization', value: selectedService.capacity ? `${((selectedService.load / selectedService.capacity) * 100).toFixed(1)}%` : '—', color: '#f59e0b' },
+              { label: 'Leg Load Factor', value: selectedService.leg_load_factor != null ? `${(selectedService.leg_load_factor * 100).toFixed(1)}%` : '—', color: '#f59e0b' },
               { label: 'Weekly Profit', value: fmt(selectedService.weekly_profit || 0), color: '#10b981' },
               { label: 'Profit Margin', value: `${(selectedService.margin_pct || 0).toFixed(1)}%`, color: (selectedService.margin_pct || 0) > 0 ? '#10b981' : '#ef4444' },
               { label: 'Revenue', value: fmt(selectedService.revenue || 0), color: '#00d4ff' },

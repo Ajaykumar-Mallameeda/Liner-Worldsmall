@@ -23,10 +23,10 @@ export default function FleetPanel({ optimizationState }) {
 
       <div className="grid grid-cols-4 gap-3 mb-3">
         {[
-          { label: "Vessels Deployed", value: fmtNum(fleet.totalVessels), color: "#00d4ff" },
+          { label: "Vessels Assigned", value: fmtNum(fleet.totalVessels), color: "#00d4ff" },
           { label: "Capacity Deployed", value: `${(fleet.totalCapacity / 1000).toFixed(0)}K TEU`, color: "#10b981" },
           { label: "Total Load", value: `${(fleet.totalLoad / 1000).toFixed(0)}K TEU`, color: "#8b5cf6" },
-          { label: "Utilization", value: `${fleet.utilizationPct}%`, color: "#f59e0b" },
+          { label: "Leg Load Factor", value: fleet.legLoadFactorPct != null ? `${fleet.legLoadFactorPct}%` : "—", color: "#f59e0b" },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-lg p-2 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
             <div className="text-lg font-bold font-mono" style={{ color }}>{value}</div>

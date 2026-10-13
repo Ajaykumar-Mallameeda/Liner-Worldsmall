@@ -10,7 +10,9 @@ export function computeFleetStats(selectedServices = []) {
       vesselClasses: {},
       totalCapacity: 0,
       totalLoad: 0,
-      utilizationPct: 0,
+      utilizationPct: null,
+      legLoadFactorPct: null,
+      serviceCount: 0,
       servicesByRegion: {},
     };
   }
@@ -18,6 +20,10 @@ export function computeFleetStats(selectedServices = []) {
   const classes = {};
   let totalCap = 0;
   let totalLoad = 0;
+  let carriedLegs = 0;
+  let offeredLegs = 0;
+  let vesselsAssigned = 0;
+  let vesselsKnown = true;
   const regionCounts = {};
 
   selectedServices.forEach(s => {
@@ -25,6 +31,11 @@ export function computeFleetStats(selectedServices = []) {
     classes[cls] = (classes[cls] || 0) + 1;
     totalCap += s.capacity || 0;
     totalLoad += s.load || 0;
+    if (s.offered_teu_legs != null && s.carried_teu_legs != null) {
+      carriedLegs += Number(s.carried_teu_legs);
+      offeredLegs += Number(s.offered_teu_legs);
+    }
+    if (s.vessels != null) vesselsAssigned += Number(s.vessels); else vesselsKnown = false;
     const reg = s.region || 'Unknown';
     regionCounts[reg] = (regionCounts[reg] || 0) + 1;
   });
@@ -32,12 +43,19 @@ export function computeFleetStats(selectedServices = []) {
   const sorted = Object.entries(classes).sort((a, b) => b[1] - a[1]);
 
   return {
-    totalVessels: selectedServices.length,
+    // vessels assigned = sum of the plan's vessel counts (NOT the number of services); null when the field is absent
+    totalVessels: vesselsKnown ? vesselsAssigned : selectedServices.length,
+    vesselsAssigned: vesselsKnown ? vesselsAssigned : null,
+    serviceCount: selectedServices.length,
     vesselClasses: Object.fromEntries(sorted),
     vesselClassList: sorted.map(([cls, count]) => ({ cls, count, pct: ((count / selectedServices.length) * 100).toFixed(0) })),
     totalCapacity: totalCap,
     totalLoad,
-    utilizationPct: totalCap > 0 ? ((totalLoad / totalCap) * 100).toFixed(1) : 0,
+    // leg load factor = carried TEU-legs / offered TEU-legs (capacity x weekly departures x legs).
+    // The weekly cargo `totalLoad` divided by the per-departure `totalCapacity` is NOT a utilisation
+    // (it exceeds 100 % for any service with several legs or departures) and is no longer computed.
+    legLoadFactorPct: offeredLegs > 0 ? Number(((carriedLegs / offeredLegs) * 100).toFixed(1)) : null,
+    utilizationPct: offeredLegs > 0 ? Number(((carriedLegs / offeredLegs) * 100).toFixed(1)) : null,
     servicesByRegion: regionCounts,
   };
 }

@@ -54,7 +54,8 @@ class Ledger:
     revenue: float = 0.0
     vessel_cost: float = 0.0
     fuel_cost: float = 0.0
-    port_call_fixed_cost: float = 0.0
+    port_call_fixed_cost: float = 0.0       # includes the canal fees (memo item ``canal_fee_cost``)
+    canal_fee_cost: float = 0.0
     handling_cost: float = 0.0
     transshipment_cost: float = 0.0
     port_variable_cost: float = 0.0
@@ -170,6 +171,44 @@ def compute_ledger(
         if absent:
             bad({"type": "missing_port_record", "service": s.service_id, "ports": absent})
             continue
+        # physical rules (recomputed here from the raw records, not from the service model):
+        # draft feasibility and canal traversals of the closed rotation
+        canal_fee = 0.0
+        vd = _num(getattr(cls, "draft", 0.0))
+        flags = getattr(distance_matrix, "canal_flags", None) or {}
+        edraft = getattr(distance_matrix, "edge_draft", None) or {}
+        if vd > 0:
+            low = [p for p in ports if 0 < _num(getattr(port_lookup.get(p), "draft", 0.0)) < vd - 1e-9]
+            if low:
+                bad({"type": "draft_infeasible", "service": s.service_id, "class": cls.vessel_class,
+                     "class_draft": vd, "ports": low})
+                continue
+        n_pan = n_sue = 0
+        blocked = None
+        for i, a in enumerate(ports):
+            b = ports[(i + 1) % len(ports)]
+            if vd > 0 and (a, b) in edraft and vd > edraft[(a, b)] + 1e-9:
+                blocked = {"type": "draft_infeasible", "service": s.service_id, "class": cls.vessel_class,
+                           "class_draft": vd, "leg": (a, b), "leg_limit": edraft[(a, b)]}
+                break
+            pan, sue = flags.get((a, b), (0, 0))
+            n_pan += int(pan)
+            n_sue += int(sue)
+        if blocked is not None:
+            bad(blocked)
+            continue
+        for n_t, fee, nm in ((n_pan, getattr(cls, "panama_fee", None), "Panama"),
+                             (n_sue, getattr(cls, "suez_fee", None), "Suez")):
+            if n_t <= 0:
+                continue
+            if fee is None:
+                bad({"type": "canal_not_passable", "service": s.service_id, "class": cls.vessel_class,
+                     "canal": nm, "traversals": n_t})
+                canal_fee = None
+                break
+            canal_fee += n_t * float(fee)
+        if canal_fee is None:
+            continue
         price = bunker_price_usd_per_t
         if fuel_prices is not None:
             entry = fuel_prices.get(s.service_id)
@@ -193,7 +232,9 @@ def compute_ledger(
             "vessel_cost": vessels * cls.tc_rate_daily * 7.0,
             "fuel": f * fuel_t * price,
             "fuel_tonnes": f * fuel_t, "fuel_price": price,
-            "port_fixed": f * sum(_num(getattr(port_lookup.get(p), "port_call_cost", 0.0)) for p in ports),
+            "port_fixed": f * (sum(_num(getattr(port_lookup.get(p), "port_call_cost", 0.0)) for p in ports)
+                               + canal_fee),
+            "canal_fee": f * canal_fee,
             "revenue": 0.0, "load": 0.0, "var_cost": 0.0,
         }
         L.cycle_time_days[s.service_id] = cycle
@@ -202,6 +243,7 @@ def compute_ledger(
         L.vessel_cost += svc[s.service_id]["vessel_cost"]
         L.fuel_cost += svc[s.service_id]["fuel"]
         L.port_call_fixed_cost += svc[s.service_id]["port_fixed"]
+        L.canal_fee_cost += svc[s.service_id]["canal_fee"]
 
     # fleet inventory per class
     for cname, used in L.vessels_by_class.items():
@@ -335,8 +377,18 @@ def compute_ledger(
                        for di, d in enumerate(demands) if d.weekly_teu > 0)
     L.unserved_teu = max(0.0, L.total_demand_teu - L.served_teu)
 
+    legs_carried: Dict[str, float] = defaultdict(float)
+    for (sid, _leg), load in leg_load.items():
+        legs_carried[sid] += load
     for sid, r in svc.items():
+        offered_legs = r["cap"] * r["f"] * len(r["ports"])         # closed rotation: one leg per port
         L.service_rows[sid] = {
+            # utilisation of the offered slot capacity: carried TEU-legs / (capacity x f x legs); the
+            # ``load`` below is the weekly cargo through the service and is NOT comparable with the
+            # per-departure ``capacity_per_departure``
+            "weekly_capacity_per_leg": r["cap"] * r["f"], "carried_teu_legs": legs_carried.get(sid, 0.0),
+            "offered_teu_legs": offered_legs,
+            "leg_load_factor": (legs_carried.get(sid, 0.0) / offered_legs) if offered_legs > 0 else None,
             "ports": list(r["ports"]), "vessel_class": r["class"].vessel_class,
             "frequency": r["f"], "vessels": r["vessels"], "cycle_time_days": r["cycle"],
             "capacity_per_departure": r["cap"], "load": r["load"], "revenue": r["revenue"],

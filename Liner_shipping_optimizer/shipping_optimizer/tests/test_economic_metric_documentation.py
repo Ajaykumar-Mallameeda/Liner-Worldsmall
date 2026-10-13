@@ -383,8 +383,9 @@ def test_frequency_ga_fitness_is_net_of_fuel():
 ])
 def test_fleet_cost_fields_are_unread_outside_the_loader(field):
     """F-04 (updated): the LINERLIB cost vocabulary is consumed ONLY by the sanctioned
-    canonical economic modules. ``panama_fee`` / ``suez_fee`` remain unread (no canal
-    routing in the data), so any new reader must be a deliberate, reviewed decision.
+    canonical economic modules. ``panama_fee`` / ``suez_fee`` are read by the physical-rules module, the
+    service model and the independent ledger (decision phase D-08); any new reader must be a deliberate,
+    reviewed decision.
     """
     # Deliberate repairs: modules that are SANCTIONED to read a field. Task 3 prices a
     # candidate's vessel cost from the class's TC rate in the feasibility module.
@@ -396,6 +397,11 @@ def test_fleet_cost_fields_are_unread_outside_the_loader(field):
         "tc_rate_daily": _econ | {"src/services/service_feasibility.py"},
         "idle_consumption_tons_per_day": _econ | {"src/utils/fuel_cost.py"},
         "bunker_consumption_tons_per_day": _econ | {"src/utils/fuel_cost.py"},
+        # decision phase (D-08): canal fees are charged per round trip (LINERLIB reference code and the authors'
+        # own solution log, reports/decision_phase/d08); read by the physical-rules module, the service model
+        # and the independent ledger only.
+        "panama_fee": _econ | {"src/network/physical_rules.py"},
+        "suez_fee": _econ | {"src/network/physical_rules.py"},
     }
     offenders = []
     for path in (ROOT / "src").rglob("*.py"):

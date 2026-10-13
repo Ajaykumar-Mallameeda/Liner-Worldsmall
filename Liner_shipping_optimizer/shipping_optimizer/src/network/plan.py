@@ -62,6 +62,9 @@ class PlanResult:
     flow_reopt: Dict = field(default_factory=dict)                  # Task 20 flow re-optimisation
     local_search: Dict = field(default_factory=dict)                # C2 exact-LP local search (opt-in)
     stage_timing: Dict = field(default_factory=dict)                # seconds per step of the stage
+    #: the capped MILP exactly as the solver returned it (before local search / flow re-optimisation /
+    #: repair / vessel trim change the plan): incumbent, bound, termination.  The bound belongs to THIS.
+    milp_stage: Dict = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -219,6 +222,15 @@ class NetworkPlanner:
         timing["milp_sec"] = round(time.perf_counter() - t_solve0, 3)
         timing["milp_budget_sec"] = round(milp_budget, 1)
         res.solution = sol
+        res.milp_stage = {
+            "status": sol.status, "solver_status": sol.solver_status,
+            "incumbent_profit_usd_per_week": (float(sol.objective_value)
+                                              + float(sol.objective_components.get("unserved_penalty", 0.0))
+                                              if sol.usable else None),
+            "relaxation_bound_usd_per_week": sol.relaxation_bound,
+            "mip_gap_reported_by_backend": sol.mip_gap, "backend": sol.solver_backend,
+            "services_in_integer_problem": sol.n_services_restricted_to,
+        }
         res.status = sol.status
         res.message = sol.message
         res.flow_reopt = {"applied": False, "reason": "disabled"}

@@ -586,8 +586,10 @@ class NetworkLoader:
         src = path.name
         df = _read_table(path, _DISTANCE_REQUIRED, lower_columns=True)
 
-        matrix = {}
+        from src.network.physical_rules import LinerDistanceMatrix
+        matrix = LinerDistanceMatrix()
         seen = {}
+        has_flags = {"ispanama", "issuez"} <= set(df.columns)
 
         for n, row in enumerate(df.to_dict("records"), start=1):
 
@@ -612,6 +614,15 @@ class NetworkLoader:
 
             matrix.setdefault(o, {})
             matrix[o][d] = dist
+            if has_flags:
+                # canal traversal flags and the draft limit of the leg (listed on the Panama edges only)
+                pan = int(float(row["ispanama"] or 0))
+                sue = int(float(row["issuez"] or 0))
+                if pan or sue:
+                    matrix.canal_flags[(o, d)] = (pan, sue)
+                dv = row.get("draft")
+                if dv not in (None, "") and not (isinstance(dv, float) and math.isnan(dv)):
+                    matrix.edge_draft[(o, d)] = float(dv)
 
         self._check_dataset_identity(
             path, "distance", {i for o, d in seen for i in (o, d)}, src
@@ -621,6 +632,8 @@ class NetworkLoader:
             "source": str(path),
             "unit": "nautical miles",
             "directed_pairs": len(seen),
+            "canal_flagged_pairs": len(matrix.canal_flags),
+            "pairs_with_draft_limit": len(matrix.edge_draft),
         }
         return matrix
 

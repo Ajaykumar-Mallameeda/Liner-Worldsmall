@@ -20,7 +20,8 @@ export default function ServiceDetailPanel({ service, onClose }) {
   const dest = ports[ports.length - 1] || '—';
   const load = service.load || 0;
   const capacity = service.capacity || 1;
-  const utilPct = capacity > 0 ? (load / capacity) * 100 : 0;
+  // leg load factor from the ledger (carried TEU-legs / offered TEU-legs); unknown is shown as a dash, never as 0
+  const utilPct = service.leg_load_factor != null ? service.leg_load_factor * 100 : null;
   const weeklyProfit = service.weekly_profit || 0;
   const marginPct = service.margin_pct != null ? service.margin_pct : (service.revenue > 0 ? (weeklyProfit / service.revenue) * 100 : 0);
 
@@ -63,14 +64,14 @@ export default function ServiceDetailPanel({ service, onClose }) {
           <div className="text-sm font-bold text-cyan-400 mt-0.5">{fmtPct(marginPct)}</div>
         </div>
         <div className="bg-white/[0.02] p-2 border border-white/5">
-          <div className="text-[7.5px] text-slate-400 uppercase tracking-wider">LOAD / CAPACITY</div>
+          <div className="text-[7.5px] text-slate-400 uppercase tracking-wider">WEEKLY CARGO / CAPACITY PER DEPARTURE</div>
           <div className="text-xs font-bold text-slate-100 mt-0.5">
             {fmtNum(load)} <span className="text-slate-500 font-normal">/ {fmtNum(capacity)} TEU</span>
           </div>
         </div>
         <div className="bg-white/[0.02] p-2 border border-white/5">
-          <div className="text-[7.5px] text-slate-400 uppercase tracking-wider">UTILIZATION</div>
-          <div className="text-xs font-bold text-purple-300 mt-0.5">{fmtPct(utilPct)}</div>
+          <div className="text-[7.5px] text-slate-400 uppercase tracking-wider">LEG LOAD FACTOR</div>
+          <div className="text-xs font-bold text-purple-300 mt-0.5">{utilPct != null ? fmtPct(utilPct) : '—'}</div>
         </div>
       </div>
 

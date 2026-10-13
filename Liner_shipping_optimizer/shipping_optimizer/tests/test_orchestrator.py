@@ -2112,6 +2112,27 @@ def _num0(v) -> float:
     return float(v) if isinstance(v, (int, float)) and v == v and abs(v) != float("inf") else 0.0
 
 
+_RAW_CANAL_CACHE: Dict[str, Any] = {}
+
+
+def _raw_canal_and_leg_draft():
+    """(is_panama, is_suez) and leg draft limit per directed pair, read straight from the raw dist_dense.csv."""
+    if "v" not in _RAW_CANAL_CACHE:
+        import csv as _csv
+        path = Path(__file__).parent.parent / "data" / "raw" / "WorldSmall" / "dist_dense.csv"
+        flags, drafts = {}, {}
+        with open(path, newline="", encoding="utf-8-sig") as fh:
+            for r in _csv.DictReader(fh, delimiter="\t"):
+                k = (r["fromUNLOCODe"].strip(), r["ToUNLOCODE"].strip())
+                pan, sue = int(float(r.get("IsPanama") or 0)), int(float(r.get("IsSuez") or 0))
+                if pan or sue:
+                    flags[k] = (pan, sue)
+                if (r.get("Draft") or "").strip():
+                    drafts[k] = float(r["Draft"])
+        _RAW_CANAL_CACHE["v"] = (flags, drafts)
+    return _RAW_CANAL_CACHE["v"]
+
+
 def _independent_fuel_price(fp: Dict, rotation) -> Tuple[float, str, Any]:
     """Applicable bunker price of a rotation, from the PINNED pricing block alone.
 
@@ -2216,6 +2237,29 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
         fuel_cost += f * (sea * cls.bunker_consumption_tons_per_day
                           + port_days * cls.idle_consumption_tons_per_day) * price
         port_fixed += f * sum(_num0(getattr(ports.get(p), "port_call_cost", 0.0)) for p in rot)
+        # canal fees and draft feasibility, recomputed from the RAW dist_dense.csv (not from the loader's flags):
+        # fee = traversals of the closed rotation x class fee, once per weekly departure; draft: class <= port / leg
+        raw_flags, raw_draft = _raw_canal_and_leg_draft()
+        cdraft = float(getattr(cls, "draft", 0.0) or 0.0)
+        low_ports = [p for p in rot if 0 < _num0(getattr(ports.get(p), "draft", 0.0)) < cdraft - 1e-9]
+        if cdraft > 0 and low_ports:
+            bad({"type": "draft_infeasible", "service": s["id"], "ports": low_ports})
+        canal_fee = 0.0
+        for a_, b_ in zip(rot, rot[1:] + rot[:1]):
+            pan_, sue_ = raw_flags.get((a_, b_), (0, 0))
+            if cdraft > 0 and (a_, b_) in raw_draft and cdraft > raw_draft[(a_, b_)] + 1e-9:
+                bad({"type": "draft_infeasible", "service": s["id"], "leg": [a_, b_]})
+            if pan_:
+                if getattr(cls, "panama_fee", None) is None:
+                    bad({"type": "canal_not_passable", "service": s["id"], "canal": "Panama"})
+                else:
+                    canal_fee += cls.panama_fee
+            if sue_:
+                if getattr(cls, "suez_fee", None) is None:
+                    bad({"type": "canal_not_passable", "service": s["id"], "canal": "Suez"})
+                else:
+                    canal_fee += cls.suez_fee
+        port_fixed += f * canal_fee
 
     for cname, used in out["vessels_by_class"].items():
         if used > fleet[cname].quantity:
@@ -3600,25 +3644,37 @@ def section_vessel_utilization_summary(result: Dict):
         print(f"  {sep()}")
         return
 
-    # Calculate average utilization from load/capacity
-    total_load = 0
-    total_capacity = 0
-
+    # Display only (no assertion).  Three different quantities are shown and never mixed:
+    #  * leg load factor  = carried TEU-legs / offered TEU-legs (capacity x weekly departures x legs);
+    #  * vessel inventory utilisation = vessels assigned / vessels owned, per class (network ledger);
+    #  * weekly cargo is NOT divided by the per-departure capacity (that ratio exceeds 100 %).
+    carried = offered = 0.0
+    n_services = n_with_legs = 0
     for r in regional_results:
-        selected = r.get("selected_services", [])
-        for svc in selected:
-            load = svc.get("load", 0)
-            capacity = svc.get("capacity", 1)
-            total_load += load
-            total_capacity += capacity
+        for svc in r.get("selected_services", []):
+            n_services += 1
+            if svc.get("offered_teu_legs") is not None and svc.get("carried_teu_legs") is not None:
+                carried += float(svc["carried_teu_legs"])
+                offered += float(svc["offered_teu_legs"])
+                n_with_legs += 1
 
-    if total_capacity > 0:
-        avg_utilization = (total_load / total_capacity) * 100
-        print_kv("Average utilization", f"{avg_utilization:.1f}%")
-        print_kv("Total capacity", f"{total_capacity:,.0f} TEU")
-        print_kv("Total load", f"{total_load:,.0f} TEU")
+    if offered > 0:
+        print_kv("Leg load factor", f"{carried / offered * 100:.1f}%  ({carried:,.0f} / {offered:,.0f} TEU-legs, "
+                                    f"{n_with_legs}/{n_services} services)")
     else:
-        print_kv("Average utilization", "N/A")
+        print_kv("Leg load factor", "N/A (no leg data in the output)")
+
+    fleet = (result.get("network_ledger") or {}).get("fleet_by_class") or {}
+    if fleet:
+        used = sum(int(v.get("used", 0)) for v in fleet.values())
+        avail = sum(int(v.get("available", 0)) for v in fleet.values())
+        print_kv("Vessel inventory utilisation",
+                 f"{used / avail * 100:.1f}%  ({used} of {avail} vessels assigned)" if avail else "N/A")
+        for cls, v in sorted(fleet.items()):
+            a_ = int(v.get("available", 0))
+            print_kv(f"  {cls}", f"{int(v.get('used', 0))} / {a_}" + (f"  ({int(v.get('used', 0)) / a_ * 100:.0f}%)" if a_ else ""))
+    else:
+        print_kv("Vessel inventory utilisation", "N/A (no fleet block in the output)")
 
     print(f"\n  {sep()}")
 

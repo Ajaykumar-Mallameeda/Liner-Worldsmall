@@ -87,19 +87,27 @@ export default function FleetIntelligence(props) {
       const s = selectedServices[i];
       const cls = s.vessel_class || 'Standard';
       if (!map[cls]) {
-        map[cls] = { count: 0, capacity: 0, load: 0, profit: 0 };
+        map[cls] = { count: 0, capacity: 0, load: 0, profit: 0, carriedLegs: 0, offeredLegs: 0, hasLegs: false };
       }
       map[cls].count += 1;
       map[cls].capacity += Number(s.capacity || 0);
       map[cls].load += Number(s.load || 0);
       map[cls].profit += Number(s.weekly_profit || 0);
+      if (s.offered_teu_legs != null && s.carried_teu_legs != null) {
+        map[cls].carriedLegs += Number(s.carried_teu_legs);
+        map[cls].offeredLegs += Number(s.offered_teu_legs);
+        map[cls].hasLegs = true;
+      }
     }
     return map;
   }, [selectedServices]);
 
   const totalCapacity = Object.values(vesselClassStats).reduce(function(acc, s) { return acc + (s.capacity || 0); }, 0);
   const totalLoad = Object.values(vesselClassStats).reduce(function(acc, s) { return acc + (s.load || 0); }, 0);
-  const utilization = totalCapacity > 0 ? (totalLoad / totalCapacity) * 100 : null;
+  // leg load factor from the ledger's carried / offered TEU-legs; weekly cargo / per-departure capacity is not a utilisation
+  const carriedLegsAll = Object.values(vesselClassStats).reduce(function(acc, s) { return acc + (s.carriedLegs || 0); }, 0);
+  const offeredLegsAll = Object.values(vesselClassStats).reduce(function(acc, s) { return acc + (s.offeredLegs || 0); }, 0);
+  const utilization = offeredLegsAll > 0 ? (carriedLegsAll / offeredLegsAll) * 100 : null;
   const overallState = totalSelected > 0 ? 'available' : 'no_data';
 
   return h(F, null,
@@ -178,13 +186,13 @@ export default function FleetIntelligence(props) {
           )
         ),
         h('div', { className: 'cx-span-3' },
-          h(InstrumentPanel, { title: 'Fleet Utilization', right: 'load / capacity', style: { height: '100%', display: 'flex', flexDirection: 'column' } },
+          h(InstrumentPanel, { title: 'Leg Load Factor', right: 'carried / offered TEU-legs', style: { height: '100%', display: 'flex', flexDirection: 'column' } },
             h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } },
               h(Stat, {
                 k: 'util',
                 v: utilization != null ? (utilization.toFixed(1) + '%') : EM,
                 variant: utilization != null ? 'good' : 'muted',
-                sub: fmtNum(totalLoad) + ' / ' + fmtNum(totalCapacity) + ' TEU'
+                sub: fmtNum(carriedLegsAll) + ' / ' + fmtNum(offeredLegsAll) + ' TEU-legs'
               }),
               h('div', {
                 style: {

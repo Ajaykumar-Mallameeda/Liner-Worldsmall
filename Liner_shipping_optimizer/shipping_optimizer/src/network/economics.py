@@ -37,6 +37,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from src.network.physical_rules import check_rotation
 from src.network.bunker_prices import (
     BunkerPriceError, FuelPriceResolution, FuelPricing, LEGACY_UNIFORM_USD_PER_T, active_pricing,
 )
@@ -136,7 +137,9 @@ class ServiceModel:
     vessel_week_cost: float                     # TC_daily * 7, per vessel
     fuel_cost_per_rotation: float               # USD, sea + port idle
     fuel_tonnes_per_rotation: float
-    port_fixed_per_rotation: float              # sum of fixed port-call costs
+    port_fixed_per_rotation: float              # sum of fixed port-call costs + canal fees of the rotation
+    canal_fee_per_rotation: float = 0.0         # memo: the canal-fee part of ``port_fixed_per_rotation``
+    canal_traversals: Tuple[int, int] = (0, 0)  # (Panama, Suez) traversals of the closed rotation
     capacity_unit_status: str = "provisional"
     # applicable bunker price and where it came from (fuel cost = tonnes x this price)
     fuel_price_usd_per_t: float = float("nan")
@@ -244,6 +247,13 @@ def build_service_model(
         raise ServiceModelError(
             f"service {service_id}: no port record for {missing_ports}; port costs are "
             f"never assumed to be zero", ["missing_port_record"])
+    # physical rules of the benchmark: draft feasibility (hard) and canal fees (charged per round trip);
+    # see src/network/physical_rules.py for the evidence
+    rules = check_rotation(feas.ports, vessel, distance_matrix, port_lookup)
+    if rules.reasons:
+        raise ServiceModelError(
+            f"service {service_id}: {', '.join(sorted(set(rules.reasons)))}: {'; '.join(rules.details)}",
+            sorted(set(rules.reasons)))
 
     try:
         price = assumptions.resolve_fuel_price(feas.ports)
@@ -258,7 +268,8 @@ def build_service_model(
     port_days = len(feas.ports) * assumptions.port_stay_days
     fuel_t = sea_days * vessel.bunker_consumption_tons_per_day \
         + port_days * vessel.idle_consumption_tons_per_day
-    port_fixed = sum(_port_attr(port_lookup.get(p), "port_call_cost") for p in feas.ports)
+    port_fixed = sum(_port_attr(port_lookup.get(p), "port_call_cost") for p in feas.ports) \
+        + rules.canal_fee_per_rotation
 
     m = ServiceModel(
         service_id=str(service_id),
@@ -277,6 +288,8 @@ def build_service_model(
         fuel_cost_per_rotation=fuel_t * price.price_usd_per_t,
         fuel_tonnes_per_rotation=fuel_t,
         port_fixed_per_rotation=port_fixed,
+        canal_fee_per_rotation=rules.canal_fee_per_rotation,
+        canal_traversals=(rules.panama_traversals, rules.suez_traversals),
         capacity_unit_status=capacity_unit_status,
         fuel_price_usd_per_t=price.price_usd_per_t,
         fuel_price_basis=price.basis,

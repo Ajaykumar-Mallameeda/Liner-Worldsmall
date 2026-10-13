@@ -173,6 +173,41 @@ def _fallback_owner(proposers_of_sid: Sequence[str], owner_of_sid: Optional[str]
     return region_names[0] if region_names else None
 
 
+def _capped_gap(plan):
+    m = getattr(plan, "milp_stage", None) or {}
+    inc, bd = m.get("incumbent_profit_usd_per_week"), m.get("relaxation_bound_usd_per_week")
+    if inc is None or bd is None:
+        return None, None
+    return float(bd) - float(inc), (100.0 * (float(bd) - float(inc)) / abs(float(bd)) if bd else None)
+
+
+def _capped_model_block(plan, led) -> Dict:
+    m = dict(getattr(plan, "milp_stage", None) or {})
+    usd, pct = _capped_gap(plan)
+    m.update({"gap_usd_per_week": usd, "gap_pct_of_bound": pct,
+              "scope": "model over the retained (capped) path set, restricted to the LP-support services; "
+                       "the bound is valid for this model only"})
+    return m
+
+
+def _final_plan_block(plan, led) -> Dict:
+    m = getattr(plan, "milp_stage", None) or {}
+    inc, bd = m.get("incumbent_profit_usd_per_week"), m.get("relaxation_bound_usd_per_week")
+    final = float(led.operating_profit)
+    exceeds = (bd is not None and final > float(bd) + 1e-6 * max(1.0, abs(float(bd))))
+    return {
+        "profit_usd_per_week": final,
+        "post_solve_change_usd_per_week": (final - float(inc)) if inc is not None else None,
+        "post_solve_steps": {"local_search_applied": bool((getattr(plan, "local_search", {}) or {}).get("applied")),
+                             "flow_reoptimisation_applied": bool((plan.flow_reopt or {}).get("applied")),
+                             "profit_floor_repair_applied": bool(((plan.flow_reopt or {}).get("repair") or {}).get("applied"))},
+        "exceeds_capped_model_bound": bool(exceeds),
+        "scope": "ledger-verified plan after post-solve steps; it may use paths and services outside the capped "
+                 "model, so it is not comparable with the capped model's bound and a value above the bound "
+                 "is not a negative gap and does not prove optimality",
+    }
+
+
 def reconcile(
     problem,
     pools: Dict[str, List[Dict]],
@@ -350,6 +385,10 @@ def reconcile(
             "ports": list(row["ports"]),
             "load": float(row["load"]),
             "capacity": float(row["capacity_per_departure"]),
+            "weekly_capacity_per_leg": float(row["weekly_capacity_per_leg"]),
+            "carried_teu_legs": float(row["carried_teu_legs"]),
+            "offered_teu_legs": float(row["offered_teu_legs"]),
+            "leg_load_factor": row["leg_load_factor"],
             "vessel_class": row["vessel_class"],
             "vessel_cost": float(row["vessel_cost"]),
             "fuel_cost": float(row["fuel_cost"]),
@@ -465,8 +504,13 @@ def reconcile(
         "optimality": {
             "milp_status": plan.status,
             "relaxation_upper_bound_usd_per_week": sol.relaxation_bound,
-            "gap_to_bound_usd_per_week": (sol.relaxation_bound - sol.objective_value)
-            if sol.relaxation_bound is not None else None,
+            # the gap is a property of the CAPPED MODEL: its incumbent as the solver returned it versus
+            # its own bound.  The final plan (after local search / flow re-optimisation over the full
+            # valid path set) lies outside that model and is reported separately; a negative
+            # final-plan-minus-bound is NOT a proof of optimality and not a negative gap.
+            "gap_to_bound_usd_per_week": _capped_gap(plan)[0],
+            "capped_model": _capped_model_block(plan, led),
+            "final_plan": _final_plan_block(plan, led),
             "solver_backend": sol.solver_backend,
             "mip_gap_reported_by_backend": sol.mip_gap,
             "bound_applies_to": "the model over the retained (capped) path set",

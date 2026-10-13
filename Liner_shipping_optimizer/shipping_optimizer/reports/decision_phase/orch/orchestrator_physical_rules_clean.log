@@ -1,0 +1,1420 @@
+llm_all_providers_failed role=regional reason=groq: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m2n71jmmeh98vk6jpwzmymvk` service tier `on_demand` on output tokens per minute (OT last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+llm_all_providers_failed role=service_generator reason=groq: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m2n71jmmeh98vk6jpwzmymvk` service tier `on_demand` on output tokens per minute (OT last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+llm_all_providers_failed role=regional reason=groq: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m2n71jmmeh98vk6jpwzmymvk` service tier `on_demand` on output tokens per minute (OT last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
+llm_all_providers_failed role=regional reason=groq: Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m2n71jmmeh98vk6jpwzmymvk` service tier `on_demand` on output tokens per minute (OT last_provider=groq last_model=qwen/qwen3.8-27b last_error_type=http_429
++ Configuration validated
+  Provider order: groq
+
+======================================================================
+  LINER SHIPPING OPTIMIZER - WORLDSMALL FULL PIPELINE TEST 
+======================================================================
+
+0 . INITIALISATION
+  ----------------------------------------------------------------------
++  OrchestratorAgent created
++  Regional agents: ['regional_asia', 'regional_europe', 'regional_americas', 'regional_middle_east', 'regional_africa']
++  CoordinatorAgent: coordinator
++  WorldSmall dir: C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\data\raw\WorldSmall
++  WorldSmall loaded via production CSV loaders (ports, demands, distances, fleet)
+
+W . WORLDSMALL DATA CONTRACT
+  ----------------------------------------------------------------------
+  +  Ports == 47 (WorldSmall source)
+  +  Demand rows == 1764 (WorldSmall source)
+  +  No invalid port references in demands
+  Raw source FFE/week       138,247
+  Runtime TEU/week          276,494.0
+  TEU / FFE ratio           2.0000  (expected ~2.0; x6 scaling => 12.0)
+  Flat FFE x 2 nominal      276,494
+  Delta vs nominal          0.0 TEU (0 expected: 1 FFE = 2 TEU exactly)
+  +  No artificial demand scaling (TEU/FFE ratio ~= 2.0)
+  +  DEMAND_SCALE=6 NOT applied to WorldSmall
+  +  WorldSmall Problem carries a Fleet object
+  +  Fleet total == sum(class quantities) (derived, not hardcoded)
+  +  Fleet total == 263 vessels (from fleet_WorldSmall.csv)
+  +  Fleet has 6 vessel classes
+  +  Fleet[Feeder_450] == 24
+  +  Fleet[Feeder_800] == 29
+  +  Fleet[Panamax_1200] == 68
+  +  Fleet[Panamax_2400] == 74
+  +  Fleet[Post_panamax] == 58
+  +  Fleet[Super_panamax] == 10
+  Fleet total vessels       263  (no FLEET_SIZE constant)
+  Fleet classes             6
+  +  Directed distance pairs == 2162 (47 x 46)
+  +  Every required OD pair has a distance (no 500 nm fallback)
+  +  All distance values are positive
+  Directed pairs            2,162
+  Fallback pairs            0
+  +  Problem starts with services=[] (generated at runtime)
+
+  ----------------------------------------------------------------------
+
+1 . ECONOMIC DATA LOADING SUMMARY
+  ----------------------------------------------------------------------
+
+  PORT COST COLUMNS LOADED
+  CostPerFULL (handling)    [OK] Loaded (47 ports with data)
+    Min/Max/Avg             $9/$349/$121 per TEU
+    Sample port             Kaohsiung: $9/TEU
+  PortCallCostFixed         [OK] Loaded (47 ports with data)
+    Min/Max/Avg             $533/$34,988/$8,115 per call
+  PortCallCostPerFFE (variable)[OK] Loaded (47 ports with data)
+    Min/Max/Avg             $0/$30/$5 per TEU
+  CostPerFULLTrnsf (transshipment)[OK] Loaded (46 ports with data)
+    Min/Max/Avg             $10/$430/$79 per TEU
+
+  ----------------------------------------------------------------------
+  +  Port handling costs loaded
+  +  Port call costs loaded
+
+2 . REVENUE MODEL SUMMARY
+  ----------------------------------------------------------------------
+
+  REVENUE MODEL STATUS
+  Revenue model             [OK] Active (FFE->TEU conversion applied)
+  FFE->TEU conversion       [OK] Trade lane specific factors (1.75-2.1)
+  Sample factors            AOLAD-AEJEA:2.00, AUBNE-AEJEA:2.00, BEANR-AEJEA:2.00
+  Estimated weekly revenue  $264,870,100
+  Estimated annual revenue  $13,773,245,200
+
+  ----------------------------------------------------------------------
+  +  Weekly revenue > 0
+  +  Weekly demand > 0
+
+3 . PROBLEM STATISTICS
+  ----------------------------------------------------------------------
+  Ports                     47
+  Candidate services        0
+  Demand lanes              1,764
+  Total weekly demand       276,494 TEU
+  Avg demand/lane           156.7 TEU
+  Network density           163.2%
+  Top-3 corridor share      3.9% of total demand
+
+  #      Origin  Destination     TEU/week     Share
+  --------------------------------------------------
+  1       CNYTN        USLAX        3,730      1.3%
+  2       CNSHA        DEBRV        3,720      1.3%
+  3       KRPUS        DEBRV        3,210      1.2%
+  4       CNYTN        NLRTM        2,694      1.0%
+  5       CNSHA        USLAX        2,412      0.9%
+
+  ----------------------------------------------------------------------
+  +  Ports loaded
+  +  Demand lanes loaded
+  +  Total demand > 0 TEU
+  !  Candidate services not pre-loaded -- generated during pipeline
+
+4 . PORT COST SUMMARY
+  ----------------------------------------------------------------------
+
+  AGGREGATE PORT COSTS
+  Total handling cost capacity$5,690 per TEU (sum across ports)
+  Total transshipment cost capacity$3,634 per TEU (sum across ports)
+  Total fixed port-call cost$381,394 per call (sum across ports)
+  Total variable cost capacity$254 per TEU (sum across ports)
+
+  TOP 5 PORTS BY HANDLING COST
+    Newark                  $349/TEU
+    Barcelona               $298/TEU
+    Brisbane                $270/TEU
+    Los Angeles             $265/TEU
+    Hamburg                 $233/TEU
+
+  ----------------------------------------------------------------------
+  +  Total handling cost > 0
+  +  At least one port has handling cost
+
+RUNNING PIPELINE
+  ----------------------------------------------------------------------
+  Steps:
+    -> Orchestrator LLM -- problem analysis
+    -> PortClustering -> RegionalSplitter -- decomposition
+    -> RegionalAgent x 5 -- GA + MILP + LLM
+    -> CoordinatorAgent -- conflict detection + resolution + feedback
+    -> Feedback loop -- up to 3 iterations
+    -> Orchestrator LLM -- executive summary
+
+  Running... (this may take several minutes)
+
+
+  +  Pipeline complete in 463.4s
+  +  Iterations run: 3
+
+OBJECTIVE FUNCTION SUMMARY
+  ----------------------------------------------------------------------
+
+  OBJECTIVE FUNCTION STATUS
+  Optimizer mode            [OK] PROFIT-AWARE OPTIMIZER ACTIVE
+  Weight rebalancing        [OK] APPLIED
+  Coverage dominance        [OK] REMOVED
+  Negative penalty          [OK] ACTIVE
+  Profitability gate        [OK] ACTIVE
+
+  CURRENT WEIGHTS
+  Profit weight             0.537
+  Coverage weight           0.357
+  Cost weight               0.106
+  ----------------------------------------------------------------------
+
+WEIGHT CONTRIBUTION SUMMARY
+  ----------------------------------------------------------------------
+
+  EXPECTED CONTRIBUTION BREAKDOWN
+  Profit contribution       53.7%
+  Coverage contribution     35.7%
+  Cost contribution         10.6%
+
+  OBJECTIVE MODE STATUS
+  Current mode              [OK] PROFIT-AWARE
+  Weight application        [OK] FIXED
+  Normalization             [OK] ACTIVE
+  ----------------------------------------------------------------------
+
+N . NETWORK LEDGER - INDEPENDENT RECOMPUTATION FROM RAW DATA
+  ----------------------------------------------------------------------
+
+  N.1 Status propagation
+  +  result.status is an explicit accounting status
+  +  result.status == 'complete' exactly when the network ledger is verified
+  Result status             complete
+  Ledger verified           True
+  MILP status               feasible
+  +  network_ledger carries the plan (services + flows) needed for recomputation
+  +  time/price assumptions are stated in the output
+
+  N.2 Reported vs independently recomputed (USD / week)
+  item                              reported        recomputed
+  revenue                        103,202,060       103,202,060
+  +  revenue: reported == recomputed
+  vessel_cost                     16,457,000        16,457,000
+  +  vessel_cost: reported == recomputed
+  fuel_cost                       28,684,421        28,684,421
+  +  fuel_cost: reported == recomputed
+  port_call_fixed_cost             7,625,720         7,625,720
+  +  port_call_fixed_cost: reported == recomputed
+  handling_cost                   18,597,123        18,597,123
+  +  handling_cost: reported == recomputed
+  transshipment_cost               1,244,590         1,244,590
+  +  transshipment_cost: reported == recomputed
+  port_variable_cost                 816,924           816,924
+  +  port_variable_cost: reported == recomputed
+  total_operating_cost            73,425,778        73,425,778
+  +  total_operating_cost: reported == recomputed
+  operating_profit                29,776,282        29,776,282
+  +  operating_profit: reported == recomputed
+  +  operating profit == revenue - total operating cost
+  +  independent recomputation finds no violations
+  +  pipeline ledger reports no violations
+
+  N.3 Demand conservation
+  +  served TEU == recomputed
+  +  total demand == data file total
+  +  served + unserved == total demand
+  +  coverage in [0, 100]%
+
+  N.4 Fleet per class (inventory is a hard limit)
+  class               used  recomputed  inventory
+  Feeder_450            23          23         24
+  +  Feeder_450: reported vessels == ceil(T*f/7) summed
+  +  Feeder_450: vessels used <= inventory
+  Feeder_800            26          26         29
+  +  Feeder_800: reported vessels == ceil(T*f/7) summed
+  +  Feeder_800: vessels used <= inventory
+  Panamax_1200          66          66         68
+  +  Panamax_1200: reported vessels == ceil(T*f/7) summed
+  +  Panamax_1200: vessels used <= inventory
+  Panamax_2400          62          62         74
+  +  Panamax_2400: reported vessels == ceil(T*f/7) summed
+  +  Panamax_2400: vessels used <= inventory
+  Post_panamax           0           0         58
+  +  Post_panamax: reported vessels == ceil(T*f/7) summed
+  +  Post_panamax: vessels used <= inventory
+  Super_panamax          0           0         10
+  +  Super_panamax: reported vessels == ceil(T*f/7) summed
+  +  Super_panamax: vessels used <= inventory
+
+  N.5 Real rotation time per operated service (no constant frequency/cycle)
+  service       class         ports      nm  sail d  port d cycle d  f/wk  vess headway d
+  asia_svc_579  Feeder_800        5  30,717    91.4     5.0      97     1    14       7.0
+  asia_svc_576  Feeder_800        5  25,932    77.2     5.0      83     1    12       7.0
+  europe_svc_46 Panamax_2400      5  24,738    64.4     5.0      70     1    10       7.0
+  asia_svc_599  Panamax_2400      5  23,938    62.3     5.0      68     1    10       7.0
+  americas_svc_ Panamax_1200      5  27,004    62.5     5.0      68     1    10       7.0
+  europe_svc_49 Panamax_2400      5  23,145    60.3     5.0      66     1    10       7.0
+  americas_svc_ Panamax_2400      5  22,677    59.1     5.0      65     1    10       7.0
+  asia_svc_540  Panamax_2400      3  21,568    56.2     3.0      60     1     9       7.0
+  asia_svc_555  Panamax_2400      3  19,992    52.1     3.0      56     1     8       7.0
+  asia_svc_552  Panamax_1200      3  21,972    50.9     3.0      54     1     8       7.0
+  asia_svc_565  Panamax_1200      3  21,136    48.9     3.0      52     1     8       7.0
+  americas_svc_ Panamax_1200      5  19,708    45.6     5.0      51     1     8       7.0
+  americas_svc_ Feeder_450        4  12,352    42.9     4.0      47     1     7       7.0
+  asia_svc_559  Panamax_1200      3  17,098    39.6     3.0      43     1     7       7.0
+  asia_svc_524  Panamax_1200      6  14,748    34.1     6.0      41     1     6       7.0
+  Distinct cycle times (d)  [3, 4, 5, 6, 9, 10, 13, 16, 29, 36, 38, 40, 41, 43, 47, 51, 52, 54, 56, 60, 65, 66, 68, 70, 83, 97]
+  Distinct weekly frequencies[1, 5]
+  +  every declared cycle covers sailing + port time
+  +  every frequency <= floor(7 * class inventory / cycle)
+  +  reported cycle/vessels/frequency of each service == recomputed
+  +  cycle times differ between services (derived from distance, not constant)
+  +  every operated service ties up >= 1 vessel
+
+  N.6 Regional results add up to the network
+  +  sum of regional revenue == network revenue
+  +  sum of regional total cost == network cost
+  +  sum of regional profit == network profit
+  +  summary_metrics.weekly_profit == network operating profit
+
+  N.7 Sensitivity: a tampered plan must be rejected
+  +  adding 10M TEU to a flow is flagged (demand / capacity)
+  +  +1000 departures/week on one service is flagged as fleet_exceeded
+
+  N.7b Bunker pricing (pinned snapshot, price per service)
+  +  fuel pricing mode is stated in the output
+  +  fuel pricing names its price snapshot
+  +  legacy uniform price == the stated bunker price assumption
+  +  the uniform price is labelled an assumption, not an observation
+  +  reported price / basis / bunkering port of every service == recomputed from the snapshot
+  Pricing mode              legacy_uniform  snapshot=legacy_uniform_600
+  Services by price basis   {'legacy_uniform': 28}
+  Distinct applied prices (USD/t)[600.0]
+
+  N.8 Stated assumptions
+  +  capacity unit status is reported
+  +  capacity feasibility is flagged as conditional on the non-primary-source unit reading
+  !  Capacity FFE read as FFE (secondary source): fleet-capacity feasibility is conditional
+  Port stay assumed         24 h per call
+  Bunker price (uniform / reference)$600/t
+  Transfer dwell assumed    48 h min + 3.5 d wait
+
+  N.9 Journey bound, strategy and utilisation report
+  +  journeys have at most two transfers (hard bound of the model)
+  +  every routed flow has at most max_transfers + 1 segments
+  +  network_ledger carries the strategy report
+  +  strategy report reconciles with the pipeline ledger (revenue, charges, service cost, profit, served TEU)
+  +  strategies add up to the recomputed served TEU (each flow counted once)
+  +  strategy revenue == recomputed revenue
+  +  strategy port charges == recomputed handling + transshipment + port variable
+  +  allocated service cost + idle capacity cost == recomputed vessel + fuel + port calls
+  +  idle capacity cost is not negative
+  +  strategy flow counts == direct / one-transfer / two-transfer flows of the plan
+  +  no multi-hop cargo unless two transfers are enabled
+  +  no routed flow exceeds its transit limit (by strategy)
+  +  per-service carried TEU-legs == recomputed leg loads
+  +  no leg is loaded beyond its capacity (utilisation report)
+  +  network load factor in [0, 1]
+  +  every unserved remainder has a defined reason
+  +  unserved TEU by reason adds up to the unserved demand
+  Served TEU by strategy    direct=64,742, feeder=21,284, hub_and_spoke=5,148, multi_hop=1,722
+  Unserved by reason (TEU)  capacity_exhausted=10,616, fleet_inventory_exhausted=96,720, limit_below_fastest_sailing_time=9,312, no_time_feasible_service_in_pool=23,316, not_economic_to_open_service=42,524, not_profitable_to_carry=1,110
+  Network load factor       0.623
+
+  N.10 Flow re-optimisation over the full valid path set
+  +  network_ledger.optimality states whether the flows were re-optimised
+  +  flow re-optimisation never lowers the plan's profit
+  +  a plan improved with paths outside the solved model is not reported 'optimal'
+  Flow re-optimisation gain 6,235,708 USD/week, 79 path(s) added, served TEU 88,206 -> 92,896
+
+  N.11 Opt-in optimiser flags (C1 inequality, local search, class variants)
+  +  network_ledger.optimality states whether the local search was enabled
+  +  network_ledger.optimality states the formulation flags in force
+
+O . DECISION-LAYER ECONOMICS (F-15) - SAME NUMBERS AS THE LEDGER
+  ----------------------------------------------------------------------
+
+  O.1 Accounting state is explicit
+  +  global_metrics states its accounting status
+  +  global_metrics.accounting_verified == network_ledger.verified
+
+  O.2 One definition of cost, profit and margin
+  item                                  global_metrics       independent
+  total_cost (all-in)                       73,425,778        73,425,778
+  vessel_hire_cost (component)              16,457,000        16,457,000
+  revenue                                  103,202,060       103,202,060
+  profit                                    29,776,282        29,776,282
+  profit margin on revenue (%)                   28.85             28.85
+  +  global_metrics.total_cost == independently recomputed all-in cost
+  +  global_metrics.total_cost == summary_metrics.total_cost (one value per name)
+  +  global_metrics.vessel_hire_cost == recomputed vessel hire (component, own name)
+  +  all-in cost exceeds its vessel-hire component
+  +  global_metrics.revenue == recomputed revenue
+  +  global_metrics: profit == revenue - total_cost (no unserved penalty inside)
+  +  global_metrics.profit_margin_pct == 100 * profit / revenue (recomputed)
+  +  margin is NOT the vessel-hire-only ratio (defect F-15 cannot silently return)
+  +  global_metrics margin == ledger profit_margin_on_revenue
+
+  O.3 Iteration selection used the all-in cost
+  +  selected iteration snapshot is present
+  +  selected iteration metrics.total_cost == recomputed all-in cost
+  +  selected iteration metrics.profit_margin_pct == recomputed margin
+  +  selected iteration metrics.operating_cost remains the vessel-hire component
+  +  iteration scorecard ranks on the all-in total_cost
+  +  selected iteration scorecard is flagged accounting_verified
+  All-in cost / revenue     $73,425,778 / $103,202,060
+  Margin on revenue         28.85%  (vessel-hire-only ratio would read 64.40%)
+
+P . CANDIDATE POOL AND VESSEL CLASSES (TASKS 9 / 10)
+  ----------------------------------------------------------------------
+
+  P.1 Generation settings in force
+  +  candidate-generation settings are stated in the output
+  Demand-coherent loops     enabled=True budget/region=60 ports=3-5 (none (deterministic for fixed inputs))
+  Class assignment          per_rotation_screening (alternatives per rotation: 1)
+  +  class assignment mode is one of the documented modes
+
+  P.2 Modelled pool and operated services
+  Candidates offered / modelled / rejected1170 / 1170 / 0
+  Modelled by number of ports{'2': 884, '3': 88, '4': 28, '5': 111, '6': 59}
+  Modelled by vessel class  {'Feeder_450': 917, 'Feeder_800': 160, 'Panamax_1200': 24, 'Panamax_2400': 67, 'Post_panamax': 0, 'Super_panamax': 2}
+  Operated by number of ports{'2': 10, '3': 6, '4': 1, '5': 8, '6': 3}
+  +  the optimiser had modelled candidates
+  +  pool composition by ports sums to the modelled count
+  +  operated services by ports sum to the operated count
+  +  pool composition lists exactly the registered classes
+  !  registered classes with no candidate in the pool: Post_panamax
+
+  P.3 Operated rotations
+  +  every operated service uses a registered vessel class
+  +  every operated rotation has >= 2 distinct ports (closed loop)
+  +  no operated service has zero departures
+  +  deployed vessels per class never exceed the registered inventory
+  class             deployed  inventory  candidates
+  Feeder_450              23         24         917
+  Feeder_800              26         29         160
+  Panamax_1200            66         68          24
+  Panamax_2400            62         74          67
+  Post_panamax             0         58           0
+  Super_panamax            0         10           2
+  Multi-port (>= 3) operated services18 of 28
+
+2 . PROBLEM ANALYSIS  (Orchestrator LLM)
+  ----------------------------------------------------------------------
+Size: Small
+Complexity Drivers:
+- High network density at 163.2% indicates significant lane overlap and routing flexibility
+- Low demand concentration with Top-5 corridors accounting for only 5.7% of total volume
+- Moderate average lane demand of 156.7 TEU across 1,764 lanes suggests fragmented flow distribution
+Demand Concentration: low - The dispersed demand profile across 1,764 lanes implies that no single corridor dominates the network, requiring broad coverage rather than focused capacity allocation.
+Decomposition Rationale: The low concentration and high density support a regional decomposition strategy with approximately 15 ports per region to balance computational tractability with local routing fidelity.
+
+  ----------------------------------------------------------------------
+  LLM status                SUCCESS (LLM)
+  +  Analysis is non-trivial (>80 chars)
+  +  Analysis contains size classification
+  +  Analysis cites at least one specific number
+  +  Analysis references domain-specific terms
+  +  Size classification is 'Small' for 47 ports
+
+3 . REGIONAL AGENT RESULTS
+  ----------------------------------------------------------------------
+  +  At least 1 regional agent returned a result
+
+  ----------------------------------------------------------------------
+  Region        Services    Profit/wk       Coverage    Cost/wk         Oper.Cost     Trans.Cost    Margin%   $/svc/wk    Uncov TEU   
+  ----------------------------------------------------------------------
+  Asia          20          $26,082,604     39.8%       $52,000,486     $12,754,000   $730,029      33.4%     $1,304,130  89,020      
+  Europe        3           $3,939,272      22.2%       $5,851,908      $777,000      $151,582      40.2%     $1,313,091  37,730      
+  Americas      5           $-245,594       29.0%       $15,573,384     $2,926,000    $362,979      -1.6%     $-49,119    56,848      
+  ----------------------------------------------------------------------
+
+  -- Asia --
+  +  [Asia] Weekly profit is a finite number
+  +  [Asia] Services selected > 0
+  +  [Asia] Coverage in [0, 100]%
+  +  [Asia] Annual profit ~= weekly x 52
+
+  Strategy output:
+    Strategy: C
+    Selected: hybrid
+    Reason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density lanes like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-volume routes.
+    Reason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model balances the 7.2% top-3 share concentration against the broad distribution of the remaining 92.8% of demand.
+    Hub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]
+  +  [Asia] Strategy output is non-trivial
+  +  [Asia] Strategy cites specific numbers
+  +  [Asia] Strategy contains strategy label
+  +  [Asia] Strategy references shipping domain terms
+  +  [Asia] Strategy avoids vague language
+
+  Explanation output:
+    Verdict: Good
+      Profit margin 33.4% with coverage 39.8%.
+    
+    Strengths:
+    - Weekly profit $26,082,604 (20 services) -> $1,304,130/service/week.
+    - Satisfied 58,874 TEU/wk at 39.8% coverage.
+    
+    Weaknesses:
+    - 60.2% unserved (89,020 TEU/wk).
+    - Transshipment $730,029 + port $16,886,468/wk.
+    
+    Improvement Actions:
+    - Offer the unserved corridors to the next candidate pool.
+    - Re-balance vessel classes where utilisation is below target.
+  +  [Asia] Explanation is non-trivial
+  +  [Asia] Explanation cites specific numbers
+  +  [Asia] Explanation contains verdict
+  +  [Asia] Explanation has structured sections
+  +  [Asia] Explanation avoids vague language
+
+  Hardened-agent fields:
+  +  [Asia] Profit margin % present in result
+    Profit margin %         33.4
+  +  [Asia] Profit per service present in result
+    Profit per service      1304130.0
+  +  [Asia] Cost per service present in result
+    Cost per service        2600024.0
+  +  [Asia] Uncovered TEU present in result
+    Uncovered TEU           89020.0
+  +  [Asia] Hub port IDs present in result
+    Hub port IDs            ['CNSHA', 'MYTPP', 'CNYTN', 'HKHKG', 'CNTAO']
+
+  -- Europe --
+  +  [Europe] Weekly profit is a finite number
+  +  [Europe] Services selected > 0
+  +  [Europe] Coverage in [0, 100]%
+  +  [Europe] Annual profit ~= weekly x 52
+
+  Strategy output:
+    Strategy: C
+    Selected: hybrid
+    Reason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.
+    Reason 2: The network comprises 12 ports and 391 lanes, creating a dense connectivity matrix where a hybrid model optimizes the trade-off between hub consolidation at USCHS and direct point-to-point efficiency.
+    Hub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]
+  +  [Europe] Strategy output is non-trivial
+  +  [Europe] Strategy cites specific numbers
+  +  [Europe] Strategy contains strategy label
+  +  [Europe] Strategy references shipping domain terms
+  +  [Europe] Strategy avoids vague language
+
+  Explanation output:
+    Verdict: Good
+      Profit margin 40.2% with coverage 22.2%.
+    
+    Strengths:
+    - Weekly profit $3,939,272 (3 services) -> $1,313,091/service/week.
+    - Satisfied 10,780 TEU/wk at 22.2% coverage.
+    
+    Weaknesses:
+    - 77.8% unserved (37,730 TEU/wk).
+    - Transshipment $151,582 + port $3,333,535/wk.
+    
+    Improvement Actions:
+    - Offer the unserved corridors to the next candidate pool.
+    - Re-balance vessel classes where utilisation is below target.
+  +  [Europe] Explanation is non-trivial
+  +  [Europe] Explanation cites specific numbers
+  +  [Europe] Explanation contains verdict
+  +  [Europe] Explanation has structured sections
+  +  [Europe] Explanation avoids vague language
+
+  Hardened-agent fields:
+  +  [Europe] Profit margin % present in result
+    Profit margin %         40.2
+  +  [Europe] Profit per service present in result
+    Profit per service      1313091.0
+  +  [Europe] Cost per service present in result
+    Cost per service        1950636.0
+  +  [Europe] Uncovered TEU present in result
+    Uncovered TEU           37730.0
+  +  [Europe] Hub port IDs present in result
+    Hub port IDs            ['USCHS', 'BRSSZ', 'USLAX', 'PAMIT', 'USEWR']
+
+  -- Americas --
+  +  [Americas] Weekly profit is a finite number
+  !  [Americas] Weekly profit $-245,594 is non-positive (region-level loss; network profitability asserted separately)
+  +  [Americas] Services selected > 0
+  +  [Americas] Coverage in [0, 100]%
+  +  [Americas] Annual profit ~= weekly x 52
+
+  Strategy output:
+    Strategy: C
+    Selected: hybrid
+    Reason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while using hubs for lower-density lanes.
+    Reason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% of the 80,090 TEU/wk total demand.
+    Hub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]
+  +  [Americas] Strategy output is non-trivial
+  +  [Americas] Strategy cites specific numbers
+  +  [Americas] Strategy contains strategy label
+  +  [Americas] Strategy references shipping domain terms
+  +  [Americas] Strategy avoids vague language
+
+  Explanation output:
+    Verdict: Poor
+      Profit margin -1.6% with coverage 29.0%.
+    
+    Strengths:
+    - Weekly profit $-245,594 (5 services) -> $-49,119/service/week.
+    - Satisfied 23,242 TEU/wk at 29.0% coverage.
+    
+    Weaknesses:
+    - 71.0% unserved (56,848 TEU/wk).
+    - Transshipment $362,979 + port $6,819,764/wk.
+    
+    Improvement Actions:
+    - Offer the unserved corridors to the next candidate pool.
+    - Re-balance vessel classes where utilisation is below target.
+  +  [Americas] Explanation is non-trivial
+  +  [Americas] Explanation cites specific numbers
+  +  [Americas] Explanation contains verdict
+  +  [Americas] Explanation has structured sections
+  +  [Americas] Explanation avoids vague language
+
+  Hardened-agent fields:
+  +  [Americas] Profit margin % present in result
+    Profit margin %         -1.6
+  +  [Americas] Profit per service present in result
+    Profit per service      -49119.0
+  +  [Americas] Cost per service present in result
+    Cost per service        3114677.0
+  +  [Americas] Uncovered TEU present in result
+    Uncovered TEU           56848.0
+  +  [Americas] Hub port IDs present in result
+    Hub port IDs            ['DEBRV', 'NLRTM', 'AEJEA', 'ITGIT', 'ZADUR']
+
+4 . GLOBAL AGGREGATED METRICS
+  ----------------------------------------------------------------------
+  Services deployed         28
+  Weekly profit             $29,776,282
+  Annual profit             $1,548,366,665
+  Weekly operating cost     $73,425,778
+  Profit margin             28.9%
+  Profit per service        $1,063,439/wk
+  Cost per service          $2,622,349/wk
+  Global Network Coverage   33.6%
+  Average Regional Coverage 30.4%
+  Unserved demand           66.4%  (183,598 TEU/wk)
+
+  ITERATION CANDIDATES (multi-objective selection)
+  ITER     REG AVG    GLOBAL          PROFIT    SCORE  SELECTED
+  -----------------------------------------------------------------
+  0          29.2%     33.1% $    28,964,487    0.806   
+  1          27.0%     30.0% $    24,423,791    0.795   
+  2          30.4%     33.6% $    29,776,282    0.811  *
+
+  ----------------------------------------------------------------------
+  +  Global weekly profit > 0
+  +  Total services deployed > 0
+  +  Global coverage in [0, 100]%
+  +  Annual profit = weekly x 52
+  +  Network is profitable (profit margin > 0)
+
+8 . ECONOMIC KPI SUMMARY
+  ----------------------------------------------------------------------
+
+  ECONOMIC PERFORMANCE INDICATORS
+  Weekly profit             $29,776,282
+  Annual profit             $1,548,366,665
+  Weekly revenue            $264,870,100
+  Weekly operating cost     $73,425,778
+  Profit margin             28.9%
+  Revenue per TEU           $958
+  Cost per TEU (served)     $790
+  Demand coverage           33.6%
+  Services deployed         28
+  Pipeline runtime          463.4s
+
+  ----------------------------------------------------------------------
+  +  Weekly profit > 0
+  +  Annual profit > 0
+  +  Profit margin > 0
+
+F . FUEL / BUNKER ECONOMICS SUMMARY
+  ----------------------------------------------------------------------
+  Bunker price used         $600/ton
+  Fuel consumption model    Vessel class x distance based
+  Vessel classes used       4 types
+  Total weekly fuel cost    $28,684,421
+  Fuel cost percentage      0.0% of operating cost
+  Avg fuel cost per service $1,024,444
+  Fuel cost per TEU (served)$341.82
+
+  FUEL COST VERIFICATION TRACE
+  Fuel cost in MILP results [OK] Present
+  Fuel cost in regional summary[OK] Aggregated
+  Fuel > 10% of operating cost[WARN] Low share
+
+  ----------------------------------------------------------------------
+
+G . VOYAGE COST BREAKDOWN
+  ----------------------------------------------------------------------
+  Fuel / bunker cost        $28,684,421
+  Port handling cost        $27,039,767
+  Transshipment cost        $1,244,590
+  Fixed operating cost      $0
+                            
+  TOTAL VOYAGE COST         $56,968,778
+
+  COST BREAKDOWN %:
+  Fuel                      50.4%
+  Port                      47.5%
+  Transshipment             2.2%
+  Operating                 0.0%
+
+  ----------------------------------------------------------------------
+
+5 . EXECUTIVE SUMMARY  (Orchestrator LLM)
+  ----------------------------------------------------------------------
+Verdict: Good
+  Profit margin 28.9% with 33.6% demand coverage.
+
+Strengths:
+- Weekly profit $29,776,282 across 28 services ($1,063,439/service/week).
+- Cost breakdown: operating $16,457,000, transship $1,244,590, port $27,039,767/week.
+
+Weaknesses:
+- 66.4% demand (183,598 TEU/week) unserved.
+- Cost per service $2,622,349/week limits expansion.
+
+Priority Actions:
+- Expand Europe (currently 22.2% coverage).
+- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week).
+
+  ----------------------------------------------------------------------
+  +  Summary is non-trivial (>100 chars)
+  +  Summary contains verdict (Good / Moderate / Poor)
+  +  Summary has structured sections
+  +  Summary cites specific numbers
+  +  Summary references a dollar figure
+  +  Summary references a percentage figure
+  +  Summary avoids generic/vague language
+
+10 . PHASE IMPLEMENTATION VISIBILITY
+  ----------------------------------------------------------------------
+
+  ECONOMIC PHASE STATUS
+  Phase E1                  [OK] Active
+    - Port cost columns     Loaded and used
+    - FFE->TEU conversions  Trade lane specific
+  Phase E2                  [OK] Active
+    - Variable port costs   Loaded and used
+    - Three-component model Handling + Fixed + Variable
+  Phase E3                  [OK] Active
+    - Vessel classes        Mapped to services
+    - Fuel consumption      Distance-based calculation
+  Economic integration      [OK] Real costs in optimization
+
+  ----------------------------------------------------------------------
+  +  Phase E1 should be active
+  +  Phase E2 should be active
+  +  Phase E3 should be active
+
+6 . PIPELINE INTEGRITY
+  ----------------------------------------------------------------------
+  +  Top-level key 'status' present
+  +  Top-level key 'problem_analysis' present
+  +  Top-level key 'regional_results' present
+  +  Top-level key 'executive_summary' present
+  +  Top-level key 'summary_metrics' present
+  +  Status == 'complete'
+  +  [Asia] Required key 'agent' present
+  +  [Asia] Required key 'region' present
+  +  [Asia] Required key 'status' present
+  +  [Asia] Required key 'services_generated' present
+  +  [Asia] Required key 'services_filtered' present
+  +  [Asia] Required key 'services_selected' present
+  +  [Asia] Required key 'weekly_profit' present
+  +  [Asia] Required key 'coverage_percent' present
+  +  [Asia] Required key 'operating_cost' present
+  +  [Asia] Required key 'strategy' present
+  +  [Asia] Required key 'explanation' present
+  +  [Asia] Hardened key 'annual_profit' present
+  +  [Asia] Hardened key 'profit_margin_pct' present
+  +  [Asia] Hardened key 'profit_per_service' present
+  +  [Asia] Hardened key 'cost_per_service' present
+  +  [Asia] Hardened key 'uncovered_teu' present
+  +  [Asia] Hardened key 'hub_ports' present
+  +  [Europe] Required key 'agent' present
+  +  [Europe] Required key 'region' present
+  +  [Europe] Required key 'status' present
+  +  [Europe] Required key 'services_generated' present
+  +  [Europe] Required key 'services_filtered' present
+  +  [Europe] Required key 'services_selected' present
+  +  [Europe] Required key 'weekly_profit' present
+  +  [Europe] Required key 'coverage_percent' present
+  +  [Europe] Required key 'operating_cost' present
+  +  [Europe] Required key 'strategy' present
+  +  [Europe] Required key 'explanation' present
+  +  [Europe] Hardened key 'annual_profit' present
+  +  [Europe] Hardened key 'profit_margin_pct' present
+  +  [Europe] Hardened key 'profit_per_service' present
+  +  [Europe] Hardened key 'cost_per_service' present
+  +  [Europe] Hardened key 'uncovered_teu' present
+  +  [Europe] Hardened key 'hub_ports' present
+  +  [Americas] Required key 'agent' present
+  +  [Americas] Required key 'region' present
+  +  [Americas] Required key 'status' present
+  +  [Americas] Required key 'services_generated' present
+  +  [Americas] Required key 'services_filtered' present
+  +  [Americas] Required key 'services_selected' present
+  +  [Americas] Required key 'weekly_profit' present
+  +  [Americas] Required key 'coverage_percent' present
+  +  [Americas] Required key 'operating_cost' present
+  +  [Americas] Required key 'strategy' present
+  +  [Americas] Required key 'explanation' present
+  +  [Americas] Hardened key 'annual_profit' present
+  +  [Americas] Hardened key 'profit_margin_pct' present
+  +  [Americas] Hardened key 'profit_per_service' present
+  +  [Americas] Hardened key 'cost_per_service' present
+  +  [Americas] Hardened key 'uncovered_teu' present
+  +  [Americas] Hardened key 'hub_ports' present
+  +  [Asia] Service funnel: generated(633) >= filtered(568)
+  +  [Asia] Service funnel: selected(20) <= filtered(568)
+  +  [Europe] Service funnel: generated(518) >= filtered(465)
+  +  [Europe] Service funnel: selected(3) <= filtered(465)
+  +  [Americas] Service funnel: generated(583) >= filtered(559)
+  +  [Americas] Service funnel: selected(5) <= filtered(559)
+  +  Regional profit sum ~= global total (within 2%)
+
+7 . PERFORMANCE
+  ----------------------------------------------------------------------
+  Total elapsed time        463.4s
+  Demand lanes              1,764
+  Throughput                4 lanes/second
+  Time per port             9859.6ms
+  !  Pipeline took 463s -- over 5 minutes
+  +  Pipeline completed within 1 hour
+
+8 . FEEDBACK LOOP AUDIT
+  ----------------------------------------------------------------------
+  Iterations run            3
+  Final convergence score   0.811  (1.0 = perfect)
+  Final needs_rerun         False
+  Final rerun_reason        coverage 30.4% is 39.6pp below 70.0% target; [CAPPED] max iterations (3) reached ? halting despite gaps
+  Coverage gap              39.65pp
+  Profit gap                $0
+  Conflict severity         0
+
+  ITERATION TRACE
+  Iter        Profit/wk   Coverage   Conv.Score   NeedsRerun  Reason
+  ------------------------------------------------------------------------------
+  0      $   28,964,487      29.2%        0.806   YES    coverage 29.2% is 40.8pp below 70.0% tar
+  1      $   24,423,791      27.0%        0.795   YES    coverage 27.0% is 43.0pp below 70.0% tar
+  2      $   29,776,282      30.4%        0.811   NO     coverage 30.4% is 39.6pp below 70.0% tar
+
+  ----------------------------------------------------------------------
+  +  At least 1 iteration ran
+  +  Audit entries match iterations_run
+  +  feedback has 'needs_rerun'
+  +  feedback has 'rerun_reason'
+  +  feedback has 'coverage_gap'
+  +  feedback has 'profit_gap'
+  +  feedback has 'conflict_severity'
+  +  feedback has 'weight_adjustments'
+  +  feedback has 'convergence_score'
+  +  Convergence score in [0.0, 1.0]
+  +  Feedback weights sum ~= 1.0 (got 1.000)
+  +  GA weights changed between iterations (feedback applied)
+  +  Iterations capped at 3 (ran 3)
+  +  PROJECT X: standard successful run executes exactly 3 iterations
+  +  PROJECT X: iteration_audit contains exactly 3 entries
+  +  audit entry exposes regional 'coverage'
+  +  audit entry exposes 'global_coverage'
+  +  audit entry exposes 'selected_as_final'
+  +  audit entry exposes regional 'coverage'
+  +  audit entry exposes 'global_coverage'
+  +  audit entry exposes 'selected_as_final'
+  +  audit entry exposes regional 'coverage'
+  +  audit entry exposes 'global_coverage'
+  +  audit entry exposes 'selected_as_final'
+  +  PROJECT X: exactly one iteration is selected_as_final
+  +  PROJECT X: summary_metrics.coverage equals selected iteration's global_coverage
+  +  decisions has 'actions'
+  +  decisions has 'priorities'
+  +  decisions has 'weight_adjustments'
+  +  All 3 iterations have audit records
+
+9 . CONFLICT RESOLUTION AUDIT
+  ----------------------------------------------------------------------
+  Conflicts detected        0
+  Conflicts resolved        0
+
+  ----------------------------------------------------------------------
+  Total resolutions (all iterations)0
+  +  resolution_log is a list
+  +  No conflicts -- resolution not required
+  +  evaluation has 'score'
+  +  evaluation has 'status'
+  +  evaluation has 'reasons'
+  +  Evaluation score in [0, 5]
+  +  Evaluation status is one of good/moderate/poor (got 'good')
+
+SERVICE PROFITABILITY SUMMARY
+  ----------------------------------------------------------------------
+  Total services            28
+  Profitable services       23
+  Negative services         5
+  Average service margin    234.4%
+  Best service profit       $26,082,604
+  Worst service loss        $-245,594
+
+  ----------------------------------------------------------------------
+
+NEGATIVE SERVICE SURVIVAL ANALYSIS
+  ----------------------------------------------------------------------
+  Total negative services   7
+  Strategically required    0
+  Removable                 7
+
+  WORST 5 NEGATIVE SERVICES
+    1. Asia: 
+       Profit: $-450,996/wk | Util: 0% | Margin: -27.7%
+    2. Americas: 
+       Profit: $-259,388/wk | Util: 0% | Margin: -70.7%
+    3. Asia: 
+       Profit: $-152,000/wk | Util: 0% | Margin: -45.1%
+    4. Asia: 
+       Profit: $-142,051/wk | Util: 0% | Margin: -93.5%
+    5. Asia: 
+       Profit: $-39,054/wk | Util: 0% | Margin: -71.6%
+
+  ----------------------------------------------------------------------
+
+STRATEGY SUMMARY
+  ----------------------------------------------------------------------
+  Total services            28
+  2-port services           10
+  Multi-port services       18
+  Hub ports                 3 regions
+
+  ----------------------------------------------------------------------
+
+VESSEL UTILIZATION SUMMARY
+  ----------------------------------------------------------------------
+  Leg load factor           62.3%  (175,580 / 281,800 TEU-legs, 28/28 services)
+  Vessel inventory utilisation67.3%  (177 of 263 vessels assigned)
+    Feeder_450              23 / 24  (96%)
+    Feeder_800              26 / 29  (90%)
+    Panamax_1200            66 / 68  (97%)
+    Panamax_2400            62 / 74  (84%)
+    Post_panamax            0 / 58  (0%)
+    Super_panamax           0 / 10  (0%)
+
+  ----------------------------------------------------------------------
+
+NETWORK ECONOMIC KPI SUMMARY
+  ----------------------------------------------------------------------
+
+  ECONOMIC SUMMARY
+  Weekly Revenue            $103,202,060
+  Weekly Total Cost         $73,425,778
+  Fuel Cost                 $28,684,421
+  Port Handling Cost        $27,039,767
+  Port Fixed Cost           $4,937,100
+  Transshipment Cost        $1,244,590
+  Vessel OPEX               $16,457,000
+  Charter / Depreciation    $6,582,800
+  Crew Cost                 $3,291,400
+  Overhead Cost             $1,645,700
+  Cost per TEU              $790
+  Revenue per TEU           $1111
+  Network Profit            $29,776,282
+  Profit Margin %           28.9%
+
+  ANNUALIZED METRICS
+  Annual Revenue            $5,366,507,120
+  Annual Profit             $1,548,366,665
+  ----------------------------------------------------------------------
+
+PHASE P2 COMMERCIAL CALIBRATION SUMMARY
+  ----------------------------------------------------------------------
+
+  COMMERCIAL CALIBRATION SUMMARY
+  Total Services            28
+  Profitable Services       21
+  Negative Services         7
+  Negative Service %        25.0%
+  Strategically Retained Negative Services6
+  Removable Negative Services1
+  Average Service Margin %  93.4%
+
+  STRATEGY MIX
+    Direct                  10 (35.7%)
+    Hybrid                  11 (39.3%)
+    Hub-Spoke               1 (3.6%)
+    Feeder                  0 (0.0%)
+    Relay                   6 (21.4%)
+    Pendulum                0 (0.0%)
+
+  VESSEL DEPLOYMENT SUMMARY
+    Panamax_1200            services: 11, TEU: 26,400.0, util: 198.8%, profit: $677,576
+    Feeder_450              services: 8, TEU: 7,200.0, util: 193.1%, profit: $144,453
+    Panamax_2400            services: 7, TEU: 33,600.0, util: 144.7%, profit: $2,527,995
+    Feeder_800              services: 2, TEU: 3,200.0, util: 242.8%, profit: $1,735,678
+
+  TOP 5 PROFITABLE SERVICES
+    1. AEJEA -> ITGIT -> ESALG...vessel: Panamax_2400, util: 170%, profit: $3,923,646, margin: 41.5%
+    2. GBFXT -> MYTPP -> JPYOK...vessel: Panamax_2400, util: 224%, profit: $3,770,528, margin: 38.1%
+    3. DEBRV -> NLRTM -> USMIA...vessel: Panamax_2400, util: 132%, profit: $3,327,972, margin: 37.5%
+    4. CNSHA -> DEBRV -> GBFXTvessel: Panamax_2400, util: 130%, profit: $2,702,708, margin: 33.9%
+    5. BRSSZ -> HKHKG -> CNYTN...vessel: Panamax_2400, util: 159%, profit: $2,576,682, margin: 33.4%
+
+  WORST 5 SERVICES
+    1. MYTPP -> ZADUR -> SGSINvessel: Panamax_2400, util: 56%, loss: $450,996, margin: -27.7%, reason: Strategic hub connector
+    2. AEJEA -> SAJED       vessel: Panamax_1200, util: 65%, loss: $259,388, margin: -70.7%, reason: Direct service
+    3. MYTPP -> TWKHH       vessel: Panamax_1200, util: 85%, loss: $152,000, margin: -45.1%, reason: Direct service
+    4. CNYTN -> HKHKG       vessel: Feeder_450, util: 566%, loss: $142,051, margin: -93.5%, reason: Direct service
+    5. HKHKG -> TWKHH       vessel: Feeder_450, util: 73%, loss: $39,054, margin: -71.6%, reason: Direct service
+
+  ----------------------------------------------------------------------
+
+GLOBAL ECONOMIC SUMMARY
+  ----------------------------------------------------------------------
+  Total Revenue             $103,202,060
+  Total Fuel Cost           $28,684,421
+  Total Port Cost           $27,039,767
+  Total Transshipment Cost  $1,244,590
+  Total Vessel Cost         $16,457,000
+  Total Weekly Cost         $73,425,778
+  Total Weekly Profit       $29,776,282
+  Profit Margin %           28.9%
+  Demand Coverage           33.6%
+
+  ----------------------------------------------------------------------
+  +  Revenue is visible and > 0
+  +  Fuel cost is visible (>= 0)
+  +  Port cost is visible (>= 0)
+  +  Transshipment cost is visible (>= 0)
+  +  Vessel cost is visible (>= 0)
+  +  Total cost is visible and > 0
+  +  Weekly profit > 0
+  +  Revenue = profit + total_cost
+
+REGIONAL ECONOMIC BREAKDOWN
+  ----------------------------------------------------------------------
+  ----------------------------------------------------------------------
+  Region          Revenue         Fuel          Port          Trans         Vessel        Cost            Profit          Margin%    Svcs  
+  ----------------------------------------------------------------------
+  Asia            $78,083,090     $21,629,989   $16,886,468   $730,029      $12,754,000   $52,000,486     $26,082,604     33.4%      20    
+  Europe          $9,791,180      $1,589,791    $3,333,535    $151,582      $777,000      $5,851,908      $3,939,272      40.2%      3     
+  Americas        $15,327,790     $5,464,641    $6,819,764    $362,979      $2,926,000    $15,573,384     $-245,594       -1.6%      5     
+  ----------------------------------------------------------------------
+  +  [Asia] fuel_cost field is present (not None)
+  +  [Asia] regional weekly profit is a finite number
+  +  [Europe] fuel_cost field is present (not None)
+  +  [Europe] regional weekly profit is a finite number
+  +  [Americas] fuel_cost field is present (not None)
+  +  [Americas] regional weekly profit is a finite number
+  !  [Americas] Regional profit $-245,594 is negative (GA/MILP economic outcome; network profitability asserted globally)
+
+SERVICE PROFITABILITY SUMMARY
+  ----------------------------------------------------------------------
+  Total selected services   28
+  Profitable services       21
+  Negative services         7
+  Average service margin    9.0%
+
+  ----------------------------------------------------------------------
+
+  PER-SERVICE ECONOMIC TABLE
+  ----------------------------------------------------------------------
+  Svc ID            Region      Revenue       Vessel      Fuel        Port        Cost          Profit        Margin% 
+  ----------------------------------------------------------------------
+  asia_svc_599      Asia        $9,456,754    $1,470,000  $2,162,839  $1,900,269  $5,533,108    $3,923,646    41.5%   
+  americas_svc_570  Americas    $9,887,775    $1,470,000  $2,049,743  $2,597,503  $6,117,247    $3,770,528    38.1%   
+  europe_svc_462    Asia        $8,869,422    $1,470,000  $2,234,589  $1,836,860  $5,541,449    $3,327,972    37.5%   
+  asia_svc_540      Asia        $7,977,392    $1,323,000  $1,943,920  $2,007,764  $5,274,684    $2,702,708    33.9%   
+  europe_svc_498    Asia        $7,717,638    $1,470,000  $2,091,717  $1,579,239  $5,140,956    $2,576,682    33.4%   
+  asia_svc_576      Asia        $4,935,199    $672,000    $1,104,979  $975,700    $2,752,680    $2,182,519    44.2%   
+  americas_svc_527  Asia        $7,274,634    $770,000    $1,981,042  $2,383,841  $5,134,883    $2,139,750    29.4%   
+  asia_svc_555      Asia        $6,836,204    $1,176,000  $1,802,572  $2,012,207  $4,990,779    $1,845,425    27.0%   
+  asia_svc_579      Asia        $4,130,126    $784,000    $1,307,487  $749,803    $2,841,290    $1,288,836    31.2%   
+  asia_svc_565      Americas    $4,679,157    $616,000    $1,548,367  $1,423,531  $3,587,897    $1,091,260    23.3%   
+  americas_svc_554  Americas    $4,776,923    $616,000    $1,449,042  $1,790,273  $3,855,315    $921,608      19.3%   
+  americas_svc_579  Europe      $2,203,831    $245,000    $489,547    $629,813    $1,364,360    $839,471      38.1%   
+  asia_svc_552      Asia        $4,363,802    $616,000    $1,609,325  $1,311,789  $3,537,114    $826,689      18.9%   
+  asia_svc_559      Asia        $3,861,364    $539,000    $1,253,929  $1,308,625  $3,101,555    $759,809      19.7%   
+  asia_svc_524      Asia        $3,121,810    $462,000    $1,089,775  $818,349    $2,370,124    $751,686      24.1%   
+  europe_svc_394    Asia        $3,519,813    $462,000    $939,785    $1,416,071  $2,817,856    $701,958      19.9%   
+  europe_svc_374    Europe      $3,619,832    $462,000    $1,010,806  $1,632,869  $3,105,675    $514,157      14.2%   
+  asia_svc_189      Asia        $1,185,068    $210,000    $428,543    $252,239    $890,782      $294,286      24.8%   
+  europe_svc_014    Europe      $735,748      $70,000     $89,438     $371,855    $531,294      $204,454      27.8%   
+  asia_svc_019      Asia        $1,073,392    $231,000    $428,883    $255,703    $915,586      $157,806      14.7%   
+  asia_svc_491      Asia        $120,916      $35,000     $41,342     $41,568     $117,910      $3,007        2.5%    
+  asia_svc_156      Asia        $94,815       $35,000     $22,620     $38,194     $95,814       $-999         -1.1%   
+  americas_svc_105  Americas    $220,778      $70,000     $78,002     $76,263     $224,265      $-3,487       -1.6%   
+  asia_svc_354      Asia        $54,543       $35,000     $29,670     $28,927     $93,597       $-39,054      -71.6%  
+  asia_svc_145      Asia        $151,993      $105,000    $16,358     $172,686    $294,044      $-142,051     -93.5%  
+  asia_svc_046      Asia        $337,280      $154,000    $252,133    $83,147     $489,280      $-152,000     -45.1%  
+  americas_svc_050  Americas    $366,895      $154,000    $339,488    $132,795    $626,283      $-259,388     -70.7%  
+  americas_svc_497  Asia        $1,628,957    $735,000    $888,478    $456,476    $2,079,953    $-450,996     -27.7%  
+  ----------------------------------------------------------------------
+  +  Per-service profit = revenue - total_cost
+
+  TOP 5 PROFITABLE SERVICES
+  ----------------------------------------------------------------------
+  Svc ID            Region      Revenue       Vessel      Fuel        Port        Cost          Profit        Margin% 
+  ----------------------------------------------------------------------
+  asia_svc_599      Asia        $9,456,754    $1,470,000  $2,162,839  $1,900,269  $5,533,108    $3,923,646    41.5%   
+  americas_svc_570  Americas    $9,887,775    $1,470,000  $2,049,743  $2,597,503  $6,117,247    $3,770,528    38.1%   
+  europe_svc_462    Asia        $8,869,422    $1,470,000  $2,234,589  $1,836,860  $5,541,449    $3,327,972    37.5%   
+  asia_svc_540      Asia        $7,977,392    $1,323,000  $1,943,920  $2,007,764  $5,274,684    $2,702,708    33.9%   
+  europe_svc_498    Asia        $7,717,638    $1,470,000  $2,091,717  $1,579,239  $5,140,956    $2,576,682    33.4%   
+  ----------------------------------------------------------------------
+
+  WORST 5 SERVICES
+  ----------------------------------------------------------------------
+  Svc ID            Region      Revenue       Vessel      Fuel        Port        Cost          Profit        Margin% 
+  ----------------------------------------------------------------------
+  americas_svc_497  Asia        $1,628,957    $735,000    $888,478    $456,476    $2,079,953    $-450,996     -27.7%  
+  americas_svc_050  Americas    $366,895      $154,000    $339,488    $132,795    $626,283      $-259,388     -70.7%  
+  asia_svc_046      Asia        $337,280      $154,000    $252,133    $83,147     $489,280      $-152,000     -45.1%  
+  asia_svc_145      Asia        $151,993      $105,000    $16,358     $172,686    $294,044      $-142,051     -93.5%  
+  asia_svc_354      Asia        $54,543       $35,000     $29,670     $28,927     $93,597       $-39,054      -71.6%  
+  ----------------------------------------------------------------------
+
+STRATEGY MIX TABLE
+  ----------------------------------------------------------------------
+  ----------------------------------------------------------------------
+  Strategy          Count     Share%      Avg Margin%     Avg Profit    
+  ----------------------------------------------------------------------
+  Direct            10        35.7%       -21.4%          $6,257        
+  Hybrid            0         0.0%        0.0%            $0            
+  Hub-and-Spoke     7         25.0%       35.5%           $2,443,642    
+  Feeder            0         0.0%        0.0%            $0            
+  Relay             6         21.4%       15.9%           $1,129,149    
+  Pendulum          5         17.9%       24.6%           $1,166,664    
+  Multi-hop         0         0.0%        0.0%            $0            
+  ----------------------------------------------------------------------
+
+VESSEL DEPLOYMENT SUMMARY
+  ----------------------------------------------------------------------
+  ----------------------------------------------------------------------
+  Vessel Class      Services    Deployed TEU    Avg Util%     Avg Profit      Avg Cost      
+  ----------------------------------------------------------------------
+  Panamax_1200      11          26,400          198.8%        $677,576        $2,685,597    
+  Feeder_450        8           7,200           193.1%        $144,453        $451,508      
+  Panamax_2400      7           33,600          144.7%        $2,527,995      $4,954,025    
+  Feeder_800        2           3,200           242.8%        $1,735,678      $2,796,985    
+  ----------------------------------------------------------------------
+
+SERVICE ID DUPLICATE AUDIT
+  ----------------------------------------------------------------------
+  Total service IDs (global)28
+  Unique service IDs        28
+  Duplicate service IDs     0
+
+  ----------------------------------------------------------------------
+  +  Zero duplicate service IDs across all regions
+
+======================================================================
+  PHASE T0 -- SYSTEM TRUTH VALIDATION & CERTIFICATION 
+======================================================================
+
+T0.1 . PHASE IMPLEMENTATION INVENTORY
+  ----------------------------------------------------------------------
+
+  ----------------------------------------------------------------------
+  Phase         Title                               Implemented     Loaded      Executed      Verified  
+  ----------------------------------------------------------------------
+  A             Coordinator Activation              PASS   PASS  PASS  PASS
+  B             Service Generator Activation        PASS   PASS  PASS  PASS
+  C             Regional Agent Activation           PASS   PASS  PASS  PASS
+  D.1           Consensus Engine                    PASS   PASS  PASS  PASS
+  D.2           Shared Context                      PASS   PASS  PASS  PASS
+  D.3           Multi-Agent Coordination            PASS   PASS  PASS  PASS
+  E1            Port Cost Columns (Phase E1)        PASS   PASS  PASS  PASS
+  E2            Variable Port Costs (Phase E2)      PASS   PASS  PASS  PASS
+  E3            Fuel / Bunker Economics (Phase E3)  PASS   PASS  PASS  PASS
+  ----------------------------------------------------------------------
+
+  INVENTORY SUMMARY
+  Total checks              36
+  Passed                    36
+  Failed                    0
+  Score                     100.0%
+
+  ----------------------------------------------------------------------
+  +  All phase inventory checks pass
+
+T0.2 . AI PATHWAY TRUTH AUDIT
+  ----------------------------------------------------------------------
+
+  PATHWAY A -- Coordinator -> Weight Adjustment -> GA
+  +  A1: Weights generated (runtime)
+  +  A2: Weights applied (runtime evidence)
+  +  A3: Weights differ from defaults
+  +  A4: Weights reached GA
+  >>>  PATHWAY A: PASS
+
+  PATHWAY B -- Service Generator -> Archetype Parameters -> Candidate Pool
+  +  B1: Archetype params generated
+  +  B2: Ratios validated
+  +  B3: Candidate counts modified
+  +  B4: Candidate pool differs from default
+  >>>  PATHWAY B: PASS
+
+  PATHWAY C -- Regional Agent -> Regional Policy -> Optimization
+  +  C1: Regional policy exists
+  +  C2: Service filtering modified
+  +  C3: Hub strategy injected
+  +  C4: GA biases modified
+  >>>  PATHWAY C: PASS
+
+  PATHWAY D -- Consensus Engine -> Shared Policy -> Optimization
+  +  D1: Consensus Engine exists and can execute
+  +  D2: Consensus output generated (runtime)
+  +  D3: Shared policy generated
+  +  D4: Shared policy propagated to Problem
+  >>>  PATHWAY D: PASS
+
+  ----------------------------------------------------------------------
+  PATHWAY AUDIT SUMMARY
+  Pathways verified         4
+  Passed                    4
+  Failed                    0
+  +  All 4 AI pathways verified
+  ----------------------------------------------------------------------
+
+T0.3 . OPTIMIZATION INFLUENCE AUDIT
+  ----------------------------------------------------------------------
+
+  ----------------------------------------------------------------------
+  Component             Phase       Active?     Influential?    Evidence                                                    
+  ----------------------------------------------------------------------
+  Coordinator           Phase A     YES  YES    profit_weight changed: 0.6 -> 0.5469; coverage_weight ...   
+  Service Generator     Phase B     YES  YES    services_generated=1734 across 3 regions                    
+  Regional Agents       Phase C     YES  YES    Asia: profit=$26,082,604, cov=39.8%, svcs=20; Europe: ...   
+  Consensus Engine      Phase D     YES  YES    Problem weights diverged from defaults: profit=0.5369       
+  ----------------------------------------------------------------------
+
+  INFLUENCE METRICS
+  Total components          4
+  Active                    4
+  Influential               4
+  % Implemented active      100%
+  % Active influential      100%
+
+  ----------------------------------------------------------------------
+
+T0.4 . SHARED CONTEXT AUDIT
+  ----------------------------------------------------------------------
+  +  SharedContext module exists
+  +  global_objectives created
+  +  regional_priorities created
+  +  service_archetype_plan created
+  +  hub_strategy created
+  +  All required SharedContext fields present
+  +  Ownership: Coordinator owns global_objectives
+  +  Ownership: Regional Agents own regional_priorities
+  +  Ownership: Service Generator owns service_archetype_plan
+  +  Serialization: profit_weight round-trips
+  +  Serialization: coverage_weight round-trips
+  +  Deserialization from None produces SharedContext
+  +  Deserialization from None uses defaults
+
+  ----------------------------------------------------------------------
+  SHARED CONTEXT AUDIT SUMMARY
+  SharedContext module      OK
+  Fields valid              PASS
+  Serialization             PASS
+  Deserialization           PASS
+
+T0.5 . MULTI-AGENT COORDINATION AUDIT
+  ----------------------------------------------------------------------
+  +  Regional recommendations generated
+  +  Conflicts detection ran (list exists)
+  +  Conflicts resolved (or none to resolve)
+  +  Confidence score generated
+  +  Consensus weights generated
+  +  No fallback used (or fallback is safe)
+  +  Shared policy propagated
+
+  ----------------------------------------------------------------------
+  COORDINATION AUDIT SUMMARY
+  Checks                    7
+  Passed                    7
+  Failed                    0
+  ----------------------------------------------------------------------
+
+T0.6 . DEAD AI OUTPUT DETECTOR
+  ----------------------------------------------------------------------
+
+  +  No dead AI outputs detected
+
+  ALIVE / CONSUMED OUTPUTS:
+  Source               Field                    Consumed By
+  --------------------------------------------------------
+  + coordinator         agent                    result dict
+  + coordinator         iteration                UNCLASSIFIED
+  + coordinator         status                   UNCLASSIFIED
+  + coordinator         global_metrics           summary_metrics, feedback_loop
+  + coordinator         evaluation               dashboard, feedback_loop
+  + coordinator         conflicts                resolution_log
+  + coordinator         resolution_log           service_filtering
+  + coordinator         decisions                feedback_loop
+  + coordinator         feedback                 weight_adjustments, iteration_stop
+  + coordinator         llm_runtime_metrics      UNCLASSIFIED
+  + coordinator         llm_actuation            UNCLASSIFIED
+  + regional            agent                    result dict
+  + regional            region                   result dict
+  + regional            status                   dashboard
+  + regional            services_generated       pipeline_progress
+  + regional            services_filtered        pipeline_progress
+  + regional            services_selected        summary_metrics
+  + regional            weekly_profit            summary_metrics, coordinator
+  + regional            annual_profit            summary_metrics, dashboard
+  + regional            operating_cost           summary_metrics
+  ... and 28 more fields
+
+  ----------------------------------------------------------------------
+  DEAD OUTPUT DETECTOR SUMMARY
+  Total AI output fields    48
+  Alive / consumed          48
+  Dead / unconsumed         0
+  Dead output %             0.0%
+
+  ----------------------------------------------------------------------
+  +  Zero critical dead AI outputs (found 0)
+
+T0.7 . PHASE ACTIVATION TRUTH SCORECARD
+  ----------------------------------------------------------------------
+
+  ==================================================
+    PHASE ACTIVATION TRUTH SCORECARD
+  ==================================================
+
+    Phase A -- Coordinator                  ACTIVE
+    Phase B -- Service Generator            ACTIVE
+    Phase C -- Regional Agent               ACTIVE
+    Phase D -- Consensus Engine             ACTIVE
+    Phase D -- Shared Context               ACTIVE
+    Phase D -- Coordination                 ACTIVE
+    Economic E1 -- Port Cost Columns        ACTIVE
+    Economic E2 -- Variable Port Costs      ACTIVE
+    Economic E3 -- Fuel/Bunker Economics    ACTIVE
+
+  ==================================================
+
+  DERIVED TRUTH METRICS
+  Phases implemented        9
+  Phases active             9
+  Phases inactive           0
+  % Implemented active      100.0%
+  % Active influential      44.4%
+  Dead AI output %          0.0%
+
+  ==================================================
+  SYSTEM CERTIFICATION: NOT READY
+  ==================================================
+
+T0.8 . SYSTEM TRUTH REPORT GENERATION
+  ----------------------------------------------------------------------
+
+  +  System Truth Report generated: C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\SYSTEM_TRUTH_REPORT.md
+  SYSTEM_TRUTH_REPORT.md written -- 8,057 chars
+
+  ----------------------------------------------------------------------
+
+T0 . TRUTH VALIDATION SCORECARD
+  ----------------------------------------------------------------------
+  T0 Sections Executed: 8/8
+    +  T0.1 Phase Inventory
+    +  T0.2 AI Pathway Audit
+    +  T0.3 Influence Audit
+    +  T0.4 Shared Context
+    +  T0.5 Coordination Audit
+    +  T0.6 Dead Output Detector
+    +  T0.7 Truth Scorecard
+    +  T0.8 System Truth Report
+  ----------------------------------------------------------------------
+  SYSTEM_TRUTH_REPORT.md -- GENERATED
+
+OPTIMIZATION RESULTS SUMMARY
+  ----------------------------------------------------------------------
+
+  +-----------------------------------------------------------------------+
+  |  GLOBAL NETWORK PERFORMANCE                          |
+  +-----------------------------------------------------------------------+
+  |  Services deployed          28                            |
+  |  Weekly profit        $    29,776,282                        |
+  |  Annual profit        $ 1,548,366,665                        |
+  |  Operating cost/wk    $    73,425,778                          |
+  |  Profit margin                 28.9%                         |
+  |  Demand coverage               33.6%                              |
+  |  Unserved demand           183,598 TEU/wk                  |
+  |  Feedback iterations         3                            |
+  +-----------------------------------------------------------------------+
+
+  REGIONAL BREAKDOWN
+  Region             Profit/wk   Coverage   Services   Margin%  Hub Ports
+  ----------------------------------------------------------------------
+  Asia          $   26,082,604      39.8%         20     33.4%  ['CNSHA', 'MYTPP', 'CNYTN']
+  Europe        $    3,939,272      22.2%          3     40.2%  ['USCHS', 'BRSSZ', 'USLAX']
+  Americas      $     -245,594      29.0%          5     -1.6%  ['DEBRV', 'NLRTM', 'AEJEA']
+
+  FEEDBACK LOOP TRACE
+  Iter    Reg.Cov  Gbl.Cov  Conv.Score  Reason
+  ------------------------------------------------------------
+  0         29.2%    33.1%        0.806  ->  coverage 29.2% is 40.8pp below 70.0% target
+  1         27.0%    30.0%        0.795  ->  coverage 27.0% is 43.0pp below 70.0% target
+  2         30.4%    33.6%        0.811  +  coverage 30.4% is 39.6pp below 70.0% target; 
+
+  ITERATION CANDIDATE SELECTION
+  Candidates: [0, 1, 2]  |  Pareto-optimal: [0, 1, 2]
+  Selected: iteration 2  via deterministic_multi_objective  [FALLBACK]
+  Iter      Score         Profit     Cov%          Cost$  Pareto      DomBy
+  --------------------------------------------------------------------------------
+  0        0.7253    28,964,487    33.1%    16,891,000  yes           -
+  1        0.1500    24,423,791    30.0%    15,470,000  yes           -
+  2        0.8896    29,776,282    33.6%    16,457,000  yes           -
+
+TEST SCORECARD
+  ----------------------------------------------------------------------
+  Passed  :  364/364
+  Failed  :    0/364
+  Warnings:    4
+  Score   : 100%
+
+  ----------------------------------------------------------------------
+
+  + ALL ASSERTIONS PASSED
+  Pipeline is operating correctly.
+
+  4 warning(s) noted -- review above.
+
+======================================================================
+
+
+  ----------------------------------------------------------------------
+  +  [A]  [A] <file timestamp> -- File age 0s -- consistent with current run
+  +  [A]  [A] test_scorecard.assertions_passed -- Present in result -- file was written after assertions ran
+  +  [A]  [A] orchestrator -- Present in result
+  +  [A]  [A] status -- Present in result
+  +  [A]  [A] regional_results -- Present in result
+  +  [A]  [A] summary_metrics -- Present in result
+  +  [A]  [A] iteration_audit -- Present in result
+  +  [A]  [A] orchestrator -- top-level orchestrator name (present)
+  +  [A]  [A] status -- orchestrator status (present)
+  +  [D]  [D] problem_analysis -- orchestrator analysis; fallback is rule-based (present)
+  +  [B]  [B] regional_results -- produced by RegionalAgent per region (present)
+  +  [B]  [B] decision_output -- coordinator agent output (present)
+  +  [D]  [D] executive_summary -- orchestrator summary; fallback when LLM fails (present)
+  +  [A]  [A] summary_metrics -- orchestrator aggregate_results() (present)
+  +  [A]  [A] iteration_audit -- orchestrator iteration audit trail (present)
+  +  [A]  [A] iterations_run -- orchestrator computed from audit len (present)
+  +  [B]  [B] selected_services -- aggregated from regional results (present)
+  +  [B]  [B] all_selected_services -- aggregated from regional results (present)
+  +  [A]  [A] iteration_results -- orchestrator iteration snapshots (present)
+  +  [B]  [B] iteration_selection -- iteration-selector result (present)
+  +  [B]  [B] best_iteration -- selector-selected best iteration (present)
+  +  [B]  [B] final_selected_iteration -- mirror of best_iteration (present)
+  +  [B]  [B] health_status -- health_tracker snapshot (present)
+  +  [B]  [B] consensus_result -- ConsensusEngine output (present)
+  +  [B]  [B] shared_context -- SharedContext serialisation (present)
+  +  [D]  [D] maritime_intelligence -- additive optional feature; may be None/skipped (present)
+  +  [A]  [A] llm_runtime_metrics -- orchestrator LLM telemetry block (present)
+  +  [A]  [A] llm_runtime_aggregate -- orchestrator provider/model telemetry (present)
+  +  [C]  [C] test_scorecard -- derived by test_orchestrator.py (present)
+  +  [A]  [A] summary_metrics.weekly_profit -- Finite number (29776282.01785715)
+  +  [A]  [A] summary_metrics.annual_profit -- Finite number (1548366664.9285717)
+  +  [A]  [A] summary_metrics.coverage -- Finite number (33.5978)
+  +  [A]  [A] summary_metrics.total_services -- Finite number (28)
+  +  [A]  [A] summary_metrics.satisfied_demand -- Finite number (92896.0)
+  +  [A]  [A] summary_metrics.unserved_demand -- Finite number (183598.0)
+
+======================================================================
+[SUCCESS] PIPELINE OUTPUT SAVED TO: C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\pipeline_output.json
+======================================================================
+
++  P2 Diagnostic Report generated: C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\P2_DIAGNOSTIC_RUNTIME_VALIDATION_REPORT.md
