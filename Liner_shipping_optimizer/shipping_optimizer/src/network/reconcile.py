@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from src.network.economics import EconomicsAssumptions, assumptions_for_problem
+from src.network.assumption_register import build as _assumption_register
 from src.network.class_variants import (
     augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
 )
@@ -506,6 +507,7 @@ def reconcile(
                     getattr(fleet, "capacity_unit_status", "provisional") != "verified",
             },
             "transit_time_unit": "TransitTime column read as days (unverified unit)",
+            "assumption_register": _assumption_register(a, fleet),
             # how the candidate pool was generated (reproducibility record)
             "candidate_generation": _candidate_generation_settings(),
         },
