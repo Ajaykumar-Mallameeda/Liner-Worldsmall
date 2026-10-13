@@ -332,7 +332,7 @@ class TestWorldSmallPool:
             assert s.required_vessels <= c.quantity, s.id                   # one departure/week
             assert s.weekly_cost == c.tc_rate_daily * 7.0, s.id
             assert s.speed == c.design_speed, s.id
-            assert s.capacity_unit_status == "secondary_source", s.id
+            assert s.capacity_unit_status == "reference_code", s.id
 
     def test_report_is_arithmetically_consistent(self, ws):
         _, pool, rep = ws
@@ -346,7 +346,7 @@ class TestWorldSmallPool:
         # (the rejection paths themselves are exercised by the synthetic tests above)
         assert sum(d["rejections_by_reason"].values()) >= d["rejected"]
         assert set(d["rejections_by_reason"]) <= set(sf.ALL_REASONS)
-        assert d["capacity_unit_status"] == "secondary_source"
+        assert d["capacity_unit_status"] == "reference_code"
         assert d["capacity_feasibility_is_conditional"] is True
 
     def test_long_loops_fall_back_to_a_class_with_enough_vessels(self, ws):

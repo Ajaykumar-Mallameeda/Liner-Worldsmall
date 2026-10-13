@@ -12,7 +12,8 @@ despite the ``.csv`` extension):
                                     ``Capacity FFE`` is an FFE count and is
                                     converted once, here, to TEU:
                                     ``capacity_teu = 2 * Capacity FFE``.
-                                    Status ``secondary_source``: the unit is
+                                    Status ``reference_code``: confirmed by the benchmark authors' reference code (FFE type);
+                                    also
                                     defined by the RL paper (arXiv:2411.09068,
                                     App. A.1); the primary LINERLIB report was
                                     not available (``CAPACITY_UNIT_PROVENANCE``).
@@ -110,10 +111,11 @@ TEU_PER_FFE = 2.0
 # "capacity of 800 FFEs") defines the capacity in FFE and never uses TEU. Decision of
 # 2026-10-13: the column is an FFE count and is converted ONCE, at this boundary, to the
 # model's internal TEU. The evidence is a secondary source: the status is therefore
-# "secondary_source", never "verified" (that requires the primary LINERLIB report).
+# "reference_code" since the decision phase (the authors' reference implementation types the capacity as FFE),
+# never "verified" (that requires the technical report text).
 CAPACITY_SOURCE_COLUMN = "Capacity FFE"
 CAPACITY_INTERNAL_UNIT = "TEU"
-CAPACITY_UNIT_STATUS = "secondary_source"   # "verified" requires authoritative_source
+CAPACITY_UNIT_STATUS = "reference_code"     # "verified" requires the technical report (authoritative_source)
 CAPACITY_UNIT_PROVENANCE = {
     "source_file": "data/raw/WorldSmall/fleet_data.csv",
     "source_column": CAPACITY_SOURCE_COLUMN,
@@ -122,6 +124,11 @@ CAPACITY_UNIT_PROVENANCE = {
     "conversion_applied": "x2 once at the loader boundary (capacity_teu = 2 * Capacity FFE)",
     "status": CAPACITY_UNIT_STATUS,
     "authoritative_source": None,
+    "reference_code": (
+        "LINERLIB reference implementation (benchmark authors): BM_Graph.hpp 'typedef unsigned long long FFE; "
+        "//Number of Forty Foot Equivalent containers', bm_data.hpp 'vesselclass(..., FFE capacity, ...)' and "
+        "'FFE m_capacity; // The maximal load for the vesseltype'; verified in reports/decision_phase/primary_source_units.md"
+    ),
     "secondary_source": (
         "Dutta, Lin, Jin, 'Liner Shipping Network Design with Reinforcement Learning', "
         "arXiv:2411.09068v1, App. A.1 (vcap = maximum number of FFEs) and section 6.1 "
@@ -655,7 +662,7 @@ class NetworkLoader:
         ``Capacity FFE`` is an FFE count: ``capacity_teu = 2 * Capacity FFE`` (converted
         here, once; nothing downstream converts again). The reading rests on a secondary
         source (see ``CAPACITY_UNIT_PROVENANCE``): the returned ``Fleet`` carries
-        ``capacity_unit_status == "secondary_source"`` (never "verified"). Quantities and
+        ``capacity_unit_status == "reference_code"`` (never "verified"). Quantities and
         specifications must describe exactly the same set of vessel classes.
 
         Returns:
@@ -770,7 +777,7 @@ class NetworkLoader:
             "canal_fee_blank": fee_blank,
             # Capacity unit is an assumption, not a verified fact (see the
             # constants above); consumers must not present capacity feasibility
-            # as source-verified while this says "provisional" or "secondary_source".
+            # as source-verified while this says "provisional", "secondary_source" or "reference_code".
             "capacity_unit": dict(CAPACITY_UNIT_PROVENANCE),
         }
         logger.info(

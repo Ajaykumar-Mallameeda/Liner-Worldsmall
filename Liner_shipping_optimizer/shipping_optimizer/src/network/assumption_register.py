@@ -6,6 +6,7 @@ infer which inputs are sourced and which are provisional.  Values are read from 
 evidence, reviewed in ``reports/audit_20261013_phaseADB`` and ``reports/issue6_assumptions``.
 
 status vocabulary
+    SOURCED_PRIMARY_CODE defined by the benchmark authors' reference code / solution logs (technical report text not read)
     SOURCED_SECONDARY   defined by a secondary source (benchmark page / paper); primary report unavailable
     PROVISIONAL         a modelling convention without a source; the result is conditional on it
     UNVERIFIED          interpretation not confirmed by any available source
@@ -24,8 +25,10 @@ def build(assumptions, fleet=None) -> List[Dict]:
     cap_status = getattr(fleet, "capacity_unit_status", "provisional") if fleet is not None else "unknown"
     rows = [
         ("capacity_unit", "Vessel capacity unit", "Capacity FFE x 2 -> TEU (converted once at the loader)",
-         "SOURCED_SECONDARY" if cap_status == "secondary_source" else "PROVISIONAL",
-         "RL paper arXiv:2411.09068 App. A.1 / sec. 6.1 (capacity in FFE); primary LINERLIB report unavailable",
+         "SOURCED_PRIMARY_CODE" if cap_status == "reference_code"
+         else ("SOURCED_SECONDARY" if cap_status == "secondary_source" else "PROVISIONAL"),
+         "LINERLIB reference code types the capacity as FFE (BM_Graph.hpp, bm_data.hpp); RL paper arXiv:2411.09068 "
+         "App. A.1 agrees; the technical report text was not available",
          "capacity, coverage, profit levels (x1.6-2.5 against the TEU reading)"),
         ("ffe_to_teu", "FFE -> TEU conversion", "1 FFE = 2 TEU exactly, no lane factors", "SOURCED_SECONDARY",
          "definition of the units; lane factors removed (unsourced)", "demand, revenue rates, per-FFE costs"),

@@ -128,7 +128,7 @@ class TestLoaderBoundary:
         assert fleet.capacity_source_column == "Capacity FFE"
         assert nl.CAPACITY_UNIT_PROVENANCE["conversion_applied"].startswith("x2")
         assert fleet.capacity_unit_status != "verified"          # primary source unavailable
-        assert fleet.capacity_unit_status == "secondary_source"
+        assert fleet.capacity_unit_status == "reference_code"
         assert nl.CAPACITY_UNIT_PROVENANCE["authoritative_source"] is None
         assert nl.CAPACITY_UNIT_PROVENANCE["secondary_source"]
 

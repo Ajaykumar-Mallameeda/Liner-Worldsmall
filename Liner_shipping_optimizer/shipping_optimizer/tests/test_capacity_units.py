@@ -116,7 +116,7 @@ class TestProvisionalStatus:
     def test_constants_declare_the_secondary_source_ffe_reading(self):
         assert CAPACITY_SOURCE_COLUMN == "Capacity FFE"
         assert CAPACITY_INTERNAL_UNIT == "TEU"
-        assert CAPACITY_UNIT_STATUS == "secondary_source"
+        assert CAPACITY_UNIT_STATUS == "reference_code"
         assert CAPACITY_UNIT_PROVENANCE["raw_unit"] == "FFE"
         assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is True
         assert CAPACITY_UNIT_PROVENANCE["authoritative_source"] is None
@@ -129,7 +129,7 @@ class TestProvisionalStatus:
             assert isinstance(src, str) and src.strip(), "verified without a cited source"
             assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is False
         else:
-            assert CAPACITY_UNIT_PROVENANCE["status"] in ("provisional", "secondary_source")
+            assert CAPACITY_UNIT_PROVENANCE["status"] in ("provisional", "secondary_source", "reference_code")
             assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is True
 
     def test_evidence_trail_is_recorded_and_states_no_unit_definition_was_found(self):
@@ -141,18 +141,18 @@ class TestProvisionalStatus:
     def test_loaded_fleet_carries_the_status(self, loader):
         fleet = loader.load_fleet()
         assert fleet.capacity_unit == "TEU"
-        assert fleet.capacity_unit_status == "secondary_source"
+        assert fleet.capacity_unit_status == "reference_code"
         assert fleet.capacity_source_column == "Capacity FFE"
 
     def test_problem_built_by_the_loader_exposes_the_status(self, loader):
         problem = loader.load_problem()
         assert isinstance(problem, Problem)
-        assert problem.fleet.capacity_unit_status == "secondary_source"
+        assert problem.fleet.capacity_unit_status == "reference_code"
 
     def test_validation_report_states_the_assumption(self, loader):
         loader.load_fleet()
         cu = loader.validation_report["fleet"]["capacity_unit"]
-        assert cu["status"] == "secondary_source"
+        assert cu["status"] == "reference_code"
         assert cu["conversion_applied"].startswith("x2")
         assert cu["capacity_feasibility_is_conditional"] is True
 
@@ -163,7 +163,7 @@ class TestProvisionalStatus:
     def test_report_copy_cannot_mutate_the_module_constant(self, loader):
         loader.load_fleet()
         loader.validation_report["fleet"]["capacity_unit"]["status"] = "verified"
-        assert nl.CAPACITY_UNIT_PROVENANCE["status"] == "secondary_source"
+        assert nl.CAPACITY_UNIT_PROVENANCE["status"] == "reference_code"
 
 
 # ---------------------------------------------------------------------------
