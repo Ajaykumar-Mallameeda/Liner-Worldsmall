@@ -363,6 +363,20 @@ def _build_and_solve(
     return out
 
 
+def _conservation_violations(demands, q, u) -> int:
+    """Number of ODs whose returned flows plus unserved quantity do not add up to the demand
+    (``sum_p q_p + u_d == weekly_teu_d`` holds in every integer-feasible solution)."""
+    served: Dict[int, float] = defaultdict(float)
+    for (di, _k), v in q.items():
+        served[di] += float(v.varValue or 0.0)
+    bad = 0
+    for di, uv in u.items():
+        d = float(demands[di].weekly_teu)
+        if abs(served.get(di, 0.0) + float(uv.varValue or 0.0) - d) > 1e-6 * max(1.0, d) + 1e-3:
+            bad += 1
+    return bad
+
+
 def solve_network(
     models: Sequence[ServiceModel],
     demands: Sequence,
@@ -512,6 +526,21 @@ def solve_network(
     if any(v.varValue is None for v in list(f.values()) + list(q.values())):
         sol.status = "not_solved"
         sol.message = "solver reported optimal but returned no variable values"
+        return sol
+
+    # A time-limited CBC run can stop before it has any integer solution and still hand back
+    # all-zero variable values with status "Optimal".  Those values are not a plan (the
+    # demand rows are equalities, so a real solution always conserves every OD): report
+    # "not_solved" instead of an empty plan that only the ledger would reject.
+    if getattr(prob, "sol_status", None) == pulp.LpSolutionNoSolutionFound:
+        sol.status = "not_solved"
+        sol.message = "solver stopped without an integer solution (no incumbent)"
+        return sol
+    broken = _conservation_violations(demands, q, u)
+    if broken:
+        sol.status = "not_solved"
+        sol.message = (f"solver returned values that do not conserve demand on {broken} OD(s) "
+                       f"(no incumbent); reported as not solved")
         return sol
 
     closed = getattr(prob, "sol_status", 1) == pulp.LpSolutionOptimal
