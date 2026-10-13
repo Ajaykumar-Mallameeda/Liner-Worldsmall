@@ -1,0 +1,246 @@
+diff --git a/src/network/flow_reopt.py b/src/network/flow_reopt.py
+--- a/src/network/flow_reopt.py
++++ b/src/network/flow_reopt.py
+@@ -23,7 +23,8 @@
+     caller runs the independent ledger on whatever is returned).
+ 
+ What it does NOT do
+-    It changes no frequency, vessel count, service, price or constraint; it adds no cargo
++    It changes no frequency, vessel count, service, price or constraint; it never serves less
++    cargo than the incumbent (a coverage floor of the solved model included); it adds no cargo
+     beyond demand; it cannot create a path the transit-time rule would have rejected (the
+     full set is built by the same ``build_paths``).  It is not a proof of optimality: a plan
+     it improves is reported ``feasible`` even if the MILP over the capped paths had closed.
+@@ -48,7 +49,7 @@
+ 
+ 
+ def reoptimize_flows(models, demands, paths: Dict[int, List], sol, build_all_paths,
+-                     *, time_limit_sec: float = 60.0) -> Dict:
++                     *, time_limit_sec: float = 60.0, min_served_teu: float = 0.0) -> Dict:
+     """Re-route ``sol`` over the full valid path set; mutates ``paths`` (new paths are
+     appended, existing indices are untouched) and ``sol`` (flows, unserved, objective) only
+     when the profit improves.  Returns a report dict (always)."""
+@@ -96,6 +97,14 @@
+         prob += pulp.lpSum(q[j] for j in js) <= float(demands[di].weekly_teu), f"od_{di}"
+     for (si, leg), js in by_leg.items():
+         prob += pulp.lpSum(q[j] for j in js) <= models[si].capacity_teu * f[si], f"cap_{si}_{leg}"
++    # Never serve less than the incumbent: the re-routing may only add cargo or trade it for
++    # better cargo on the same capacity, so a coverage floor of the solved model (and the
++    # incumbent's own coverage) can never be undercut.  The incumbent satisfies this, so the LP
++    # is feasible.
++    incumbent_served = float(sum(t for _, _, t in sol.flows))
++    floor = max(float(min_served_teu), incumbent_served) - 1e-6
++    if floor > 0.0:
++        prob += pulp.lpSum(q) >= floor, "no_coverage_regression"
+     try:
+         prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=max(1, int(math.ceil(time_limit_sec)))))
+     except Exception as exc:                                       # noqa: BLE001
+diff --git a/src/network/paths.py b/src/network/paths.py
+--- a/src/network/paths.py
++++ b/src/network/paths.py
+@@ -355,9 +355,15 @@
+     *,
+     max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD,
+     config: Optional[PathConfig] = None,
++    only_services: Optional[Sequence[int]] = None,
+ ) -> Tuple[Dict[int, List[OdPath]], PathStats]:
+     """Enumerate time-feasible paths for every demand with positive weekly TEU and select
+-    the ones that enter the network model (``config``; default: the environment)."""
++    the ones that enter the network model (``config``; default: the environment).
++
++    ``only_services`` restricts the enumeration to paths whose every segment rides one of
++    those service indices (used by the flow re-optimisation, which only needs paths through
++    operated services); the paths found are exactly the unrestricted enumeration's paths
++    that use only those services."""
+     import time as _time
+     t_start = _time.perf_counter()
+     cfg = config if config is not None else config_from_environment()
+@@ -366,7 +372,10 @@
+ 
+     # boarding index: port -> [service]
+     by_port: Dict[str, List[int]] = defaultdict(list)
++    allowed = None if only_services is None else set(only_services)
+     for si, m in enumerate(models):
++        if allowed is not None and si not in allowed:
++            continue
+         for p in m.ports:
+             by_port[p].append(si)
+ 
+diff --git a/src/network/plan.py b/src/network/plan.py
+--- a/src/network/plan.py
++++ b/src/network/plan.py
+@@ -182,7 +182,7 @@
+         res.flow_reopt = {"applied": False, "reason": "disabled"}
+         if (self.path_config.reoptimize_flows and sol.usable and fixed is None
+                 and not unserved_penalty_per_teu and port_capacity is None
+-                and not min_served_fraction and not total_vessel_limit):
++                and not total_vessel_limit):
+             import dataclasses
+             from src.network.paths import BUDGET_FIXED, SELECT_FASTEST
+             cfg_all = dataclasses.replace(
+@@ -190,11 +190,18 @@
+                 multi_hop_min_alternatives=(10 ** 9 if self.path_config.max_transfers >= 2
+                                             else self.path_config.multi_hop_min_alternatives))
+ 
++            operated = [si for si, fr in sol.frequencies.items() if fr > 0]
++
+             def _all_paths():
+                 return build_paths(demands, models, self.port_lookup, self.assumptions,
+-                                   max_paths_per_od=10 ** 9, config=cfg_all)
+-
+-            res.flow_reopt = reoptimize_flows(models, demands, paths, sol, _all_paths)
++                                   max_paths_per_od=10 ** 9, config=cfg_all,
++                                   only_services=operated)
++
++            floor_teu = (float(min_served_fraction)
++                         * sum(d.weekly_teu for d in demands if d.weekly_teu > 0)
++                         if min_served_fraction else 0.0)
++            res.flow_reopt = reoptimize_flows(models, demands, paths, sol, _all_paths,
++                                              min_served_teu=floor_teu)
+             if res.flow_reopt.get("applied") and sol.status == "optimal":
+                 # the capped model's proven optimum has been improved on with paths outside it:
+                 # the plan is feasible, and no optimality over the full path set is proven
+diff --git a/src/network/reconcile.py b/src/network/reconcile.py
+--- a/src/network/reconcile.py
++++ b/src/network/reconcile.py
+@@ -66,6 +66,26 @@
+         },
+         "regional_filter": _regional_filter_mode(),
+     }
++
++
++ENV_GLOBAL_MIN_COVERAGE = "LINER_GLOBAL_MIN_COVERAGE"
++
++
++def _global_min_coverage() -> Optional[float]:
++    """``LINER_GLOBAL_MIN_COVERAGE`` = a coverage floor in (0, 1] for the global MILP, or None.
++    A malformed value is an error (never ignored); an unattainable floor makes the stage
++    ``infeasible`` with its explicit status - it is never relaxed silently."""
++    import os
++    raw = (os.environ.get(ENV_GLOBAL_MIN_COVERAGE) or "").strip()
++    if not raw:
++        return None
++    try:
++        v = float(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_GLOBAL_MIN_COVERAGE} must be a number in (0, 1], got {raw!r}") from None
++    if not (0.0 < v <= 1.0):
++        raise ValueError(f"{ENV_GLOBAL_MIN_COVERAGE} must be in (0, 1], got {v}")
++    return v
+ 
+ 
+ def canonical_rotation(ports: Sequence[str]) -> Tuple[str, ...]:
+@@ -162,8 +182,11 @@
+                     if cid:
+                         initial[cid] = max(initial.get(cid, 0), int(f))
+ 
++    # Opt-in epsilon constraint (Task 19, experimental, NOT the default): profit-maximising
++    # subject to served TEU >= fraction x total demand.  Unset = the production objective.
++    min_cov = _global_min_coverage()
+     plan = planner.plan(cands, demands=problem.demands, initial_frequencies=initial or None,
+-                        time_limit_sec=time_limit_sec)
++                        time_limit_sec=time_limit_sec, min_served_fraction=min_cov)
+     if cands and not plan.models:
+         # nothing could be modelled: an empty network would be "valid" but is not a result
+         why = sorted({r for b in plan.rejected_candidates for r in b.get("reasons", [])})
+@@ -422,6 +445,7 @@
+             "basis": a.basis,
+             "sailing_speed": "class designSpeed (only speed with a source consumption)",
+             "max_transfers_per_od": planner.path_config.max_transfers,
++            "global_min_coverage": min_cov,
+             "path_selection": planner.path_config.describe(),
+             "capacity_unit": {
+                 "status": getattr(fleet, "capacity_unit_status", "provisional"),
+diff --git a/tests/test_multi_hop_paths.py b/tests/test_multi_hop_paths.py
+--- a/tests/test_multi_hop_paths.py
++++ b/tests/test_multi_hop_paths.py
+@@ -419,3 +419,89 @@
+         pl = NetworkPlanner(pr, max_paths_per_od=1, path_config=PathConfig(reoptimize_flows=True))
+         res = pl.plan([Candidate("s0", ("A", "C"), "S")], fixed_frequencies={"s0": 1}, time_limit_sec=30)
+         assert res.flow_reopt["applied"] is False
++
++
++# ============================================================================ H. network signals
++class TestSignals:
++    def test_signals_describe_the_candidate_network(self):
++        d = [Demand("A", "C", 100.0, 3000.0), Demand("A", "D", 300.0, 3000.0),
++             Demand("B", "C", 600.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, CHAIN)          # A-B, B-C, C-D
++        _paths, st = build_paths(d, models, pl, config=PathConfig())
++        s = st.signals
++        # A->C: one transfer path (at B); A->D needs two transfers (none built); B->C: direct
++        assert s["od_by_valid_paths"]["0"] == 1 and s["od_by_valid_paths"]["1"] == 2
++        assert s["demand_share_without_any_path"] == pytest.approx(300.0 / 1000.0)
++        assert s["demand_share_with_direct_path"] == pytest.approx(600.0 / 1000.0)
++        assert sum(s["demand_share_by_valid_paths"].values()) == pytest.approx(1.0)
++        assert s["port_connectivity"]["ports"] == 4
++        assert s["port_connectivity"]["services_per_port_max"] == 2        # B and C
++        assert s["transfer_concentration"]["distinct_transfer_ports"] == 1
++        assert s["demand_concentration"]["top10_od_share"] == pytest.approx(1.0)
++
++    def test_two_transfer_enumeration_removes_the_unreachable_share(self):
++        d = [Demand("A", "D", 300.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, CHAIN)
++        _p, base = build_paths(d, models, pl, config=PathConfig())
++        _p, multi = build_paths(d, models, pl, config=TWO)
++        assert base.signals["demand_share_without_any_path"] == pytest.approx(1.0)
++        assert multi.signals["demand_share_without_any_path"] == pytest.approx(0.0)
++
++
++# ============================================================ I. global stage (reconcile)
++class TestGlobalStage:
++    """SYNTHETIC end to end through ``reconcile``: the regional partition of a plan that carries
++    a two-transfer journey must add up to the ledger (both hubs' transshipment charges
++    attributed), and the result carries the strategy report and the re-optimisation record."""
++
++    def _stage(self, monkeypatch, **env):
++        from src.network.reconcile import reconcile
++        for k, v in env.items():
++            monkeypatch.setenv(k, v)
++        d = [Demand("A", "D", 500.0, 3000.0, max_transit_days=30.0),
++             Demand("B", "C", 200.0, 2000.0, max_transit_days=30.0)]
++        pr = problem(d, port_over={"B": dict(transshipment_cost=40), "C": dict(transshipment_cost=50)})
++        pools = {"R1": [{"id": f"s{i}", "ports": list(r), "vessel_class": "V"} for i, r in enumerate(CHAIN)]}
++        region_of_od = {("A", "D"): "R1", ("B", "C"): "R1"}
++        return reconcile(pr, pools, region_of_od, ["R1"], time_limit_sec=30)
++
++    def test_two_transfer_plan_partitions_exactly(self, monkeypatch):
++        st = self._stage(monkeypatch, LINER_MAX_TRANSFERS="2", LINER_FLOW_REOPT="1")
++        assert st.ok, st.message
++        led = st.plan.ledger
++        assert not led.violations and st.network_ledger["verified"]
++        assert st.network_ledger["assumptions"]["max_transfers_per_od"] == 2
++        reg = st.region_updates["R1"]
++        assert reg["revenue"] == pytest.approx(led.revenue)
++        assert reg["total_cost"] == pytest.approx(led.operating_cost)
++        assert reg["transship_cost"] == pytest.approx(led.transshipment_cost)
++        assert reg["transship_cost"] == pytest.approx(500.0 * 90.0)        # both hubs, 500 TEU
++        assert st.network_ledger["strategy_report"]["reconciliation"]["all"]
++        assert "flow_reoptimisation" in st.network_ledger["optimality"]
++
++    def test_default_configuration_is_the_one_transfer_baseline(self, monkeypatch):
++        for k in ("LINER_MAX_TRANSFERS", "LINER_FLOW_REOPT", "LINER_PATH_SELECTION", "LINER_PATH_BUDGET"):
++            monkeypatch.delenv(k, raising=False)
++        st = self._stage(monkeypatch)
++        assert st.network_ledger["assumptions"]["max_transfers_per_od"] == 1
++        assert st.plan.ledger.served_teu == pytest.approx(200.0)           # A->D has no 1-transfer path
++        assert st.network_ledger["optimality"]["flow_reoptimisation"]["applied"] is False
++
++
++# ================================================================== J. only_services restriction
++class TestOnlyServices:
++    def test_restriction_equals_the_unrestricted_set_filtered(self):
++        d = [Demand("A", "C", 100.0, 3000.0), Demand("A", "B", 100.0, 3000.0), Demand("B", "D", 50.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, [["A", "C"], ["A", "B"], ["B", "C"], ["A", "B", "C"], ["C", "D"], ["B", "D"]])
++        cfg = PathConfig(max_transfers=2, multi_hop_min_alternatives=10 ** 6)
++        full, _ = build_paths(d, models, pl, max_paths_per_od=10 ** 6, config=cfg)
++        keep = {0, 1, 2, 5}
++        sub, _ = build_paths(d, models, pl, max_paths_per_od=10 ** 6, config=cfg, only_services=keep)
++
++        def keys(paths):
++            return {(di, p.services, p.transfer_ports) for di, pl_ in paths.items() for p in pl_}
++        want = {k for k in keys(full) if set(k[1]) <= keep}
++        assert keys(sub) == want and want

@@ -1,0 +1,1563 @@
+{
+ "source": "D:\\liner_scratch\\tier0_scenarios",
+ "scenarios": {
+  "derived_ledger_not_verified": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 10642433.53841991,
+       "annualProfit": 553406543.9978353,
+       "totalCost": 62745726.46158008,
+       "coverage": 23.0402,
+       "margin": 14.501567471401259,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "incomplete_accounting",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Not verified\n  Profit margin n/a (not verified) with 23.0% demand coverage.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 10349644.4258658,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 17.8,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 47634105.5741342,
+        "operating_cost": 16303000.0,
+        "transship_cost": 393712.0,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Moderate\n  Profit margin 17.8% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $10,349,644 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $393,712 + port $8,057,800/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 1642225.333333333,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 29.4,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 3936724.666666667,
+        "operating_cost": 833000.0,
+        "transship_cost": 1416.0,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Good\n  Profit margin 29.4% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $1,642,225 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,416 + port $1,713,782/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": -1349436.2207792215,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": -13.7,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 11174896.220779222,
+        "operating_cost": 3276000.0,
+        "transship_cost": 45653.0,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Poor\n  Profit margin -13.7% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $-1,349,436 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $45,653 + port $2,968,399/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Not verified | Profit margin n/a (not verified) with 23.0% demand coverage. | ",
+   "decision_layer": {
+    "network_ledger_verified": false,
+    "ledger_margin": 0.1450156747140127,
+    "regional_margins": {
+     "Asia": 17.8,
+     "Europe": 29.4,
+     "Americas": -13.7
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Moderate",
+     "Europe": "Verdict: Good",
+     "Americas": "Verdict: Poor"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "unverified",
+     "margin_pct": null,
+     "note": "accounting not independently verified; no margin verdict"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 14.501567471401259
+  },
+  "derived_loss_minus_5": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": -3669408.0,
+       "annualProfit": -190809216.0,
+       "totalCost": 77057568.0,
+       "coverage": 23.0402,
+       "margin": -5.0,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Poor\n  Profit margin -5.0% with 23.0% demand coverage.\n  Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": -2899187.5,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": -5.0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 60882937.5,
+        "operating_cost": 20021595.126055762,
+        "transship_cost": 483514.82918908587,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Poor\n  Profit margin -5.0% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $-2,899,188 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $483,515 + port $9,895,725/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": -278947.5,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": -5.0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 5857897.5,
+        "operating_cost": 1023001.2108203674,
+        "transship_cost": 1738.9792491256187,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Poor\n  Profit margin -5.0% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $-278,948 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,739 + port $2,104,683/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": -491273.0,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": -5.0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 10316733.0,
+        "operating_cost": 4023231.652638084,
+        "transship_cost": 56066.11557933041,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Poor\n  Profit margin -5.0% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $-491,273 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $56,066 + port $3,645,469/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Poor | Profit margin -5.0% with 23.0% demand coverage. | Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": -0.05,
+    "regional_margins": {
+     "Asia": -5.0,
+     "Europe": -5.0,
+     "Americas": -5.0
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Poor",
+     "Europe": "Verdict: Poor",
+     "Americas": "Verdict: Poor"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "loss",
+     "margin_pct": -5.0,
+     "note": "margin -5.0% is a loss"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": -5.0
+  },
+  "derived_margin_exactly_15": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 11008224.0,
+       "annualProfit": 572427648.0,
+       "totalCost": 62379936.0,
+       "coverage": 23.0402,
+       "margin": 15.0,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Moderate\n  Profit margin 15.0% with 23.0% demand coverage.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 8697562.5,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 15.0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 49286187.5,
+        "operating_cost": 16207957.959188001,
+        "transship_cost": 391416.7664864029,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Moderate\n  Profit margin 15.0% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $8,697,562 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $391,417 + port $8,010,825/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 836842.5,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 15.0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 4742107.5,
+        "operating_cost": 828143.8373307737,
+        "transship_cost": 1407.7451064350248,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 15.0% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $836,842 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,408 + port $1,703,791/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": 1473819.0,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": 15.0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 8351641.0,
+        "operating_cost": 3256901.814040354,
+        "transship_cost": 45386.85546898177,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 15.0% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $1,473,819 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $45,387 + port $2,951,094/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Moderate | Profit margin 15.0% with 23.0% demand coverage. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": 0.15,
+    "regional_margins": {
+     "Asia": 15.0,
+     "Europe": 15.0,
+     "Americas": 15.0
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Moderate",
+     "Europe": "Verdict: Moderate",
+     "Americas": "Verdict: Moderate"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "at_or_above_target",
+     "margin_pct": 15.0,
+     "note": "margin 15.0% >= advisory target 15.0%"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 15.0
+  },
+  "derived_margin_exactly_20": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 14677632.0,
+       "annualProfit": 763236864.0,
+       "totalCost": 58710528.0,
+       "coverage": 23.0402,
+       "margin": 20.0,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Moderate\n  Profit margin 20.0% with 23.0% demand coverage.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 11596750.0,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 20.0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 46387000.0,
+        "operating_cost": 15254548.667471059,
+        "transship_cost": 368392.25081073213,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Moderate\n  Profit margin 20.0% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $11,596,750 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $368,392 + port $7,539,600/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 1115790.0,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 20.0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 4463160.0,
+        "operating_cost": 779429.4939583753,
+        "transship_cost": 1324.9365707623763,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 20.0% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $1,115,790 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,325 + port $1,603,568/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": 1965092.0,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": 20.0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 7860368.0,
+        "operating_cost": 3065319.3543909215,
+        "transship_cost": 42717.04044139461,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 20.0% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $1,965,092 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $42,717 + port $2,777,500/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Moderate | Profit margin 20.0% with 23.0% demand coverage. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": 0.2,
+    "regional_margins": {
+     "Asia": 20.0,
+     "Europe": 20.0,
+     "Americas": 20.0
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Moderate",
+     "Europe": "Verdict: Moderate",
+     "Americas": "Verdict: Moderate"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "at_or_above_target",
+     "margin_pct": 20.0,
+     "note": "margin 20.0% >= advisory target 15.0%"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 20.0
+  },
+  "derived_margin_exactly_25": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 18347040.0,
+       "annualProfit": 954046080.0,
+       "totalCost": 55041120.0,
+       "coverage": 23.0402,
+       "margin": 25.0,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Good\n  Profit margin 25.0% with 23.0% demand coverage.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 14495937.5,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 25.0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 43487812.5,
+        "operating_cost": 14301139.375754118,
+        "transship_cost": 345367.7351350614,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Moderate\n  Profit margin 25.0% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $14,495,938 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $345,368 + port $7,068,375/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 1394737.5,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 25.0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 4184212.5,
+        "operating_cost": 730715.1505859769,
+        "transship_cost": 1242.1280350897277,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 25.0% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $1,394,738 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,242 + port $1,503,345/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": 2456365.0,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": 25.0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 7369095.0,
+        "operating_cost": 2873736.8947414886,
+        "transship_cost": 40047.22541380744,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 25.0% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $2,456,365 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $40,047 + port $2,603,907/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Good | Profit margin 25.0% with 23.0% demand coverage. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": 0.25,
+    "regional_margins": {
+     "Asia": 25.0,
+     "Europe": 25.0,
+     "Americas": 25.0
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Moderate",
+     "Europe": "Verdict: Moderate",
+     "Americas": "Verdict: Moderate"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "at_or_above_target",
+     "margin_pct": 25.0,
+     "note": "margin 25.0% >= advisory target 15.0%"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 25.0
+  },
+  "derived_margin_fields_missing": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 10642433.53841991,
+       "annualProfit": 553406543.9978353,
+       "totalCost": 62745726.46158008,
+       "coverage": 23.0402,
+       "margin": 14.501567471401259,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Poor\n  Profit margin 14.5% with 23.0% demand coverage.\n  Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 10349644.4258658,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 47634105.5741342,
+        "operating_cost": 16303000.0,
+        "transship_cost": 393712.0,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $10,349,644 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $393,712 + port $8,057,800/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 1642225.333333333,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 3936724.666666667,
+        "operating_cost": 833000.0,
+        "transship_cost": 1416.0,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $1,642,225 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,416 + port $1,713,782/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": -1349436.2207792215,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": 0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 11174896.220779222,
+        "operating_cost": 3276000.0,
+        "transship_cost": 45653.0,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Poor\n  Profit margin 0% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $-1,349,436 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $45,653 + port $2,968,399/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Poor | Profit margin 14.5% with 23.0% demand coverage. | Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": 0.1450156747140127,
+    "regional_margins": {
+     "Asia": null,
+     "Europe": null,
+     "Americas": null
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Poor",
+     "Europe": "Verdict: Poor",
+     "Americas": "Verdict: Poor"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "below_target",
+     "margin_pct": 14.501567471401268,
+     "note": "margin 14.5% < advisory target 15.0% (advisory only; the network remains feasible and its profit is unchanged)"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 14.501567471401259
+  },
+  "derived_margin_just_below_15": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 11000885.184,
+       "annualProfit": 572046029.5680001,
+       "totalCost": 62387274.816,
+       "coverage": 23.0402,
+       "margin": 14.99,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Poor\n  Profit margin 15.0% with 23.0% demand coverage.\n  Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 8691764.125,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 15.0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 49291985.875,
+        "operating_cost": 16209864.777771434,
+        "transship_cost": 391462.81551775424,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Moderate\n  Profit margin 15.0% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $8,691,764 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $391,463 + port $8,011,768/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 836284.605,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 15.0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 4742665.395,
+        "operating_cost": 828241.2660175186,
+        "transship_cost": 1407.91072350637,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 15.0% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $836,285 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,408 + port $1,703,992/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": 1472836.4540000001,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": 15.0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 8352623.546,
+        "operating_cost": 3257284.9789596526,
+        "transship_cost": 45392.195099036944,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Moderate\n  Profit margin 15.0% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $1,472,836 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $45,392 + port $2,951,441/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Poor | Profit margin 15.0% with 23.0% demand coverage. | Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": 0.1499,
+    "regional_margins": {
+     "Asia": 15.0,
+     "Europe": 15.0,
+     "Americas": 15.0
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Moderate",
+     "Europe": "Verdict: Moderate",
+     "Americas": "Verdict: Moderate"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "below_target",
+     "margin_pct": 14.990000000000002,
+     "note": "margin 15.0% < advisory target 15.0% (advisory only; the network remains feasible and its profit is unchanged)"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 14.99
+  },
+  "derived_zero_revenue": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 0.0,
+       "annualProfit": 0.0,
+       "totalCost": 0.0,
+       "coverage": 23.0402,
+       "margin": 0,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Undefined\n  Profit margin n/a (undefined) with 23.0% demand coverage.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 0.0,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 0,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 0.0,
+        "operating_cost": 0.0,
+        "transship_cost": 0.0,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Undefined\n  Profit margin n/a (no revenue) with coverage 29.1%.\n\nStrengths:\n- Weekly profit $0 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 0.0,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 0,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 0.0,
+        "operating_cost": 0.0,
+        "transship_cost": 0.0,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Undefined\n  Profit margin n/a (no revenue) with coverage 11.4%.\n\nStrengths:\n- Weekly profit $0 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": 0.0,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": 0,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 0.0,
+        "operating_cost": 0.0,
+        "transship_cost": 0.0,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Undefined\n  Profit margin n/a (no revenue) with coverage 18.9%.\n\nStrengths:\n- Weekly profit $0 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $0 + port $0/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Undefined | Profit margin n/a (undefined) with 23.0% demand coverage. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": null,
+    "regional_margins": {
+     "Asia": 0,
+     "Europe": 0,
+     "Americas": 0
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Undefined",
+     "Europe": "Verdict: Undefined",
+     "Americas": "Verdict: Undefined"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "undefined",
+     "margin_pct": null,
+     "note": "margin undefined (no revenue)"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 0
+  },
+  "real": {
+   "endpoints": {
+    "/api/metrics/summary": {
+     "status_code": 200,
+     "body": {
+      "metrics": {
+       "weeklyProfit": 10642433.53841991,
+       "annualProfit": 553406543.9978353,
+       "totalCost": 62745726.46158008,
+       "coverage": 23.0402,
+       "margin": 14.501567471401259,
+       "totalServices": 24
+      },
+      "status": {
+       "status": "complete",
+       "assertions_passed": 342,
+       "assertions_failed": 0,
+       "assertions_total": 342,
+       "warnings": 8,
+       "score": 100.0
+      },
+      "executive_summary": "Verdict: Poor\n  Profit margin 14.5% with 23.0% demand coverage.\n  Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged.\n\nStrengths:\n- Weekly profit $10,642,434 across 24 services ($443,435/service/week).\n- Cost breakdown: operating $20,412,000, transship $440,781, port $12,739,981/week.\n\nWeaknesses:\n- 77.0% demand (212,753 TEU/week) unserved.\n- Cost per service $2,614,405/week limits expansion.\n\nPriority Actions:\n- Expand Europe (currently 11.4% coverage).\n- Route capacity to Port CNYTN -> Port USLAX (3,730 TEU/week)."
+     }
+    },
+    "/api/regions/": {
+     "status_code": 200,
+     "body": {
+      "regions": {
+       "asia": {
+        "id": "asia",
+        "name": "Asia",
+        "status": "completed",
+        "profit": 10349644.4258658,
+        "coverage": 29.07902880508122,
+        "services": 17,
+        "margin": 17.8,
+        "hubs": [
+         "CNSHA",
+         "MYTPP",
+         "CNYTN",
+         "HKHKG",
+         "CNTAO"
+        ],
+        "uncovered": 104848.5,
+        "cost": 47634105.5741342,
+        "operating_cost": 16303000.0,
+        "transship_cost": 393712.0,
+        "generated": 629,
+        "filtered": 561,
+        "selected": 17,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 98.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like CNYTN -> USLAX (3,730 TEU/wk) while maintaining hub consolidation for lower-density lanes.\nReason 2: The network comprises 14 ports and 604 lanes, creating a complex topology where a hybrid model optimizes the trade-off between the 7.2% top-3 share concentration and the remaining 92.8% distributed across 604 lanes.\nHub Ports: [CNSHA, MYTPP, CNYTN, HKHKG, CNTAO]",
+        "explanation": "Verdict: Moderate\n  Profit margin 17.8% with coverage 29.1%.\n\nStrengths:\n- Weekly profit $10,349,644 (17 services) -> $608,803/service/week.\n- Satisfied 42,990 TEU/wk at 29.1% coverage.\n\nWeaknesses:\n- 70.9% unserved (104,848 TEU/wk).\n- Transshipment $393,712 + port $8,057,800/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "europe": {
+        "id": "europe",
+        "name": "Europe",
+        "status": "completed",
+        "profit": 1642225.333333333,
+        "coverage": 11.424519219867367,
+        "services": 4,
+        "margin": 29.4,
+        "hubs": [
+         "USCHS",
+         "BRSSZ",
+         "USLAX",
+         "PAMIT",
+         "USEWR"
+        ],
+        "uncovered": 42967.7,
+        "cost": 3936724.666666667,
+        "operating_cost": 833000.0,
+        "transship_cost": 1416.0,
+        "generated": 499,
+        "filtered": 440,
+        "selected": 4,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 48.0 TEU/lane indicates fragmented volume distribution, necessitating direct service for high-volume corridors like BRSSZ -> DEBRV (1,762 TEU/wk) to bypass hub congestion.\nReason 2: The network comprises 12 ports and 391 lanes, creating a dense topology where a hybrid model optimizes the 9.0% top-3 share by balancing hub consolidation at USCHS with direct point-to-point efficiency.\nHub Ports: [USCHS, BRSSZ, USLAX, PAMIT, USEWR]",
+        "explanation": "Verdict: Good\n  Profit margin 29.4% with coverage 11.4%.\n\nStrengths:\n- Weekly profit $1,642,225 (4 services) -> $410,556/service/week.\n- Satisfied 5,542 TEU/wk at 11.4% coverage.\n\nWeaknesses:\n- 88.6% unserved (42,968 TEU/wk).\n- Transshipment $1,416 + port $1,713,782/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       },
+       "americas": {
+        "id": "americas",
+        "name": "Americas",
+        "status": "completed",
+        "profit": -1349436.2207792215,
+        "coverage": 18.92916979822369,
+        "services": 3,
+        "margin": -13.7,
+        "hubs": [
+         "DEBRV",
+         "NLRTM",
+         "AEJEA",
+         "ITGIT",
+         "ZADUR"
+        ],
+        "uncovered": 64936.600000000006,
+        "cost": 11174896.220779222,
+        "operating_cost": 3276000.0,
+        "transship_cost": 45653.0,
+        "generated": 570,
+        "filtered": 547,
+        "selected": 3,
+        "strategy": "Strategy: C\nSelected: hybrid\nReason 1: Median demand of 38.0 TEU/lane indicates fragmented volume requiring direct service for high-density corridors like NLRTM -> HKHKG (1,538 TEU/wk) while maintaining hub consolidation for lower-volume lanes.\nReason 2: The network comprises 21 ports and 769 lanes, necessitating a hybrid model to balance the 5.0% top-3 share concentration with the broad distribution of the remaining 95.0% demand across the region.\nHub Ports: [DEBRV, NLRTM, AEJEA, ITGIT, ZADUR]",
+        "explanation": "Verdict: Poor\n  Profit margin -13.7% with coverage 18.9%.\n\nStrengths:\n- Weekly profit $-1,349,436 (3 services) -> $-449,812/service/week.\n- Satisfied 15,162 TEU/wk at 18.9% coverage.\n\nWeaknesses:\n- 81.1% unserved (64,937 TEU/wk).\n- Transshipment $45,653 + port $2,968,399/wk.\n\nImprovement Actions:\n- Offer the unserved corridors to the next candidate pool.\n- Re-balance vessel classes where utilisation is below target."
+       }
+      },
+      "total_regions": 3
+     }
+    },
+    "/api/pipeline/iterations": {
+     "status_code": 200,
+     "body": {
+      "iterations": [
+       {
+        "iter": 0,
+        "profit": 9332531.192666158,
+        "coverage": 18.431474418759954,
+        "globalCoverage": 20.4449,
+        "score": 0.754,
+        "rerun": true,
+        "reason": "coverage 18.4% is 51.6pp below 70.0% target",
+        "selected_as_final": false
+       },
+       {
+        "iter": 1,
+        "profit": 10642433.53841991,
+        "coverage": 19.810905941057424,
+        "globalCoverage": 23.0402,
+        "score": 0.761,
+        "rerun": true,
+        "reason": "coverage 19.8% is 50.2pp below 70.0% target",
+        "selected_as_final": true
+       },
+       {
+        "iter": 2,
+        "profit": 10473895.16955692,
+        "coverage": 20.696328008713625,
+        "globalCoverage": 22.0763,
+        "score": 0.765,
+        "rerun": false,
+        "reason": "coverage 20.7% is 49.3pp below 70.0% target; [CAPPED] max iterations (3) reached \u2014 halting despite gaps",
+        "selected_as_final": false
+       }
+      ],
+      "current_iteration": 0,
+      "total_iterations": 0
+     }
+    }
+   },
+   "executive_summary_verdict_line": "Verdict: Poor | Profit margin 14.5% with 23.0% demand coverage. | Advisory band: margin below the 15% target; feasibility, verified profit and solver status are unchanged. | ",
+   "decision_layer": {
+    "network_ledger_verified": true,
+    "ledger_margin": 0.1450156747140127,
+    "regional_margins": {
+     "Asia": 17.8,
+     "Europe": 29.4,
+     "Americas": -13.7
+    },
+    "regional_verdicts": {
+     "Asia": "Verdict: Moderate",
+     "Europe": "Verdict: Good",
+     "Americas": "Verdict: Poor"
+    },
+    "evaluation_margin_verdict": {
+     "target_pct": 15.0,
+     "advisory": true,
+     "blocks_acceptance": false,
+     "band": "below_target",
+     "margin_pct": 14.501567471401268,
+     "note": "margin 14.5% < advisory target 15.0% (advisory only; the network remains feasible and its profit is unchanged)"
+    }
+   },
+   "load_pipeline_data": true,
+   "routes_metrics_profit_margin": 14.501567471401259
+  }
+ },
+ "errors": []
+}

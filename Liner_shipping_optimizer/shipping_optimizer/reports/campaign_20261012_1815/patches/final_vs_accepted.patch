@@ -1,0 +1,3229 @@
+diff --git a/src/agents/regional_agent.py b/src/agents/regional_agent.py
+--- a/src/agents/regional_agent.py
++++ b/src/agents/regional_agent.py
+@@ -307,6 +307,10 @@
+ 
+         # ── Service generation ─────────────────────────────────────────
+         svc_agent  = ServiceGeneratorAgent(name="svc_gen", model=self.model)
++        # LINER_SEED: every (region, call) draws its own candidate-generator stream - regions and
++        # iterations differ from each other but repeat from run to run; unseeded runs ignore the label
++        self._svc_calls = getattr(self, "_svc_calls", 0) + 1
++        svc_agent.rng_label = f"{self.region}#{self._svc_calls}"
+         svc_result = svc_agent.process({"problem": problem})
+         services   = svc_result["services"]
+         services_generated = len(services)
+@@ -359,8 +363,10 @@
+         sga_params = get_service_ga_params(region_budget)
+         freq_params = get_frequency_ga_params(region_budget)
+         try:
++            self._ga_calls = getattr(self, "_ga_calls", 0) + 1
+             ga = HierarchicalGA(
+                 problem,
++                rng_label           = f"{self.region}#{self._ga_calls}",
+                 pop_size            = sga_params["pop_size"],
+                 generations         = sga_params["generations"],
+                 w_profit            = getattr(problem, "profit_weight", 0.5),
+diff --git a/src/agents/service_generator_agent.py b/src/agents/service_generator_agent.py
+--- a/src/agents/service_generator_agent.py
++++ b/src/agents/service_generator_agent.py
+@@ -384,7 +384,9 @@
+         # ── E: Heuristic base candidate pool ───────────────────────────
+         # Use adaptive heuristic target instead of fixed 150.
+         heuristic_limit = min(heuristic_target_raw, len(top_demands)) if heuristic_target_raw else 150
+-        generator = CandidateServiceGenerator(problem)
++        from src.utils.rng import streams as _streams
++        generator = CandidateServiceGenerator(
++            problem, rng=_streams("candidate_generator", getattr(self, "rng_label", None) or self.name).py)
+         generator._service_id_counter = sid
+         base_services = generator.generate_services(num_services=heuristic_limit)
+         # CandidateServiceGenerator yields plain {"ports": [...]} records. They go
+@@ -546,6 +548,7 @@
+             )
+ 
+         # ── Generate structured archetype params from LLM + validation ──
++        parse_succeeded = False
+         try:
+             json_prompt = prompt + (
+                 "\n\nReturn ONLY valid JSON (no markdown, no preamble):\n"
+@@ -557,6 +560,7 @@
+             )
+             raw_json = self.call_llm(json_prompt, temperature=0.1)
+             self._metrics["llm_calls"] += 1
++            logger.info('archetype_params_generated | tag=%s raw_len=%s', "AI_GENERATED", len(raw_json))
+             logger.info('p1e_raw_svcgen | raw_len=%s raw_preview=%s', len(raw_json), raw_json[:200])
+             import json as _json
+             import re as _re
+@@ -584,6 +588,9 @@
+         services         = self.generate_services(problem, archetype_params=archetype_params)
+         problem.services = services
+         logger.info('services_attached_to_problem | count=%s', len(services))
++        if parse_succeeded:
++            # the validated archetype parameters were handed to the generator (observability tag only)
++            logger.info('archetype_params_applied | tag=%s params=%s', "AI_APPLIED", archetype_params)
+ 
+         # Phase L + M — actuation record.
+         act = actuation_ledger.begin(f"service_generator_{self.name}")
+diff --git a/src/network/class_variants.py b/src/network/class_variants.py
+new file
+--- /dev/null
++++ b/src/network/class_variants.py
+@@ -0,0 +1,155 @@
++"""Targeted alternative-class candidates for rotations of an over-subscribed vessel class (opt-in).
++
++Problem (measured, reports/expansion_2026_10_12): after the regional filter the candidate pool is
++83 % one class (Feeder_800: 1,288 of 1,551 regional candidates) while that class owns 29 vessels;
++every operated plan exhausts it, and 16 % of the demand is blocked by class inventory although the
++same rotations could be sailed - inside the transit limit - by a class with idle vessels
++(Panamax_2400: 58-59 idle, Panamax_1200: 18-24, Post_panamax: 15-21).  The class screening
++offers one class per rotation (k = 1), so no such variant exists in the pool.
++
++What this does (``LINER_CLASS_VARIANTS`` = fraction of the unique pool to add; 0 / unset = OFF)
++  1. a class is *over-subscribed* when the pool holds at least ``PRESSURE_RATIO`` (2.0) candidates
++     per vessel of the class's inventory; a class is a *target* when it is not over-subscribed;
++  2. every rotation of an over-subscribed class is evaluated in every target class with the
++     canonical stand-alone model (``ClassScreener.evaluate_class``: feasibility, vessels per
++     weekly sailing against the class inventory, ride-feasible cargo inside the transit limit,
++     hire + fuel + port calls at the pinned price);
++  3. only variants with a POSITIVE stand-alone profit are kept by default (``LINER_CLASS_VARIANTS_FLOOR``
++     < 0 admits variants that lose up to that much stand-alone: a labelled experiment on complementary
++     roles - the MILP still charges their real fixed and variable costs), at most one variant per
++     rotation (the best profit per vessel - variants of one rotation are substitutes);
++  4. the best ``fraction * |pool|`` variants by profit per vessel are appended to the pool.
++
++Nothing here prices cargo or accounts cost: variants are ordinary candidates; the global MILP
++decides, with their actual fixed and variable costs, and the independent ledger verifies the plan.
++Every addition is returned with its provenance.
++"""
++
++from __future__ import annotations
++
++import math
++import os
++import time
++from collections import Counter
++from typing import Dict, List, Optional, Sequence, Tuple
++
++ENV_VARIANTS = "LINER_CLASS_VARIANTS"
++ENV_FLOOR = "LINER_CLASS_VARIANTS_FLOOR"     # stand-alone profit floor, USD/week (default 0 = positive only)
++PRESSURE_RATIO = 2.0
++
++
++def fraction_from_environment(env: Optional[Dict[str, str]] = None) -> float:
++    """Fraction of the unique pool to add (0 = off).  Malformed values raise ``ValueError``."""
++    raw = ((os.environ if env is None else env).get(ENV_VARIANTS) or "").strip()
++    if not raw:
++        return 0.0
++    try:
++        v = float(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_VARIANTS} must be a fraction in [0, 1], got {raw!r}") from None
++    if not (0.0 <= v <= 1.0) or not math.isfinite(v):
++        raise ValueError(f"{ENV_VARIANTS} must be a fraction in [0, 1], got {v}")
++    return v
++
++
++def floor_from_environment(env: Optional[Dict[str, str]] = None) -> float:
++    """Stand-alone profit floor (USD/week, <= 0).  0 (default) keeps only variants that earn money
++    stand-alone; a negative value ADMITS variants that lose up to that much stand-alone, as a labelled
++    experiment on complementary network roles (the MILP still charges their real costs)."""
++    raw = ((os.environ if env is None else env).get(ENV_FLOOR) or "").strip()
++    if not raw:
++        return 0.0
++    try:
++        v = float(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_FLOOR} must be a number <= 0, got {raw!r}") from None
++    if not math.isfinite(v) or v > 0:
++        raise ValueError(f"{ENV_FLOOR} must be a finite number <= 0, got {v}")
++    return v
++
++
++def augment_candidates(problem, assumptions, candidates: Sequence, *, fraction: float,
++                       deadline: Optional[float] = None, standalone_floor: Optional[float] = None,
++                       id_prefix: str = "cv") -> Tuple[List, Dict]:
++    """Return (new candidates, report).  ``candidates`` are ``Candidate`` objects (service_id, ports,
++    vessel_class).  Never raises for an unattainable variant: it is counted in the report."""
++    from src.network.plan import Candidate
++    from src.services.class_screening import ClassScreener, ClassScreeningConfig
++
++    t0 = time.perf_counter()
++    floor = floor_from_environment() if standalone_floor is None else float(standalone_floor)
++    rep: Dict = {"requested_fraction": fraction, "standalone_profit_floor": floor,
++                 "pool_unique": len(candidates), "added": 0,
++                 "over_subscribed_classes": {}, "target_classes": [], "rotations_evaluated": 0,
++                 "variants_feasible": 0, "variants_positive_standalone": 0, "variants_already_in_pool": 0,
++                 "additions": [], "sec": 0.0, "stopped_by_deadline": False}
++    if fraction <= 0 or not candidates:
++        return [], rep
++    fleet = problem.fleet
++    inventory = {c.vessel_class: int(c.quantity) for c in fleet.classes}
++    count = Counter(c.vessel_class for c in candidates)
++    ratio = {cls: count.get(cls, 0) / max(1, inventory[cls]) for cls in inventory}
++    over = {cls for cls, r in ratio.items() if r >= PRESSURE_RATIO}
++    targets = [cls for cls in inventory if cls not in over and inventory[cls] > 0]
++    rep["over_subscribed_classes"] = {cls: {"candidates": count.get(cls, 0), "inventory": inventory[cls],
++                                            "ratio": round(ratio[cls], 2)} for cls in sorted(over)}
++    rep["target_classes"] = sorted(targets)
++    if not over or not targets:
++        rep["reason"] = "no over-subscribed class" if not over else "no target class"
++        rep["sec"] = round(time.perf_counter() - t0, 2)
++        return [], rep
++
++    screener = ClassScreener(problem, fleet, assumptions, ClassScreeningConfig(k=1))
++    existing = {(tuple(c.ports), c.vessel_class) for c in candidates}
++    scored: List[Tuple[float, float, str, Tuple[str, ...], str, str, object]] = []
++    for c in candidates:
++        if c.vessel_class not in over:
++            continue
++        if deadline is not None and time.perf_counter() > deadline:
++            rep["stopped_by_deadline"] = True
++            break
++        rep["rotations_evaluated"] += 1
++        best = None
++        for tgt in targets:
++            if (tuple(c.ports), tgt) in existing:
++                rep["variants_already_in_pool"] += 1
++                continue
++            try:
++                ev = screener.evaluate_class(list(c.ports), fleet.get_class(tgt))
++            except Exception:                                           # noqa: BLE001
++                continue
++            if not ev.feasible:
++                continue
++            rep["variants_feasible"] += 1
++            if ev.vessels_at_best > inventory[tgt]:
++                continue
++            if ev.standalone_profit_best <= 0.0 and (floor >= 0.0 or ev.standalone_profit_best < floor):
++                continue
++            rep["variants_positive_standalone"] += 1
++            key = (ev.profit_per_vessel, ev.standalone_profit_best)
++            if best is None or key > best[0]:
++                best = (key, tgt, ev)
++        if best is not None:
++            (ppv, sap), tgt, ev = best
++            scored.append((ppv, sap, c.service_id, tuple(c.ports), c.vessel_class, tgt, ev))
++    scored.sort(key=lambda r: (-r[0], -r[1], r[2]))
++    n_add = min(len(scored), max(1, int(round(fraction * len(candidates)))))
++    new: List = []
++    for rank, (ppv, sap, src_id, ports, src_cls, tgt, ev) in enumerate(scored[:n_add]):
++        cid = f"{id_prefix}{rank:04d}"
++        new.append(Candidate(cid, ports, tgt))
++        rep["additions"].append({
++            "service_id": cid, "ports": list(ports), "vessel_class": tgt, "rotation_of": src_id,
++            "source_class": src_cls, "standalone_profit_usd_per_week": round(sap, 1),
++            "profit_per_vessel_usd_per_week": round(ppv, 1), "best_frequency": ev.best_frequency,
++            "vessels_at_best": ev.vessels_at_best, "served_teu_best": round(ev.served_teu_best, 1),
++            "fixed_cost_usd_per_week": round(ev.fixed_cost_best, 1), "rank": rank,
++            "standalone_negative": sap <= 0.0,
++            "reason": "alternative class for a rotation of an over-subscribed class "
++                      f"({src_cls}: {rep['over_subscribed_classes'][src_cls]['ratio']} candidates "
++                      f"per vessel); stand-alone profit {'positive' if sap > 0 else 'within the stated floor (negative)'}; "
++                      f"best profit per vessel of the rotation's variants"})
++    rep["added"] = len(new)
++    rep["scored_variants_available"] = len(scored)
++    rep["sec"] = round(time.perf_counter() - t0, 2)
++    return new, rep
+diff --git a/src/network/flow_reopt.py b/src/network/flow_reopt.py
+--- a/src/network/flow_reopt.py
++++ b/src/network/flow_reopt.py
+@@ -128,11 +128,16 @@
+     old_margin, new_margin = spec_margin(old_rows), spec_margin(carrying)
+     rep["served_teu_before"] = float(sum(t for _, _, _, t in old_rows))
+     rep["served_teu_after"] = float(sum(t for _, _, _, t in carrying))
+-    rep["gain_usd"] = new_margin - old_margin
+     rep["lp_sec"] = round(time.perf_counter() - t0, 2)
+     if new_margin <= old_margin + MIN_GAIN_USD:
++        # not applied: the plan keeps its flows, so no gain is claimed.  (The LP's margin can be BELOW the
++        # incumbent's when the incumbent already uses paths outside this re-routing's enumeration, e.g.
++        # after the exact-LP local search; the difference is recorded separately, never as a "gain".)
++        rep["gain_usd"] = 0.0
++        rep["lp_margin_minus_incumbent_usd"] = new_margin - old_margin
+         rep["reason"] = "no improvement over the incumbent's flows"
+         return rep
++    rep["gain_usd"] = new_margin - old_margin
+ 
+     # ---- accepted: extend the capped lists (existing indices untouched) and replace the flows
+     new_flows: List[Tuple[int, int, float]] = []
+diff --git a/src/network/local_search.py b/src/network/local_search.py
+new file
+--- /dev/null
++++ b/src/network/local_search.py
+@@ -0,0 +1,502 @@
++"""Exact-LP local search over the operated service set (C2, opt-in, default OFF).
++
++Why
++    The time-limited MILP incumbent leaves profit on the table that single, exactly priced
++    moves recover: services whose opening pays for itself once every valid path (not only the
++    10 fastest per OD) is available, services that lose money, and frequencies one sailing off.
++    Measured offline on recorded plans (reports/expansion_2026_10_12): four add moves were
++    worth +1.1 .. +1.3 M USD/week.
++
++What it does
++    Starting from the MILP plan (services, weekly frequencies), repeatedly applies the single
++    move that raises the weekly profit most, until no move gains more than ``min_gain_usd`` or
++    the deadline passes.  Moves (each evaluated EXACTLY):
++
++        add   an unoperated service at one weekly departure
++        drop  an operated service
++        freq  an operated service's frequency +1 / -1
++
++    Profit of a service configuration F = LP_margin(F) - sum_s fixed_cost_s(f_s), where
++    LP_margin is the optimum of the same cargo LP as ``flow_reopt.reoptimize_flows``
++    (max sum (revenue_od - per-TEU charges_p) q_p; OD demand once; capacity of EVERY leg of
++    every service  <= capacity_s * f_s) over all valid, time-feasible paths of the operated
++    services, and fixed_cost_s is ``ServiceModel.weekly_fixed_cost`` (vessel hire of
++    ceil(T f / 7) vessels + fuel + fixed port calls) - the same terms the MILP objective and the
++    independent ledger use.
++
++Hard constraints (a move that breaks one is never evaluated as feasible)
++    * class vessel inventory (sum over operated services of ceil(T f / 7) per class <= limit);
++    * f <= ``ServiceModel.max_departures(limit)``;
++    * leg capacity and OD demand (inside the LP); transit-time limits are in the path set;
++    * served TEU never falls below the incumbent's (or a coverage floor): the search may
++      trade nothing against coverage.
++
++What it does NOT do
++    It never changes a price, cost, constraint or the path rule; it does not run a solver other
++    than an LP; it does not claim optimality (a plan it changes is ``feasible``, its bound is
++    that of the capped MILP).  The independent ledger verifies whatever is returned.
++
++Time
++    The caller gives an absolute deadline (``time.perf_counter()`` instant); no move is started
++    after it.  The stage budget (MILP + this search) is split by the caller.
++"""
++
++from __future__ import annotations
++
++import math
++import os
++import time
++from collections import defaultdict
++from dataclasses import dataclass
++from typing import Dict, List, Optional, Sequence, Tuple
++
++ENV_ENABLED = "LINER_LOCAL_SEARCH"          # 0 | 1  (default 0)
++ENV_RESERVE = "LINER_LOCAL_SEARCH_SEC"      # seconds taken from the stage budget (default 15)
++ENV_MOVES = "LINER_LOCAL_SEARCH_MOVES"      # comma list of add,drop,freq (default all)
++ENV_MULTIHOP = "LINER_LOCAL_SEARCH_MULTIHOP"  # 1: the search's path set enumerates two-transfer journeys for EVERY OD
++ENV_VARIANTS = "LINER_LOCAL_SEARCH_VARIANTS"  # fraction of the pool: alternative-class variants visible ONLY to the search
++ENV_VARIANTS_FLOOR = "LINER_LOCAL_SEARCH_VARIANTS_FLOOR"  # stand-alone profit floor (USD/week, <= 0) of those variants
++
++ALL_MOVES = ("add", "drop", "freq")
++DEFAULT_RESERVE_SEC = 15.0
++MAX_RESERVE_FRACTION = 0.5                  # never more than half of the stage budget
++MIN_GAIN_USD = 1000.0                       # a move must raise the weekly profit by more than this
++COVERAGE_TOL_TEU = 1e-6
++FLOW_NOISE_TEU = 1e-6
++
++
++@dataclass(frozen=True)
++class LocalSearchConfig:
++    enabled: bool = False
++    reserve_sec: float = DEFAULT_RESERVE_SEC
++    moves: Tuple[str, ...] = ALL_MOVES
++    max_iterations: int = 60
++    min_gain_usd: float = MIN_GAIN_USD
++    # enumerate two-transfer journeys for every OD (not only where the shorter journeys are too few): a
++    # richer evaluator at the price of ~10 s of path construction inside the reserve
++    multi_hop: bool = False
++
++    def __post_init__(self):
++        if not (0.0 < self.reserve_sec <= 3600.0):
++            raise ValueError("local-search reserve must be in (0, 3600] seconds")
++        bad = [m for m in self.moves if m not in ALL_MOVES]
++        if bad or not self.moves:
++            raise ValueError(f"local-search moves must be a non-empty subset of {ALL_MOVES}, got {self.moves!r}")
++
++
++def config_from_environment(env: Optional[Dict[str, str]] = None) -> LocalSearchConfig:
++    """Unset = disabled.  A malformed value raises ``ValueError`` (never silently replaced)."""
++    e = os.environ if env is None else env
++    raw = (e.get(ENV_ENABLED) or "").strip().lower()
++    if raw in ("", "0", "false", "no", "off"):
++        return LocalSearchConfig(enabled=False)
++    if raw not in ("1", "true", "yes", "on"):
++        raise ValueError(f"{ENV_ENABLED} must be 0 or 1, got {raw!r}")
++    kw: Dict = {"enabled": True}
++    r = (e.get(ENV_RESERVE) or "").strip()
++    if r:
++        try:
++            kw["reserve_sec"] = float(r)
++        except ValueError:
++            raise ValueError(f"{ENV_RESERVE} must be a number of seconds, got {r!r}") from None
++    m = (e.get(ENV_MOVES) or "").strip().lower()
++    if m:
++        kw["moves"] = tuple(x.strip() for x in m.split(",") if x.strip())
++    mh = (e.get(ENV_MULTIHOP) or "").strip().lower()
++    if mh in ("1", "true", "yes", "on"):
++        kw["multi_hop"] = True
++    elif mh not in ("", "0", "false", "no", "off"):
++        raise ValueError(f"{ENV_MULTIHOP} must be 0 or 1, got {mh!r}")
++    return LocalSearchConfig(**kw)
++
++
++def variants_from_environment(env: Optional[Dict[str, str]] = None) -> float:
++    """Fraction of the unique pool offered to the SEARCH as extra alternative-class services (they never
++    enter the MILP, so they cannot slow it down).  0 / unset = none.  See src/network/class_variants.py."""
++    raw = ((os.environ if env is None else env).get(ENV_VARIANTS) or "").strip()
++    if not raw:
++        return 0.0
++    try:
++        v = float(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_VARIANTS} must be a fraction in [0, 1], got {raw!r}") from None
++    if not (0.0 <= v <= 1.0):
++        raise ValueError(f"{ENV_VARIANTS} must be a fraction in [0, 1], got {v}")
++    return v
++
++
++def variants_floor_from_environment(env: Optional[Dict[str, str]] = None) -> Optional[float]:
++    """Stand-alone profit floor (USD/week, <= 0) of the search-only variants.  A variant that loses money
++    stand-alone can still be worth opening as a complement; the search prices every move EXACTLY and keeps
++    it only when the plan's profit rises, so a negative floor cannot buy a loss.  Unset = ``None``: the
++    generator's own default applies (``LINER_CLASS_VARIANTS_FLOOR`` if set, else 0 = positive only)."""
++    raw = ((os.environ if env is None else env).get(ENV_VARIANTS_FLOOR) or "").strip()
++    if not raw:
++        return None
++    try:
++        v = float(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_VARIANTS_FLOOR} must be a number <= 0, got {raw!r}") from None
++    if v != v or v in (float("inf"), float("-inf")) or v > 0:
++        raise ValueError(f"{ENV_VARIANTS_FLOOR} must be a finite number <= 0, got {v}")
++    return v
++
++
++def reserve_for(cfg: LocalSearchConfig, stage_budget_sec: float) -> float:
++    """Seconds of the stage budget given to the search (never more than half of it)."""
++    return min(cfg.reserve_sec, MAX_RESERVE_FRACTION * float(stage_budget_sec))
++
++
++class _Evaluator:
++    """Cargo LP over a fixed column set (all valid paths of the pool)."""
++
++    def __init__(self, models, demands, all_paths: Dict[int, List], plan_paths: Optional[Dict[int, List]] = None):
++        from scipy.optimize import linprog                       # scipy is a pinned requirement
++        from scipy.sparse import coo_matrix
++        import numpy as np
++        self._linprog, self._coo, self._np = linprog, coo_matrix, np
++        self.models, self.demands = models, demands
++        self.cols: List[Tuple[int, object, frozenset, float, Tuple]] = []
++        self.by_service: Dict[int, List[int]] = defaultdict(list)
++        # the plan's own paths are always columns: the incumbent is then feasible in the evaluator by
++        # construction (a path the MILP / earlier steps used may lie outside the enumerated set)
++        merged: Dict[int, List] = {di: list(pl) for di, pl in all_paths.items()}
++        if plan_paths:
++            seen = {(di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments))
++                    for di, pl in merged.items() for p in pl}
++            for di, pl in plan_paths.items():
++                for p in pl:
++                    key = (di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments))
++                    if key not in seen:
++                        seen.add(key)
++                        merged.setdefault(di, []).append(p)
++        for di, plist in merged.items():
++            if not demands[di].weekly_teu > 0:
++                continue
++            for p in plist:
++                j = len(self.cols)
++                legs = tuple((seg.service, leg) for seg in p.segments for leg in seg.legs)
++                self.cols.append((di, p, frozenset(p.services),
++                                  float(demands[di].revenue_per_teu - p.port_cost_per_teu), legs))
++                for s in set(p.services):
++                    self.by_service[s].append(j)
++        self.n_lp = 0
++
++    def columns_for(self, services) -> List[int]:
++        S = frozenset(services)
++        out, seen = [], set()
++        for s in S:
++            for j in self.by_service.get(s, ()):
++                if j not in seen:
++                    seen.add(j)
++                    if self.cols[j][2] <= S:
++                        out.append(j)
++        return out
++
++    def solve(self, freq: Dict[int, int], ids: Sequence[int], floor_teu: float = 0.0,
++              want_flows: bool = False):
++        """(margin, served_teu, {col: q}) of the best routing, or None if the floor is unattainable."""
++        self.n_lp += 1
++        if not ids:
++            return (0.0, 0.0, {}) if floor_teu <= COVERAGE_TOL_TEU else None
++        np = self._np
++        od_row: Dict[int, int] = {}
++        leg_row: Dict[Tuple[int, int], int] = {}
++        rows, cs, b = [], [], []
++        cvec = np.empty(len(ids))
++        for ci, j in enumerate(ids):
++            di, _p, _S, margin, legs = self.cols[j]
++            r = od_row.get(di)
++            if r is None:
++                r = od_row[di] = len(b)
++                b.append(float(self.demands[di].weekly_teu))
++            rows.append(r)
++            cs.append(ci)
++            cvec[ci] = -margin
++            for key in legs:
++                r = leg_row.get(key)
++                if r is None:
++                    r = leg_row[key] = len(b)
++                    b.append(float(self.models[key[0]].capacity_teu * freq[key[0]]))
++                rows.append(r)
++                cs.append(ci)
++        vals = [1.0] * len(rows)
++        n_rows = len(b)
++        if floor_teu > COVERAGE_TOL_TEU:                      # sum q >= floor  <=>  -sum q <= -floor
++            for ci in range(len(ids)):
++                rows.append(n_rows)
++                cs.append(ci)
++                vals.append(-1.0)
++            b.append(-float(floor_teu))
++            n_rows += 1
++        A = self._coo((vals, (rows, cs)), shape=(n_rows, len(ids))).tocsr()
++        r = self._linprog(cvec, A_ub=A, b_ub=np.array(b), bounds=(0, None), method="highs")
++        if not r.success:
++            return None
++        flows = {}
++        if want_flows:
++            for ci, j in enumerate(ids):
++                if r.x[ci] > FLOW_NOISE_TEU:
++                    flows[j] = float(r.x[ci])
++        return float(-r.fun), float(r.x.sum()), flows
++
++
++def local_search(models, demands, paths: Dict[int, List], sol, class_limits: Dict[str, int],
++                 build_all_paths, *, config: LocalSearchConfig, deadline: float,
++                 min_served_teu: float = 0.0) -> Dict:
++    """Improve ``sol`` in place when (and only when) the exact evaluator shows a gain; return a report.
++
++    ``build_all_paths()`` -> (dict od -> [OdPath], stats): every valid time-feasible path of the pool.
++    ``deadline`` is a ``time.perf_counter()`` instant; no evaluation starts after it."""
++    t_start = time.perf_counter()
++    rep: Dict = {"applied": False, "reason": "", "moves": [], "evaluations": 0, "iterations": 0,
++                 "profit_before": None, "profit_after": None, "served_before": None, "served_after": None,
++                 "gain_usd": 0.0, "setup_sec": 0.0, "search_sec": 0.0, "terminated_by": "",
++                 "reserve_sec": config.reserve_sec, "moves_enabled": list(config.moves)}
++    f0 = {si: int(fr) for si, fr in sol.frequencies.items() if fr > 0}
++    if not f0 or not sol.flows:
++        rep.update(reason="no operated service", terminated_by="no_incumbent")
++        return rep
++    try:
++        full, _stats = build_all_paths()
++        ev = _Evaluator(models, demands, full, plan_paths=paths)
++    except Exception as exc:                                         # noqa: BLE001
++        rep.update(reason=f"evaluator unavailable: {type(exc).__name__}: {exc}", terminated_by="error")
++        return rep
++    rep["setup_sec"] = round(time.perf_counter() - t_start, 2)
++    if time.perf_counter() >= deadline:
++        rep.update(reason="deadline reached during set-up", terminated_by="deadline_before_search")
++        return rep
++
++    def vessels_used(freq) -> Dict[str, int]:
++        used: Dict[str, int] = defaultdict(int)
++        for s, f in freq.items():
++            used[models[s].vessel_class] += models[s].vessels(f)
++        return used
++
++    def fixed(freq) -> float:
++        return sum(models[s].weekly_fixed_cost(f) for s, f in freq.items())
++
++    incumbent_served = float(sum(t for _, _, t in sol.flows))
++    floor = max(float(min_served_teu), incumbent_served) - COVERAGE_TOL_TEU
++    cur = dict(f0)
++    cur_ids = ev.columns_for(cur)
++    base = ev.solve(cur, cur_ids, floor)
++    if base is None:
++        rep.update(reason="incumbent infeasible in the evaluator", terminated_by="error")
++        return rep
++    cur_margin, cur_served, _ = base
++    cur_profit = cur_margin - fixed(cur)
++    start_profit = cur_profit
++    rep.update(profit_before=cur_profit, served_before=incumbent_served)
++    used = vessels_used(cur)
++
++    def room(cls: str) -> int:
++        return int(class_limits.get(cls, 0)) - used.get(cls, 0)
++
++    def expired() -> bool:
++        return time.perf_counter() >= deadline
++
++    # ORDERING heuristic for the add moves (not a bound, nothing is pruned on it): gross margin the
++    # service could earn at one weekly departure if every TEU-leg of its capacity earned the best unit
++    # margin of its columns, minus its fixed cost.  Services with no column are never candidates.
++    ub_open: Dict[int, float] = {}
++    for s in range(len(models)):
++        cols = ev.by_service.get(s)
++        if not cols or s in cur:
++            continue
++        best_margin = max(ev.cols[j][3] for j in cols)
++        gross = models[s].capacity_teu * len(models[s].legs) * max(best_margin, 0.0)
++        ub_open[s] = gross - models[s].weekly_fixed_cost(1)
++    add_queue = sorted(ub_open, key=lambda s: -ub_open[s])
++    stale: Dict[int, float] = {}            # last evaluated delta of an add (lazy greedy)
++    t_search = time.perf_counter()
++    terminated = "local_optimum"
++
++    for it in range(config.max_iterations):
++        if expired():
++            terminated = "deadline"
++            break
++        best = None                                          # (profit, kind, service, f, ids, served)
++        # --- operated services: drop / frequency moves (cheap: few services) ---------------------
++        if "drop" in config.moves or "freq" in config.moves:
++            for s, f in list(cur.items()):
++                if expired():
++                    break
++                trial_moves = []
++                if "drop" in config.moves:
++                    trial_moves.append(("drop", s, 0))
++                if "freq" in config.moves:
++                    cls = models[s].vessel_class
++                    if (f + 1 <= models[s].max_departures(int(class_limits.get(cls, 0)))
++                            and room(cls) >= models[s].vessels(f + 1) - models[s].vessels(f)):
++                        trial_moves.append(("up", s, f + 1))
++                    if f > 1:
++                        trial_moves.append(("down", s, f - 1))
++                for kind, s2, f2 in trial_moves:
++                    trial = dict(cur)
++                    if kind == "drop":
++                        trial.pop(s2)
++                        ids = [j for j in cur_ids if s2 not in ev.cols[j][2]]
++                    else:
++                        trial[s2] = f2
++                        ids = cur_ids
++                    got = ev.solve(trial, ids, floor)
++                    rep["evaluations"] += 1
++                    if got is None:
++                        continue
++                    pr = got[0] - fixed(trial)
++                    if best is None or pr > best[0]:
++                        best = (pr, kind, s2, f2, ids, got[1])
++        # --- unoperated services: add at f=1, lazy greedy over the UB-ordered queue -------------
++        if "add" in config.moves and not expired():
++            order = sorted((s for s in add_queue if s not in cur),
++                           key=lambda s: -(stale.get(s, ub_open.get(s, 0.0))))
++            best_add = None
++            for s in order:
++                if expired():
++                    break
++                # lazy: stale values are optimistic upper bounds only if they were measured at an
++                # earlier (smaller) network; skip when even the stale value cannot beat the best
++                if best_add is not None and stale.get(s, float("inf")) + 1.0 < best_add[0] - cur_profit:
++                    continue
++                cls = models[s].vessel_class
++                if room(cls) < models[s].vessels(1) or models[s].max_departures(int(class_limits.get(cls, 0))) < 1:
++                    continue
++                S = set(cur) | {s}
++                ids = cur_ids + [j for j in ev.by_service.get(s, ()) if ev.cols[j][2] <= S]
++                trial = dict(cur)
++                trial[s] = 1
++                got = ev.solve(trial, ids, floor)
++                rep["evaluations"] += 1
++                if got is None:
++                    continue
++                pr = got[0] - fixed(trial)
++                stale[s] = pr - cur_profit
++                if best_add is None or pr > best_add[0]:
++                    best_add = (pr, "add", s, 1, ids, got[1])
++            if best_add is not None and (best is None or best_add[0] > best[0]):
++                best = best_add
++        if best is None:
++            terminated = "deadline" if expired() else "local_optimum"
++            break
++        if best[0] <= cur_profit + config.min_gain_usd:
++            terminated = "deadline" if expired() else "local_optimum"
++            break
++        pr, kind, s, f, ids, srv = best
++        if kind == "drop":
++            cur.pop(s)
++        else:
++            cur[s] = f
++        cur_ids = ids            # add: extended; drop: filtered; up/down: unchanged (same service set)
++        used = vessels_used(cur)
++        rep["moves"].append({"iter": it, "move": kind, "service": models[s].service_id, "f": f,
++                             "profit": round(pr, 1), "gain": round(pr - cur_profit, 1),
++                             "served_teu": round(srv, 1),
++                             "t_sec": round(time.perf_counter() - t_start, 2)})
++        cur_profit, cur_served = pr, srv
++        rep["iterations"] = it + 1
++    else:
++        terminated = "max_iterations"
++    rep["search_sec"] = round(time.perf_counter() - t_search, 2)
++    rep["terminated_by"] = terminated
++    rep["profit_after"] = cur_profit
++    rep["served_after"] = cur_served
++    rep["gain_usd"] = cur_profit - start_profit
++    if not rep["moves"] or cur_profit <= start_profit + config.min_gain_usd:
++        rep["reason"] = "no move raises the weekly profit"
++        rep["profit_after"] = start_profit
++        rep["served_after"] = incumbent_served
++        rep["gain_usd"] = 0.0
++        return rep
++
++    # ---- apply: final exact routing at the final configuration (flows over the evaluator's paths) --
++    final_ids = ev.columns_for(cur)
++    got = ev.solve(cur, final_ids, floor, want_flows=True)
++    if got is None:
++        rep.update(reason="final routing infeasible", terminated_by="error", profit_after=start_profit,
++                   served_after=incumbent_served, gain_usd=0.0)
++        return rep
++    margin, served_final, carrying = got
++    known = {(di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments)): k
++             for di, plist in paths.items() for k, p in enumerate(plist)}
++    new_flows: List[Tuple[int, int, float]] = []
++    served_by_od: Dict[int, float] = defaultdict(float)
++    appended = 0
++    for j, val in carrying.items():
++        di, p = ev.cols[j][0], ev.cols[j][1]
++        key = (di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments))
++        k = known.get(key)
++        if k is None:
++            paths.setdefault(di, [])
++            paths[di].append(p)
++            k = len(paths[di]) - 1
++            known[key] = k
++            appended += 1
++        new_flows.append((di, k, val))
++        served_by_od[di] += val
++    revenue = sum(demands[di].revenue_per_teu * t for di, _k, t in new_flows)
++    port = sum(paths[di][k].port_cost_per_teu * t for di, k, t in new_flows)
++    comp = dict(sol.objective_components)
++    comp["revenue"], comp["per_teu_port_cost"] = revenue, port
++    comp["vessel_cost"] = sum(models[s].vessel_week_cost * models[s].vessels(f) for s, f in cur.items())
++    comp["fuel_cost"] = sum(models[s].fuel_cost_per_rotation * f for s, f in cur.items())
++    comp["port_fixed_cost"] = sum(models[s].port_fixed_per_rotation * f for s, f in cur.items())
++    pen = comp.get("unserved_penalty", 0.0)
++    sol.frequencies = {s: int(f) for s, f in cur.items()}
++    sol.vessels = {s: int(models[s].vessels(f)) for s, f in cur.items()}
++    sol.objective_value = (revenue - port - comp["vessel_cost"] - comp["fuel_cost"]
++                           - comp["port_fixed_cost"] - pen)
++    sol.objective_components = comp
++    sol.flows = sorted(new_flows)
++    sol.unserved = {di: max(0.0, float(demands[di].weekly_teu) - served_by_od.get(di, 0.0))
++                    for di, d in enumerate(demands) if d.weekly_teu > 0}
++    rep.update(applied=True, reason="services / frequencies changed by exact-LP moves",
++               paths_added=appended, profit_after=margin - fixed(cur), served_after=served_final,
++               gain_usd=(margin - fixed(cur)) - start_profit, lp_evaluations=ev.n_lp,
++               services_after=len(cur), vessels_after=sum(used.values()))
++    return rep
++
++
++#: a routed quantity at or below this is solver noise, not cargo (same as flow_reopt / the MILP)
++IDLE_TEU = 1e-6
++
++
++def prune_idle_services(models, paths: Dict[int, List], sol) -> Dict:
++    """Drop every operated service that carries NO cargo in the final flows.
++
++    Found by the hold-out gate (campaign 2026-10-12, seed 17): the last move of the search added a
++    one-vessel service for a 9 k USD/week gain, then the final re-routing found better paths and the
++    service ended up empty - a vessel hired for nothing (74.5 k USD/week).  An idle service changes
++    neither cargo nor coverage, so removing it can only raise profit (by its weekly fixed cost) and
++    frees its vessels.  Applied only inside the opt-in local-search stage, after the re-routing and
++    the profit-floor repair; frequencies, vessels and the cost terms of the objective are updated from
++    the same service models the MILP and the independent ledger use.
++    """
++    rep: Dict = {"applied": False, "dropped": [], "gain_usd": 0.0}
++    carrying = set()
++    for di, k, teu in sol.flows:
++        if teu > IDLE_TEU:
++            carrying.update(paths[di][k].services)
++    idle = sorted(si for si, f in sol.frequencies.items() if f > 0 and si not in carrying)
++    if not idle:
++        return rep
++    comp = dict(sol.objective_components)
++    saved = 0.0
++    for si in idle:
++        f = int(sol.frequencies[si])
++        m = models[si]
++        comp["vessel_cost"] = comp.get("vessel_cost", 0.0) - m.vessel_week_cost * m.vessels(f)
++        comp["fuel_cost"] = comp.get("fuel_cost", 0.0) - m.fuel_cost_per_rotation * f
++        comp["port_fixed_cost"] = comp.get("port_fixed_cost", 0.0) - m.port_fixed_per_rotation * f
++        saved += m.weekly_fixed_cost(f)
++        rep["dropped"].append({"service": m.service_id, "vessel_class": m.vessel_class,
++                               "frequency": f, "vessels": int(m.vessels(f)),
++                               "weekly_fixed_cost_usd": round(float(m.weekly_fixed_cost(f)), 1)})
++    keep = {si: int(f) for si, f in sol.frequencies.items() if f > 0 and si not in set(idle)}
++    sol.frequencies = keep
++    sol.vessels = {si: int(models[si].vessels(f)) for si, f in keep.items()}
++    sol.objective_components = comp
++    sol.objective_value = sol.objective_value + saved
++    rep.update(applied=True, gain_usd=float(saved))
++    return rep
+diff --git a/src/network/network_milp.py b/src/network/network_milp.py
+--- a/src/network/network_milp.py
++++ b/src/network/network_milp.py
+@@ -29,6 +29,15 @@
+     The restriction can exclude better integer solutions, so the result is a
+     feasible plan with a stated bound, not a proof of optimality: ``status`` is
+     ``"optimal"`` only if the restricted MILP closed AND no service was dropped.
++
++Optional strengthening (``LINER_MILP_VUB``, default OFF)
++    adds the valid inequality  q[od, p] <= weekly_teu[od] * f[s]  for every path p of an OD and
++    every service s the path rides ("variable upper bound" / VUB).  It is implied by the integer
++    model (q <= demand, and an operated service has f >= 1; a service with f = 0 carries nothing)
++    so it removes no integer-feasible point; it only removes fractional LP points that run a
++    service at a small fraction of a weekly sailing.  It is applied to the LP relaxation (bound
++    and LP-guided restriction) and to the integer problem alike, and only for free-frequency
++    solves (with imposed frequencies it is redundant and skipped).
+ 
+ Backend (``NETWORK_MILP_BACKEND``, default ``cbc``)
+     ``cbc``    the bundled CBC through PuLP, as above (the production default).
+@@ -87,6 +96,11 @@
+     vessel_slack_cost_usd: float = 0.0
+     solver_backend: str = "cbc"
+     mip_gap: Optional[float] = None              # relative gap reported by the backend (HiGHS)
++    # which optional formulation changes were applied (LINER_MILP_VUB ...); empty = the baseline model
++    formulation: Dict = field(default_factory=dict)
++    # set when the integer problem used a path set rebuilt for the LP-support services
++    # (``path_rebuild``): flows then index THIS dict, not the caller's ``paths_by_od``
++    paths_by_od: Optional[Dict] = None
+ 
+     @property
+     def usable(self) -> bool:
+@@ -131,6 +145,20 @@
+ 
+ def _backend_name() -> str:
+     return (os.environ.get("NETWORK_MILP_BACKEND") or "cbc").strip().lower()
++
++
++ENV_VUB = "LINER_MILP_VUB"
++
++
++def vub_enabled(env: Optional[Dict[str, str]] = None) -> bool:
++    """``LINER_MILP_VUB``: add the valid inequality q <= demand * f (see the module docstring).
++    Unset / empty / 0 = off (the baseline model).  A malformed value raises ``ValueError``."""
++    raw = ((os.environ if env is None else env).get(ENV_VUB) or "").strip().lower()
++    if raw in ("", "0", "false", "no", "off"):
++        return False
++    if raw in ("1", "true", "yes", "on"):
++        return True
++    raise ValueError(f"{ENV_VUB} must be 0 or 1, got {raw!r}")
+ 
+ 
+ def _solve_highs(res, deadline: float) -> dict:
+@@ -217,6 +245,7 @@
+     port_capacity: Optional[Dict[str, float]] = None,
+     min_served_fraction: Optional[float] = None,
+     solve: bool = True,
++    vub: bool = False,
+ ):
+     """Build the model over ``services`` (indices) and solve it (``solve=False``: build
+     only, the caller solves with another backend). Returns a dict with
+@@ -287,6 +316,14 @@
+                 leg_load[(seg.service, leg)].append(v)
+     for (si, leg), vs in leg_load.items():
+         prob += pulp.lpSum(vs) <= models[si].capacity_teu * f[si], f"cap_{si}_{leg}"
++    vub_rows = 0
++    if vub and fixed is None:
++        # q[od, p] <= weekly_teu[od] * f[s]  for every service s of path p (valid: see module docstring)
++        for (di, k), v in q.items():
++            d_teu = float(demands[di].weekly_teu)
++            for si in set(path_of[(di, k)].services):
++                prob += v <= d_teu * f[si], f"vub_{di}_{k}_{si}"
++                vub_rows += 1
+     for si in active:
+         prob += 7 * n[si] >= models[si].cycle_time_days * f[si], f"veh_{si}"
+     by_class: Dict[str, List[int]] = defaultdict(list)
+@@ -315,7 +352,8 @@
+ 
+     out = dict(prob=prob, f=f, n=n, q=q, u=u, active=active, terms=dict(
+         revenue=revenue, per_teu_port=per_teu_port, vessel_cost=vessel_cost,
+-        fuel_cost=fuel_cost, port_fixed=port_fixed, pen=pen), status=None, error=None)
++        fuel_cost=fuel_cost, port_fixed=port_fixed, pen=pen), status=None, error=None,
++        vub_rows=vub_rows)
+     if not q or not solve:
+         return out
+     try:
+@@ -342,6 +380,7 @@
+     total_vessel_limit: Optional[int] = None,
+     port_capacity: Optional[Dict[str, float]] = None,
+     min_served_fraction: Optional[float] = None,
++    path_rebuild=None,
+ ) -> NetworkSolution:
+     """Solve the network design problem. Never raises for solver outcomes: the
+     status field says what happened and ``usable`` says whether values may be used."""
+@@ -380,7 +419,11 @@
+         lp_guided = fixed_frequencies is None
+     services = referenced
+     dropped = False
++    paths_int = paths_by_od
+     budget = max(1.0, time_limit_sec)
++    vub = vub_enabled() and fixed_frequencies is None
++    sol.formulation = {"vub_requested": vub_enabled(), "vub_applied": vub, "vub_rows_integer_problem": 0,
++                       "vub_rows_lp_relaxation": 0}
+ 
+     # ---- phase 1: LP relaxation (bound + service restriction) -----------------------
+     if lp_guided and fixed_frequencies is None:
+@@ -390,7 +433,8 @@
+                               time_limit_sec=min(60.0, budget * 0.4), threads=threads,
+                               total_vessel_limit=total_vessel_limit,
+                               port_capacity=port_capacity,
+-                              min_served_fraction=min_served_fraction)
++                              min_served_fraction=min_served_fraction, vub=vub)
++        sol.formulation["vub_rows_lp_relaxation"] = int(lp.get("vub_rows", 0))
+         if lp["error"] or lp["prob"].status != pulp.LpStatusOptimal:
+             lp_guided = False        # fall back to the unrestricted integer solve
+         else:
+@@ -399,6 +443,18 @@
+             dropped = len(used) < len(lp["active"])
+             services = used
+             sol.n_services_restricted_to = len(used)
++            if path_rebuild is not None and used:
++                # restriction-aware path set (opt-in): the integer problem can only use paths whose
++                # services are all in ``used``, so the per-OD path budget is re-spent on those
++                try:
++                    paths_int = path_rebuild(used)
++                    sol.paths_by_od = paths_int
++                    sol.formulation["path_include_paths_integer_problem"] = sum(
++                        len(v) for v in paths_int.values())
++                except Exception as exc:                                  # noqa: BLE001
++                    paths_int = paths_by_od
++                    sol.paths_by_od = None
++                    sol.formulation["path_include_error"] = f"{type(exc).__name__}: {exc}"
+             if not used:
+                 # the relaxation operates nothing: the empty network is the answer
+                 sol.status, sol.solver_status = "optimal", "lp_operates_nothing"
+@@ -416,14 +472,15 @@
+         sol.n_services_restricted_to = len(services)
+ 
+     # ---- phase 2: integer problem on the (restricted) service set --------------------
+-    res = _build_and_solve(models, demands, paths_by_od, class_vessel_limit, services,
++    res = _build_and_solve(models, demands, paths_int, class_vessel_limit, services,
+                            integer=True, penalty=unserved_penalty_per_teu,
+                            fixed=fixed_frequencies, initial=initial_frequencies,
+                            max_departures_cap=max_departures_cap, time_limit_sec=budget,
+                            threads=threads, total_vessel_limit=total_vessel_limit,
+                            port_capacity=port_capacity,
+                            min_served_fraction=min_served_fraction,
+-                           solve=not use_highs)
++                           solve=not use_highs, vub=vub)
++    sol.formulation["vub_rows_integer_problem"] = int(res.get("vub_rows", 0))
+     highs_msg = ""
+     if use_highs:
+         info = _solve_highs(res, t0 + max(1.0, time_limit_sec))
+diff --git a/src/network/paths.py b/src/network/paths.py
+--- a/src/network/paths.py
++++ b/src/network/paths.py
+@@ -65,6 +65,7 @@
+ ENV_HYBRID_SLOTS = "LINER_PATH_HYBRID_SLOTS"        # cost-aware slots of the hybrid rule
+ ENV_FLOW_REOPT = "LINER_FLOW_REOPT"                 # 1: re-route cargo over ALL valid paths
+ ENV_FLOOR_REPAIR = "LINER_PROFIT_FLOOR_REPAIR"      # 1: switch off losing services below the floor
++ENV_PATH_INCLUDE = "LINER_PATH_INCLUDE"             # K >= 1: restriction-aware path set (opt-in, default 0)
+ 
+ SELECT_FASTEST = "fastest"
+ SELECT_COST_AWARE = "cost_aware"
+@@ -133,6 +134,23 @@
+ 
+     def describe(self) -> Dict:
+         return dict(self.__dict__)
++
++
++def path_include_from_environment(env: Optional[Dict[str, str]] = None) -> int:
++    """``LINER_PATH_INCLUDE=K``: after the LP relaxation has chosen the services the integer problem
++    may use, rebuild the per-OD path set from the paths that ride ONLY those services, keeping the
++    K fastest per OD (the path slots of the baseline are partly spent on paths through services the
++    restricted problem cannot use).  Unset / 0 = off.  Malformed values raise ``ValueError``."""
++    raw = ((os.environ if env is None else env).get(ENV_PATH_INCLUDE) or "").strip()
++    if not raw:
++        return 0
++    try:
++        k = int(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_PATH_INCLUDE} must be a non-negative integer, got {raw!r}") from None
++    if k < 0 or k > 1000:
++        raise ValueError(f"{ENV_PATH_INCLUDE} must be in [0, 1000], got {k}")
++    return k
+ 
+ 
+ def config_from_environment(env: Optional[Dict[str, str]] = None) -> PathConfig:
+diff --git a/src/network/plan.py b/src/network/plan.py
+--- a/src/network/plan.py
++++ b/src/network/plan.py
+@@ -22,9 +22,16 @@
+ )
+ from src.network.flow_reopt import reoptimize_flows, repair_profit_floor
+ from src.network.ledger import Ledger, LedgerFlow, LedgerService, compute_ledger
++from src.network.local_search import (
++    config_from_environment as local_search_config_from_environment, local_search, reserve_for,
++    prune_idle_services,
++    variants_from_environment as local_search_variants_from_environment,
++    variants_floor_from_environment as local_search_variants_floor_from_environment,
++)
+ from src.network.network_milp import NetworkSolution, solve_network
+ from src.network.paths import (
+-    DEFAULT_MAX_PATHS_PER_OD, OdPath, PathConfig, PathStats, build_paths, config_from_environment,
++    BUDGET_FIXED, DEFAULT_MAX_PATHS_PER_OD, SELECT_FASTEST, OdPath, PathConfig, PathStats, build_paths,
++    config_from_environment, path_include_from_environment,
+ )
+ 
+ logger = logging.getLogger(__name__)
+@@ -53,6 +60,8 @@
+     infeasibility: List[Dict] = field(default_factory=list)         # structured causes
+     fuel_prices: Dict[str, Dict] = field(default_factory=dict)      # service_id -> applied price
+     flow_reopt: Dict = field(default_factory=dict)                  # Task 20 flow re-optimisation
++    local_search: Dict = field(default_factory=dict)                # C2 exact-LP local search (opt-in)
++    stage_timing: Dict = field(default_factory=dict)                # seconds per step of the stage
+ 
+     @property
+     def ok(self) -> bool:
+@@ -168,24 +177,56 @@
+         if initial_frequencies:
+             init = {index[s]: int(f) for s, f in initial_frequencies.items() if s in index}
+ 
++        # Opt-in exact-LP local search (C2, ``LINER_LOCAL_SEARCH``): it takes its time from the SAME
++        # stage budget - the MILP gets the budget minus the reserve and the search runs until
++        # (start of the plan + budget): model / path construction (~1.4 s) and any overrun of the
++        # solver's own time limit come out of the reserve, so the complete stage ends within
++        # ``time_limit_sec`` (plus the < 0.2 s of re-routing and the ledger).
++        ls_cfg = local_search_config_from_environment()
++        ls_applicable = bool(ls_cfg.enabled and fixed is None and not unserved_penalty_per_teu
++                             and port_capacity is None and not total_vessel_limit)
++        milp_budget = time_limit_sec
++        if ls_applicable:
++            milp_budget = max(1.0, time_limit_sec - reserve_for(ls_cfg, time_limit_sec))
++        res.local_search = ({"enabled": True, "applied": False, "reason": "not run"} if ls_applicable
++                            else {"enabled": bool(ls_cfg.enabled), "applied": False,
++                                  "reason": ("not applicable to this solve" if ls_cfg.enabled
++                                             else "disabled")})
++        timing: Dict[str, float] = {"model_and_paths_sec": round(time.perf_counter() - t0, 3)}
++        include_k = path_include_from_environment() if fixed is None else 0
++        path_rebuild = None
++        if include_k > 0:
++            import dataclasses as _dc
++            cfg_inc = _dc.replace(self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED)
++
++            def path_rebuild(services_used):
++                return build_paths(demands, models, self.port_lookup, self.assumptions,
++                                   max_paths_per_od=include_k, config=cfg_inc,
++                                   only_services=sorted(services_used))[0]
++        t_solve0 = time.perf_counter()
+         sol = solve_network(
+             models, demands, paths, limits,
+             unserved_penalty_per_teu=unserved_penalty_per_teu,
+             fixed_frequencies=fixed, initial_frequencies=init,
+-            time_limit_sec=time_limit_sec, lp_guided=lp_guided,
++            time_limit_sec=milp_budget, lp_guided=lp_guided,
+             total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
+-            min_served_fraction=min_served_fraction,
++            min_served_fraction=min_served_fraction, path_rebuild=path_rebuild,
+         )
++        if sol.paths_by_od is not None:
++            paths = sol.paths_by_od                  # the path set the integer problem actually used
++            res.paths = paths
++            sol.formulation["path_include_k"] = include_k
++        timing["milp_sec"] = round(time.perf_counter() - t_solve0, 3)
++        timing["milp_budget_sec"] = round(milp_budget, 1)
+         res.solution = sol
+         res.status = sol.status
+         res.message = sol.message
+         res.flow_reopt = {"applied": False, "reason": "disabled"}
+-        if ((self.path_config.reoptimize_flows or self.path_config.repair_profit_floor)
++        if ((self.path_config.reoptimize_flows or self.path_config.repair_profit_floor or ls_applicable)
+                 and sol.usable and fixed is None
+                 and not unserved_penalty_per_teu and port_capacity is None
+                 and not total_vessel_limit):
+             import dataclasses
+-            from src.network.paths import BUDGET_FIXED, SELECT_FASTEST
+             cfg_all = dataclasses.replace(
+                 self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED,
+                 multi_hop_min_alternatives=(10 ** 9 if self.path_config.max_transfers >= 2
+@@ -206,20 +247,65 @@
+                          * sum(d.weekly_teu for d in demands if d.weekly_teu > 0)
+                          if min_served_fraction else 0.0)
+             res.flow_reopt = {"applied": False, "reason": "disabled"}
++            if ls_applicable:
++                cfg_ls = dataclasses.replace(
++                    self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED,
++                    multi_hop_min_alternatives=(10 ** 9 if (ls_cfg.multi_hop and self.path_config.max_transfers >= 2)
++                                                else self.path_config.multi_hop_min_alternatives))
++
++                def _ls_paths():
++                    return build_paths(demands, models, self.port_lookup, self.assumptions,
++                                       max_paths_per_od=10 ** 9, config=cfg_ls)
++
++                t_ls = time.perf_counter()
++                ls_variant_report = None
++                ls_vf = local_search_variants_from_environment()
++                if ls_vf > 0:
++                    # alternative-class services of over-subscribed classes, visible ONLY to the search
++                    # (not to the MILP, which has already been solved): same canonical model, ids "lv####"
++                    from src.network.class_variants import augment_candidates
++                    extra_c, ls_variant_report = augment_candidates(
++                        self.problem, self.assumptions, candidates, fraction=ls_vf, id_prefix="lv",
++                        standalone_floor=local_search_variants_floor_from_environment(),
++                        deadline=time.perf_counter() + 5.0)
++                    new_models, new_rejected = self.build_models(extra_c)
++                    models.extend(new_models)
++                    res.rejected_candidates.extend(new_rejected)
++                    ls_variant_report["modelled"] = len(new_models)
++                    index = {m.service_id: i for i, m in enumerate(models)}   # the ledger looks services up by id
++                res.local_search = local_search(models, demands, paths, sol, limits, _ls_paths,
++                                                config=ls_cfg, deadline=t0 + float(time_limit_sec),
++                                                min_served_teu=floor_teu)
++                res.local_search["enabled"] = True
++                if ls_variant_report is not None:
++                    res.local_search["variants"] = {k: v for k, v in ls_variant_report.items() if k != "additions"}
++                    res.local_search["variant_additions"] = ls_variant_report.get("additions", [])
++                timing["local_search_sec"] = round(time.perf_counter() - t_ls, 3)
++            t_ro = time.perf_counter()
+             if self.path_config.reoptimize_flows:
+                 res.flow_reopt = reoptimize_flows(models, demands, paths, sol, _all_paths,
+                                                   min_served_teu=floor_teu)
++            timing["flow_reopt_sec"] = round(time.perf_counter() - t_ro, 3)
++            t_rp = time.perf_counter()
+             if self.path_config.repair_profit_floor and not min_served_fraction:
+                 res.flow_reopt["repair"] = repair_profit_floor(models, demands, paths, sol, _all_paths)
++            timing["repair_sec"] = round(time.perf_counter() - t_rp, 3)
++            idle_pruned = None
++            if ls_applicable and res.local_search.get("applied"):
++                # a service the search opened can end up empty once the cargo is re-routed: drop it
++                idle_pruned = prune_idle_services(models, paths, sol)
++                res.local_search["idle_pruned"] = idle_pruned
+             changed = bool(res.flow_reopt.get("applied")
+-                           or (res.flow_reopt.get("repair") or {}).get("applied"))
++                           or (res.flow_reopt.get("repair") or {}).get("applied")
++                           or res.local_search.get("applied")
++                           or (idle_pruned or {}).get("applied"))
+             if changed and sol.status == "optimal":
+                 # the capped model's proven optimum has been improved on with paths outside it:
+                 # the plan is feasible, and no optimality over the full path set is proven
+                 sol.status = res.status = "feasible"
+                 sol.message = (sol.message + "; " if sol.message else "") + \
+-                    "flows re-optimised over the full valid path set (optimality of the capped " \
+-                    "model no longer claimed)"
++                    "plan improved outside the solved model (flow re-optimisation / local search / " \
++                    "repair): optimality of the capped model no longer claimed"
+                 res.message = sol.message
+         if sol.status == "infeasible":
+             res.infeasibility = self._diagnose_infeasibility(
+@@ -232,6 +318,7 @@
+             return res
+ 
+         # ---- independent ledger from the plan alone -----------------------------
++        t_ledger = time.perf_counter()
+         led_services = [
+             LedgerService(models[si].service_id, models[si].ports, models[si].vessel_class, int(f))
+             for si, f in sol.frequencies.items() if f > 0
+@@ -290,6 +377,9 @@
+         # vessels: the MILP may carry more vessels than the minimum when unprofitable? no -
+         # minimisation of cost drives n to ceil(T f/7); a difference is flagged, not hidden.
+         scale = max(1.0, abs(led_profit), abs(milp_profit))
++        timing["ledger_sec"] = round(time.perf_counter() - t_ledger, 3)
++        timing["plan_total_sec"] = round(time.perf_counter() - t0, 3)
++        res.stage_timing = timing
+         res.reconciliation = {
+             "milp_profit_before_penalty": milp_profit,
+             "ledger_operating_profit": led_profit,
+@@ -303,6 +393,9 @@
+             "vessel_slack_removed": sol.vessel_slack_removed,
+             "vessel_slack_cost_usd": sol.vessel_slack_cost_usd,
+             "flow_reoptimisation": dict(res.flow_reopt),
++            "local_search": dict(res.local_search),
++            "stage_timing": dict(res.stage_timing),
++            "formulation": dict(getattr(sol, "formulation", {}) or {}),
+             "runtime_sec": round(time.perf_counter() - t0, 3),
+         }
+         return res
+diff --git a/src/network/reconcile.py b/src/network/reconcile.py
+--- a/src/network/reconcile.py
++++ b/src/network/reconcile.py
+@@ -31,6 +31,9 @@
+ from typing import Dict, List, Optional, Sequence, Tuple
+ 
+ from src.network.economics import EconomicsAssumptions, assumptions_for_problem
++from src.network.class_variants import (
++    augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
++)
+ from src.network.plan import Candidate, NetworkPlanner, PlanResult
+ from src.services.class_screening import config_from_environment as _class_screen_config
+ from src.services.demand_coherent import config_from_environment as _demand_loop_config
+@@ -147,6 +150,28 @@
+     return cands, owner
+ 
+ 
++def _register_variant_owners(additions, owner: Dict[str, Optional[str]], proposers: Dict[str, List[str]]) -> None:
++    """Search-only class variants (``lv####``) are modelled inside the plan, after the regional pools
++    were collected: give each the owner / proposers of the rotation it is a class variant of."""
++    for add in additions or []:
++        sid, src = add.get("service_id"), add.get("rotation_of")
++        if sid and sid not in owner:
++            owner[sid] = owner.get(src)
++            proposers[sid] = list(proposers.get(src, [owner[sid]] if owner.get(sid) else []))
++
++
++def _fallback_owner(proposers_of_sid: Sequence[str], owner_of_sid: Optional[str],
++                    regions, region_names: Sequence[str]) -> Optional[str]:
++    """Region charged for a service that carries no attributable cargo: its first proposer, else the
++    region that owns the rotation, else - so that no service ever drops out of the regional partition
++    (its cost is part of the network total) - the first region in the stated order."""
++    props = [p for p in proposers_of_sid if p in regions]
++    cand = props[0] if props else owner_of_sid
++    if cand in regions:
++        return cand
++    return region_names[0] if region_names else None
++
++
+ def reconcile(
+     problem,
+     pools: Dict[str, List[Dict]],
+@@ -169,6 +194,24 @@
+     except ValueError as exc:
+         return GlobalStageResult(False, "invalid_input", str(exc))
+ 
++    # Opt-in targeted alternative-class candidates (``LINER_CLASS_VARIANTS`` = fraction of the pool).
++    # The original candidates are untouched; the additions are listed with their provenance and
++    # the time the step takes is taken out of the stage budget (the stage never exceeds it).
++    class_variant_report = None
++    cv_fraction = _class_variant_fraction()
++    if cv_fraction > 0:
++        t_cv = time.perf_counter()
++        extra, class_variant_report = _augment_candidates(problem, assumptions, cands, fraction=cv_fraction,
++                                                          deadline=t_cv + 0.25 * float(time_limit_sec))
++        src_owner = {c.service_id: owner.get(c.service_id) for c in cands}
++        for add in class_variant_report.get("additions", []):
++            sid = add["service_id"]
++            base_owner = src_owner.get(add["rotation_of"])
++            owner[sid] = base_owner
++            proposers[sid] = list(proposers.get(add["rotation_of"], [base_owner] if base_owner else []))
++        cands = list(cands) + list(extra)
++        time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_cv))
++
+     initial = None
+     if hints:
+         # hints are keyed by regional ids; map through the canonical rotation
+@@ -200,6 +243,10 @@
+             False, plan.status if plan.status not in ("optimal", "feasible") else "invalid_plan",
+             plan.message or ("ledger violations: " + ", ".join(sorted(set(map(str, reasons))))),
+             plan=plan)
++
++    # services the local search opened from search-only variants (``lv####``) were modelled inside the plan:
++    # give them the owner / proposers of the rotation they are a class variant of
++    _register_variant_owners((getattr(plan, "local_search", None) or {}).get("variant_additions"), owner, proposers)
+ 
+     led, sol = plan.ledger, plan.solution
+     port_lookup = planner.port_lookup
+@@ -285,8 +332,7 @@
+             service_owner[sid] = min(
+                 users, key=lambda r: (-users[r], 0 if r in props else 1, order.get(r, 1 << 30)))
+         else:
+-            props = [p for p in proposers.get(sid, []) if p in per]
+-            service_owner[sid] = props[0] if props else owner.get(sid)
++            service_owner[sid] = _fallback_owner(proposers.get(sid, []), owner.get(sid), per, region_names)
+ 
+     services_by_region: Dict[str, List[Dict]] = {r: [] for r in region_names}
+     for sid, row in led.service_rows.items():
+@@ -424,10 +470,15 @@
+             "mip_gap_reported_by_backend": sol.mip_gap,
+             "bound_applies_to": "the model over the retained (capped) path set",
+             "flow_reoptimisation": dict(plan.flow_reopt),
++            # optional formulation changes in force (LINER_MILP_VUB ...): empty = the baseline model
++            "formulation": dict(getattr(sol, "formulation", {}) or {}),
++            "local_search": dict(getattr(plan, "local_search", {}) or {}),
++            "stage_timing": dict(getattr(plan, "stage_timing", {}) or {}),
+             "note": ("a feasible plan with a stated upper bound; not a proof of optimality "
+                      "unless status is 'optimal'"),
+         },
+         "path_model": plan.path_stats.to_dict() if plan.path_stats else {},
++        "candidate_augmentation": class_variant_report or {"enabled": False},
+         "violations": list(led.violations),
+         "assumptions": {
+             "port_stay_hours": a.port_stay_hours,
+diff --git a/src/optimization/frequency_ga.py b/src/optimization/frequency_ga.py
+--- a/src/optimization/frequency_ga.py
++++ b/src/optimization/frequency_ga.py
+@@ -50,7 +50,9 @@
+         overcap_penalty: float = 0.015,   # kept for API compatibility (not used)
+         port_cost_per_teu: float = 0.0,   # kept for API compatibility (data costs are used)
+         stagnation_limit: int = 0,
++        rng=None,
+     ):
++        self._rng       = rng if rng is not None else random      # LINER_SEED: own generator when given
+         self.problem    = problem
+         self.services   = services
+         self.max_freq   = max_freq
+@@ -192,7 +194,7 @@
+     def _random_freq(self) -> List[int]:
+         freq = list(self.init_freq)
+         for i in self.active_idx:
+-            freq[i] = max(0, min(self.f_cap[i], freq[i] + random.randint(-1, 1)))
++            freq[i] = max(0, min(self.f_cap[i], freq[i] + self._rng.randint(-1, 1)))
+         return freq
+ 
+     # ------------------------------------------------------------------ #
+@@ -236,9 +238,9 @@
+             ranked = sorted(zip(population, fitness), key=lambda x: x[1], reverse=True)
+             population = [x[0] for x in ranked[:10]]
+             while len(population) < self.pop_size:
+-                child = random.choice(ranked[:20])[0].copy()
+-                idx = random.choice(self.active_idx)
+-                child[idx] = random.randint(0, self.f_cap[idx])
++                child = self._rng.choice(ranked[:20])[0].copy()
++                idx = self._rng.choice(self.active_idx)
++                child[idx] = self._rng.randint(0, self.f_cap[idx])
+                 population.append(child)
+ 
+             fitness = [self._evaluate(p) for p in population]
+diff --git a/src/optimization/hierarchical_ga.py b/src/optimization/hierarchical_ga.py
+--- a/src/optimization/hierarchical_ga.py
++++ b/src/optimization/hierarchical_ga.py
+@@ -52,9 +52,12 @@
+         min_route_demand_threshold: float = 0.0,   # TEU — 0 = keep all
+         objective_mode: str = "profit_first",
+         stagnation_limit: int = 0,
++        rng_label: Optional[str] = None,
+     ):
+         self.problem  = problem
+         self.max_time = max_runtime_sec
++        # LINER_SEED: streams are derived from (seed, "ga", rng_label); unseeded = global generators
++        self._rng_label = rng_label
+ 
+         self._sga_kwargs = dict(
+             pop_size      = pop_size,
+@@ -118,7 +121,9 @@
+             return {"services": [], "frequencies": [], "coverage_estimate": 0.0}
+ 
+         # ── Level 1: service selection ─────────────────────────────────
+-        service_ga    = ServiceGA(self.problem, **self._sga_kwargs)
++        from src.utils.rng import streams as _streams
++        _s = _streams("service_ga", self._rng_label)
++        service_ga    = ServiceGA(self.problem, rng=_s.py, np_rng=_s.np, **self._sga_kwargs)
+         seed_services = seed_chromosome.get("services") if seed_chromosome else None
+         best_services = service_ga.run(seed_solution=seed_services)
+ 
+@@ -127,7 +132,8 @@
+             logger.warning("ga_runtime_budget_near | elapsed=%.2fs", elapsed)
+ 
+         # ── Level 2: frequency optimisation (real rotation times) ──────────
+-        freq_ga   = FrequencyGA(self.problem, best_services, **self._fga_kwargs)
++        _f = _streams("frequency_ga", self._rng_label)
++        freq_ga   = FrequencyGA(self.problem, best_services, rng=_f.py, **self._fga_kwargs)
+         best_freq = freq_ga.run()
+ 
+         # A service that is not scheduled is not operated: it leaves the mask.
+diff --git a/src/optimization/service_ga.py b/src/optimization/service_ga.py
+--- a/src/optimization/service_ga.py
++++ b/src/optimization/service_ga.py
+@@ -59,7 +59,12 @@
+         llm_budget: int = 0,
+         objective_mode: str = "legacy",
+         stagnation_limit: int = 0,
++        rng=None,
++        np_rng=None,
+     ):
++        # LINER_SEED (src/utils/rng.py): own generators when given, the process-global ones otherwise
++        self._rng        = rng if rng is not None else random
++        self._np_rng     = np_rng if np_rng is not None else np.random
+         self.problem     = problem
+         self.generations = generations
+         self.pop_size    = pop_size
+@@ -226,9 +231,9 @@
+             return [0] * self.num_services
+         probs = scores / total
+         n_pos = int((probs > 0).sum())
+-        n_select = random.randint(max(5, self.num_services // 20), max(10, self.num_services // 8))
++        n_select = self._rng.randint(max(5, self.num_services // 20), max(10, self.num_services // 8))
+         n_select = min(n_select, n_pos)
+-        selected = np.random.choice(self.num_services, size=n_select, replace=False, p=probs)
++        selected = self._np_rng.choice(self.num_services, size=n_select, replace=False, p=probs)
+         sol = [0] * self.num_services
+         for idx in selected:
+             sol[idx] = 1
+@@ -310,28 +315,27 @@
+     # ------------------------------------------------------------------ #
+     def _mutate(self, sol: List[int]) -> List[int]:
+         child = sol.copy()
+-        if random.random() < 0.5:
++        if self._rng.random() < 0.5:
+             # activate a high-demand OPERABLE service that is currently off
+             off_idx = [i for i, v in enumerate(child) if v == 0 and self._cap_wk[i] > 0]
+             if off_idx:
+                 scores = [self.service_direct_demand[i] for i in off_idx]
+                 total = sum(scores)
+                 if total > 0:
+-                    idx = random.choices(off_idx, weights=[s / total for s in scores])[0]
++                    idx = self._rng.choices(off_idx, weights=[s / total for s in scores])[0]
+                 else:
+-                    idx = random.choice(off_idx)
++                    idx = self._rng.choice(off_idx)
+                 child[idx] = 1
+         else:
+             if self.num_services:
+-                idx = random.randint(0, self.num_services - 1)
++                idx = self._rng.randint(0, self.num_services - 1)
+                 child[idx] = 1 - child[idx]
+         return child
+ 
+-    @staticmethod
+-    def _crossover(p1: List[int], p2: List[int]) -> List[int]:
++    def _crossover(self, p1: List[int], p2: List[int]) -> List[int]:
+         if len(p1) < 3:
+             return list(p1)
+-        point = random.randint(1, len(p1) - 2)
++        point = self._rng.randint(1, len(p1) - 2)
+         return p1[:point] + p2[point:]
+ 
+     # ------------------------------------------------------------------ #
+@@ -360,10 +364,10 @@
+             population = elite.copy()
+             pool = ranked[:20]
+             while len(population) < self.pop_size:
+-                p1 = random.choice(pool)[0]
+-                p2 = random.choice(pool)[0]
++                p1 = self._rng.choice(pool)[0]
++                p2 = self._rng.choice(pool)[0]
+                 child = self._crossover(p1, p2)
+-                if random.random() < self.mutation_rate:
++                if self._rng.random() < self.mutation_rate:
+                     child = self._mutate(child)
+                 population.append(child)
+ 
+diff --git a/src/services/candidate_service_generator.py b/src/services/candidate_service_generator.py
+--- a/src/services/candidate_service_generator.py
++++ b/src/services/candidate_service_generator.py
+@@ -4,9 +4,10 @@
+ 
+ class CandidateServiceGenerator:
+ 
+-    def __init__(self, problem):
++    def __init__(self, problem, rng=None):
+ 
+         self.problem = problem
++        self._rng = rng if rng is not None else random      # LINER_SEED: own generator when given
+ 
+ 
+     # ------------------------------------------------
+@@ -52,7 +53,7 @@
+             if corridor_demand > 1000:  # High-demand corridor
+                 hub_prob = 0.15  # Only 15% hub insertion for major corridors
+ 
+-            if random.random() < hub_prob:
++            if self._rng.random() < hub_prob:
+                 # Prefer actual major hubs over random ports. The inserted hub must be
+                 # a third port: a hub equal to the origin or destination would make a
+                 # rotation that visits a port twice (a zero-length leg).
+@@ -61,10 +62,10 @@
+                 available_hubs = [h for h in major_hubs
+                                   if h in self.problem.distance_matrix and h not in ends]
+                 if available_hubs:
+-                    hub = random.choice(available_hubs)
++                    hub = self._rng.choice(available_hubs)
+                 else:
+                     others = [p for p in self.problem.distance_matrix if p not in ends]
+-                    hub = random.choice(others) if others else None
++                    hub = self._rng.choice(others) if others else None
+                 if hub is not None:
+                     route.append(hub)
+ 
+@@ -105,9 +106,9 @@
+                 nearby_ports = [p for p, d in sorted_ports[:20] if p != hub]
+ 
+             if nearby_ports:
+-                spoke = random.choice(nearby_ports)
++                spoke = self._rng.choice(nearby_ports)
+             else:
+-                spoke = random.choice(ports)
++                spoke = self._rng.choice(ports)
+ 
+             if hub == spoke:
+                 continue
+diff --git a/src/utils/rng.py b/src/utils/rng.py
+new file
+--- /dev/null
++++ b/src/utils/rng.py
+@@ -0,0 +1,59 @@
++"""Central, opt-in random-number control (Task 17).
++
++``LINER_SEED`` (a non-negative integer) - unset: every stochastic component keeps drawing from the
++process-global generators (``random`` / ``numpy.random``) exactly as before, so nothing changes.
++
++Set: every stochastic component draws from its OWN generator, derived from
++``(LINER_SEED, component, region, call index)`` with a stable hash.  Results then do not depend on
++which thread ran first or on the order in which regions executed, which the shared global generator
++cannot guarantee (the orchestrator runs regions in a thread pool).
++
++What this does NOT control (documented, see reports/campaign_*/task17_reproducibility_report.md):
++the wall-clock budgets of the genetic algorithms and of CBC, the LLM providers' answers, and the
++iteration order of string sets under a randomised ``PYTHONHASHSEED``.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import os
++import random
++from typing import Dict, NamedTuple, Optional
++
++import numpy as np
++
++ENV_SEED = "LINER_SEED"
++
++
++class Streams(NamedTuple):
++    py: object            # ``random.Random`` (seeded) or the ``random`` module (unseeded)
++    np: object            # ``numpy.random.Generator`` (seeded) or the ``numpy.random`` module
++    seed: Optional[int]   # the derived seed, None when unseeded
++
++
++def seed_from_environment(env: Optional[Dict[str, str]] = None) -> Optional[int]:
++    raw = ((os.environ if env is None else env).get(ENV_SEED) or "").strip()
++    if not raw:
++        return None
++    try:
++        v = int(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_SEED} must be a non-negative integer, got {raw!r}") from None
++    if v < 0:
++        raise ValueError(f"{ENV_SEED} must be a non-negative integer, got {v}")
++    return v
++
++
++def derive_seed(base: int, *labels) -> int:
++    """Stable 63-bit seed of ``base`` and the labels (independent of PYTHONHASHSEED)."""
++    h = hashlib.sha256(("|".join([str(int(base))] + [str(x) for x in labels])).encode("utf-8")).digest()
++    return int.from_bytes(h[:8], "big") & ((1 << 63) - 1)
++
++
++def streams(*labels, base_seed: Optional[int] = None) -> Streams:
++    """Generators for one component.  Unseeded: the global generators (behaviour unchanged)."""
++    base = seed_from_environment() if base_seed is None else base_seed
++    if base is None:
++        return Streams(random, np.random, None)
++    s = derive_seed(base, *labels)
++    return Streams(random.Random(s), np.random.default_rng(s), s)
+diff --git a/tests/maritime/test_phase5_weather.py b/tests/maritime/test_phase5_weather.py
+--- a/tests/maritime/test_phase5_weather.py
++++ b/tests/maritime/test_phase5_weather.py
+@@ -452,14 +452,22 @@
+         from datetime import datetime, timezone
+         from maritime.schemas.weather import WeatherObservation
+         self._calls += 1
+-        ts = datetime.now(tz=timezone.utc).isoformat()
++        from datetime import timedelta
++        now = datetime.now(tz=timezone.utc)
++        ts = now.isoformat()
++        # A FORECAST value is valid in the future.  ``WeatherFeatureAdapter.forecast_window`` with no window
++        # keeps records whose valid_at >= now truncated to the SECOND, so a stub stamped "now" is dropped
++        # whenever the query happens one clock second after the record was made (a 1-in-10 flake that also
++        # occurs on the frozen tree).  Stamping the stub one hour ahead makes the test deterministic
++        # without touching the adapter's documented default window (the next 24 hours).
++        valid = (now + timedelta(hours=1)).isoformat()
+         out = []
+         for i in range(self.records_per_call):
+             out.append(WeatherObservation(
+                 record_id=f"stub-{self._calls}-{latitude}-{longitude}-{i}",
+                 source=self.source, dataset="stub", dataset_version="1",
+                 latitude=latitude, longitude=longitude,
+-                valid_at=ts, retrieved_at=ts,
++                valid_at=valid, retrieved_at=ts,
+                 wind_speed_ms=4.5, wave_height_m=0.6,
+                 license=self._config.license, attribution=self._config.attribution,
+                 commercial_safe=self.commercial_safe,
+diff --git a/tests/maritime/test_phase8_command_center.py b/tests/maritime/test_phase8_command_center.py
+--- a/tests/maritime/test_phase8_command_center.py
++++ b/tests/maritime/test_phase8_command_center.py
+@@ -61,6 +61,21 @@
+ @pytest.fixture(scope="session")
+ def server():
+     return _ensure_server_loaded()
++
++
++@pytest.fixture
++def artifact_root(server, tmp_path, monkeypatch):
++    """A throw-away repository root that holds a ``pipeline_output.json``.
++
++    The routing-impact endpoint resolves the artifact as ``<repo root>/pipeline_output.json`` where the
++    repo root is derived from ``backend/server.py``'s ``__file__``.  Several tests below drive the
++    endpoint with a patched ``json.load`` and need the file to EXIST; they must not depend on (or touch)
++    the real artifact, which is produced by an orchestrator run and is absent on a fresh clone.  The
++    module's ``__file__`` is therefore pointed at a temporary tree for the duration of the test."""
++    (tmp_path / "backend").mkdir()
++    (tmp_path / "pipeline_output.json").write_text("{}", encoding="utf-8")
++    monkeypatch.setattr(server, "__file__", str(tmp_path / "backend" / "server.py"))
++    return tmp_path
+ 
+ 
+ @pytest.fixture
+@@ -343,7 +358,7 @@
+                     assert body["features"] == []
+ 
+     def test_routing_impact_handles_missing_maritime_intelligence(
+-        self, server
++        self, server, artifact_root
+     ):
+         """When pipeline_output.json exists but has no
+         ``maritime_intelligence`` key (the common state on a fresh
+@@ -376,7 +391,7 @@
+         assert "baseline" in body["explanation"].lower()
+ 
+     def test_routing_impact_classifies_synthetic_features(
+-        self, server
++        self, server, artifact_root
+     ):
+         """Given a synthetic maritime_intelligence payload, the
+         endpoint must classify each feature and produce a
+@@ -543,7 +558,7 @@
+         assert classify("traffic", {"freshness_state": "fresh"})["state"] == "applied"
+         assert classify("port", {"freshness_state": "fresh"})["state"] == "applied"
+ 
+-    def test_routing_impact_never_raises(self, server):
++    def test_routing_impact_never_raises(self, server, artifact_root):
+         """The endpoint must catch every exception and degrade to
+         the safe-empty payload with reason='safe_failure'."""
+         from fastapi.testclient import TestClient
+diff --git a/tests/maritime/test_port_pipeline.py b/tests/maritime/test_port_pipeline.py
+--- a/tests/maritime/test_port_pipeline.py
++++ b/tests/maritime/test_port_pipeline.py
+@@ -114,7 +114,16 @@
+         observed_period={"start": "2024-06-01T00:00:00+00:00", "end": "2024-06-01T00:00:00+00:00"},
+         source_url="local://empty",
+     )
+-    ports = _ports_alt(__import__("json").loads(PORTS_FIXTURE.read_text(encoding="utf-8")))
++    if PORTS_FIXTURE.exists():
++        ports = _ports_alt(__import__("json").loads(PORTS_FIXTURE.read_text(encoding="utf-8")))
++    else:
++        # The synthetic fixture directory is not shipped with this tree.  What this test checks - an
++        # ingestion with ZERO records is INVALID whatever the port list is - needs only some ports, so
++        # two inline test ports (clearly labelled, not data) are used instead of failing on the file.
++        ports = _ports_alt({"ports": [
++            {"port_id": f"TEST_{k}", "name": f"Inline test port {k}", "latitude": 29.0 + k, "longitude": -95.0,
++             "radius_nm": 5.0, "port_type": "cargo", "source": "INLINE_TEST", "dataset": "inline_test",
++             "dataset_version": "0", "license": "CC0", "attribution": "unit test"} for k in (0, 1)]})
+     snap = build_port_snapshot(ingestion=ingestion, ports=ports, store=None)
+     assert snap.quality_status == QualityStatus.INVALID
+     assert snap.call_count == 0
+diff --git a/tests/test_economic_metric_documentation.py b/tests/test_economic_metric_documentation.py
+--- a/tests/test_economic_metric_documentation.py
++++ b/tests/test_economic_metric_documentation.py
+@@ -420,14 +420,22 @@
+ # --------------------------------------------------------------------------- #
+ # 9. Reproducibility                                                            #
+ # --------------------------------------------------------------------------- #
++#: Task 17 (campaign 2026-10-12): seeding exists in ONE place, ``src/utils/rng.py``, and only acts when
++#: ``LINER_SEED`` is set (unset = the process-global generators, i.e. the behaviour the F-21/F-28
++#: findings describe).  Any other file that seeds or builds a generator is still a finding that must be
++#: re-derived.  Behaviour of the module itself: tests/test_rng_control.py.
++_SEEDING_ALLOWED = {"src/utils/rng.py"}
++
++
+ def test_no_random_seeding_in_production_code():
+-    """F-21/F-28: runs cannot be reproduced. If seeding has been added, this
+-    test fails and must be updated in the same commit."""
++    """F-21/F-28: runs cannot be reproduced. If seeding has been added OUTSIDE the one opt-in
++    module (``src/utils/rng.py``, ``LINER_SEED``), this test fails and must be updated in the same
++    commit."""
+     seeds = []
+     for sub in ("src", "scripts"):
+         for path in (ROOT / sub).rglob("*.py"):
+             rel = path.relative_to(ROOT).as_posix()
+-            if "__pycache__" in rel:
++            if "__pycache__" in rel or rel in _SEEDING_ALLOWED:
+                 continue
+             text = path.read_text(encoding="utf-8", errors="replace")
+             for pat in (r"\brandom\.seed\s*\(", r"\bnp\.random\.seed\s*\(",
+diff --git a/tests/test_expansion_flags.py b/tests/test_expansion_flags.py
+new file
+--- /dev/null
++++ b/tests/test_expansion_flags.py
+@@ -0,0 +1,193 @@
++"""Phase 4 flags (default OFF): targeted alternative-class candidates (``LINER_CLASS_VARIANTS``) and the
++restriction-aware path set (``LINER_PATH_INCLUDE``).
++
++Contract
++  class variants   - only for rotations of an OVER-SUBSCRIBED class, only into classes that are not,
++                     only with a positive stand-alone profit, at most one per rotation, never a
++                     duplicate of an existing (rotation, class); the original candidates are untouched;
++                     every addition carries its provenance; off = no change at all.
++  path include     - after the LP relaxation chose the services, the per-OD path set is rebuilt from
++                     the paths that ride ONLY those services (K fastest per OD); the integer plan is
++                     feasible, ledger-verified, and never worse than the plan of the capped set on the
++                     instances below (the rebuilt set contains the capped set's usable paths).
++All fixtures are SYNTHETIC.
++"""
++import sys
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import src.network.class_variants as cv
++import src.network.network_milp as nm
++from src.network.paths import build_paths, path_include_from_environment
++from src.network.plan import Candidate, NetworkPlanner
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++DM = {
++    "A": {"B": 1000.0, "C": 1600.0, "D": 2400.0},
++    "B": {"A": 1000.0, "C": 600.0, "D": 1400.0},
++    "C": {"A": 1600.0, "B": 600.0, "D": 800.0},
++    "D": {"A": 2400.0, "B": 1400.0, "C": 800.0},
++}
++
++
++def _cls(name, qty, cap, tc=8000.0, design=12.0, bunker=20.0):
++    return FleetClass(vessel_class=name, quantity=qty, capacity_teu=cap, tc_rate_daily=tc,
++                      min_speed=design - 2.0, design_speed=design, max_speed=design + 2.0,
++                      bunker_consumption_tons_per_day=bunker, idle_consumption_tons_per_day=2.0)
++
++
++def _problem(demands, classes):
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=1000.0, transshipment_cost=0.0,
++                  variable_port_call_cost=0.0) for p in "ABCD"]
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM, fleet=Fleet(classes=classes))
++
++
++DEMANDS = [Demand("A", "B", 800.0, 1500.0), Demand("B", "A", 700.0, 1500.0), Demand("B", "C", 600.0, 1200.0),
++           Demand("C", "B", 500.0, 1200.0), Demand("C", "D", 400.0, 1300.0), Demand("D", "C", 300.0, 1300.0)]
++# class S: 2 vessels (scarce); class M: 20 vessels (plenty)
++CLASSES = [_cls("S", 2, 1000.0), _cls("M", 20, 1500.0, tc=9000.0)]
++
++
++def _pool(cls_of):
++    routes = [("A", "B"), ("B", "C"), ("C", "D"), ("A", "B", "C"), ("B", "C", "D")]
++    return [Candidate(f"c{i}", r, cls_of) for i, r in enumerate(routes)]
++
++
++class TestFlagParsing:
++    def test_class_variants(self, monkeypatch):
++        monkeypatch.delenv("LINER_CLASS_VARIANTS", raising=False)
++        assert cv.fraction_from_environment() == 0.0
++        monkeypatch.setenv("LINER_CLASS_VARIANTS", "0.1")
++        assert cv.fraction_from_environment() == pytest.approx(0.1)
++        for bad in ("-0.1", "1.5", "x", "nan"):
++            monkeypatch.setenv("LINER_CLASS_VARIANTS", bad)
++            with pytest.raises(ValueError):
++                cv.fraction_from_environment()
++
++    def test_path_include(self, monkeypatch):
++        monkeypatch.delenv("LINER_PATH_INCLUDE", raising=False)
++        assert path_include_from_environment() == 0
++        monkeypatch.setenv("LINER_PATH_INCLUDE", "20")
++        assert path_include_from_environment() == 20
++        for bad in ("-1", "x", "5000", "1.5"):
++            monkeypatch.setenv("LINER_PATH_INCLUDE", bad)
++            with pytest.raises(ValueError):
++                path_include_from_environment()
++
++
++class TestClassVariants:
++    def _augment(self, fraction, base_class="S", n_extra_scarce=0):
++        pr = _problem(DEMANDS, CLASSES)
++        from src.network.economics import assumptions_for_problem
++        cands = _pool(base_class)
++        return pr, cands, cv.augment_candidates(pr, assumptions_for_problem(pr), cands, fraction=fraction)
++
++    def test_adds_only_into_non_over_subscribed_classes_with_provenance(self):
++        pr, cands, (extra, rep) = self._augment(1.0)
++        # 5 candidates of S against 2 vessels: ratio 2.5 >= 2 -> over-subscribed; M: 0 candidates / 20 vessels
++        assert rep["over_subscribed_classes"]["S"]["ratio"] >= cv.PRESSURE_RATIO
++        assert rep["target_classes"] == ["M"]
++        assert extra, "no variant was produced although class M has idle vessels and demand to carry"
++        for c in extra:
++            assert c.vessel_class == "M"
++        keys = {(tuple(c.ports), c.vessel_class) for c in cands}
++        for c in extra:
++            assert (tuple(c.ports), c.vessel_class) not in keys             # no duplicate of an existing pair
++        rotations = [tuple(c.ports) for c in extra]
++        assert len(rotations) == len(set(rotations))                         # at most one variant per rotation
++        for a in rep["additions"]:
++            assert a["standalone_profit_usd_per_week"] > 0
++            assert a["rotation_of"] in {c.service_id for c in cands}
++            assert a["vessels_at_best"] <= 20
++            assert a["reason"]
++        assert rep["added"] == len(extra) <= len(cands)
++
++    def test_fraction_bounds_the_number_of_additions(self):
++        _pr, cands, (extra, rep) = self._augment(0.2)                        # round(0.2 * 5) = 1
++        assert len(extra) == 1
++        assert rep["scored_variants_available"] >= 1
++
++    def test_originals_are_untouched_and_off_adds_nothing(self):
++        pr, cands, _ = self._augment(0.0)
++        from src.network.economics import assumptions_for_problem
++        before = [(c.service_id, c.ports, c.vessel_class) for c in cands]
++        extra, rep = cv.augment_candidates(pr, assumptions_for_problem(pr), cands, fraction=0.0)
++        assert extra == [] and rep["added"] == 0
++        assert before == [(c.service_id, c.ports, c.vessel_class) for c in cands]
++
++    def test_nothing_is_added_when_no_class_is_over_subscribed(self):
++        pr = _problem(DEMANDS, [_cls("S", 40, 1000.0), _cls("M", 20, 1500.0, tc=9000.0)])
++        from src.network.economics import assumptions_for_problem
++        extra, rep = cv.augment_candidates(pr, assumptions_for_problem(pr), _pool("S"), fraction=1.0)
++        assert extra == [] and rep.get("reason") == "no over-subscribed class"
++
++    def test_a_loss_making_variant_is_never_added(self):
++        # class M with an absurd hire rate: every M variant has a negative stand-alone profit
++        pr = _problem(DEMANDS, [_cls("S", 2, 1000.0), _cls("M", 20, 1500.0, tc=5_000_000.0)])
++        from src.network.economics import assumptions_for_problem
++        extra, rep = cv.augment_candidates(pr, assumptions_for_problem(pr), _pool("S"), fraction=1.0)
++        assert extra == []
++        assert rep["variants_positive_standalone"] == 0
++
++    def test_augmented_pool_plans_and_passes_the_ledger(self):
++        pr, cands, (extra, rep) = self._augment(1.0)
++        plan = NetworkPlanner(pr).plan(cands + extra, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++        # (c3 of the base pool needs 3 vessels of the 2-vessel class and is rejected by the canonical
++        # model with or without variants; no VARIANT may be rejected: they are built from the same model)
++        assert not [r for r in plan.rejected_candidates if str(r.get("service", "")).startswith("cv")]
++        assert any(m.service_id.startswith("cv") for m in plan.models)
++
++
++class TestPathInclude:
++    def _models(self):
++        pr = _problem(DEMANDS, [_cls("S", 40, 1000.0)])
++        planner = NetworkPlanner(pr)
++        cands = [Candidate(f"c{i}", r, "S") for i, r in enumerate(
++            [("A", "B"), ("B", "C"), ("C", "D"), ("A", "B", "C"), ("B", "C", "D"), ("A", "B", "C", "D")])]
++        models, rejected = planner.build_models(cands)
++        assert models and not rejected
++        return pr, planner, models
++
++    def test_rebuilt_set_rides_only_the_chosen_services(self, monkeypatch):
++        pr, planner, models = self._models()
++        used_seen = {}
++
++        def rebuild(used):
++            used_seen["used"] = set(used)
++            return build_paths(pr.demands, models, planner.port_lookup, planner.assumptions,
++                               max_paths_per_od=10, config=planner.path_config, only_services=sorted(used))[0]
++
++        paths, _ = build_paths(pr.demands, models, planner.port_lookup, planner.assumptions,
++                               max_paths_per_od=1, config=planner.path_config)       # a deliberately tight cap
++        limits = {c.vessel_class: c.quantity for c in pr.fleet.classes}
++        sol = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=30.0, path_rebuild=rebuild)
++        assert sol.usable
++        assert sol.paths_by_od is not None
++        for plist in sol.paths_by_od.values():
++            for p in plist:
++                assert set(p.services) <= used_seen["used"]
++        assert sol.formulation["path_include_paths_integer_problem"] == sum(len(v) for v in sol.paths_by_od.values())
++
++    def test_never_worse_than_the_tight_cap_and_ledger_verified(self, monkeypatch):
++        monkeypatch.delenv("LINER_PATH_INCLUDE", raising=False)
++        pr, planner, _ = self._models()
++        cands = [Candidate(f"c{i}", r, "S") for i, r in enumerate(
++            [("A", "B"), ("B", "C"), ("C", "D"), ("A", "B", "C"), ("B", "C", "D"), ("A", "B", "C", "D")])]
++        base = NetworkPlanner(pr, max_paths_per_od=1).plan(cands, demands=pr.demands, time_limit_sec=60.0)
++        monkeypatch.setenv("LINER_PATH_INCLUDE", "10")
++        inc = NetworkPlanner(pr, max_paths_per_od=1).plan(cands, demands=pr.demands, time_limit_sec=60.0)
++        assert base.ok and inc.ok and inc.ledger.valid and inc.reconciliation["reconciled"] is True
++        assert inc.ledger.operating_profit >= base.ledger.operating_profit - 1e-6
++        assert inc.reconciliation["formulation"]["path_include_k"] == 10
++
++    def test_off_by_default(self, monkeypatch):
++        monkeypatch.delenv("LINER_PATH_INCLUDE", raising=False)
++        pr, planner, _ = self._models()
++        cands = [Candidate("c0", ("A", "B"), "S"), Candidate("c1", ("B", "C"), "S")]
++        plan = planner.plan(cands, demands=pr.demands, time_limit_sec=30.0)
++        assert plan.solution.paths_by_od is None
++        assert "path_include_k" not in plan.reconciliation["formulation"]
+diff --git a/tests/test_local_search.py b/tests/test_local_search.py
+new file
+--- /dev/null
++++ b/tests/test_local_search.py
+@@ -0,0 +1,426 @@
++"""C2 - exact-LP local search over the operated service set (``LINER_LOCAL_SEARCH``, default OFF).
++
++Contract
++  * default OFF: nothing changes, the plan reports ``local_search.enabled = False``;
++  * every move is evaluated with the exact cargo LP (same terms as the MILP objective / ledger);
++    a move that breaks fleet inventory, capacity, a transit limit or the coverage floor is never
++    accepted; a move that adds served TEU but lowers profit is never accepted;
++  * the search starts from a feasible plan and ends no worse (profit) and never serves less;
++  * the deadline is hard (no move after it), and the stage budget is split, not extended;
++  * the final plan passes the independent ledger; its status is ``feasible`` (never ``optimal``).
++"""
++import dataclasses
++import itertools
++import sys
++import time
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import src.network.local_search as ls
++import src.network.network_milp as nm
++from src.network.flow_reopt import reoptimize_flows
++from src.network.paths import BUDGET_FIXED, SELECT_FASTEST, build_paths
++from src.network.plan import Candidate, NetworkPlanner
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++DM = {"A": {"B": 1000.0, "C": 1600.0}, "B": {"A": 1200.0, "C": 600.0},
++      "C": {"A": 1600.0, "B": 600.0}}
++CANDS = [Candidate("ab", ("A", "B"), "V"), Candidate("abc", ("A", "B", "C"), "V"),
++         Candidate("bc", ("B", "C"), "V")]
++
++
++def _problem(demands, capacity=1000.0, quantity=40, port_call=1000.0):
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=port_call,
++                  transshipment_cost=0.0, variable_port_call_cost=0.0) for p in "ABC"]
++    v = FleetClass(vessel_class="V", quantity=quantity, capacity_teu=capacity, tc_rate_daily=8000.0,
++                   min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                   bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM,
++                   fleet=Fleet(classes=[v]))
++
++
++def _demands():
++    return [Demand("A", "B", 1500.0, 1000.0), Demand("B", "A", 1200.0, 1000.0),
++            Demand("B", "C", 800.0, 900.0), Demand("A", "C", 300.0, 1500.0)]
++
++
++def _setup(problem, fixed=None, **kw):
++    planner = NetworkPlanner(problem)
++    plan = planner.plan(CANDS, demands=problem.demands, fixed_frequencies=fixed, time_limit_sec=60.0, **kw)
++    assert plan.ok, plan.message
++    cfg = dataclasses.replace(planner.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED)
++    limits = {c.vessel_class: c.quantity for c in problem.fleet.classes}
++
++    def all_paths():
++        return build_paths(problem.demands, plan.models, planner.port_lookup, planner.assumptions,
++                           max_paths_per_od=10 ** 9, config=cfg)
++    return planner, plan, limits, all_paths
++
++
++def _profit(sol, models, demands, paths):
++    rev = sum(demands[di].revenue_per_teu * t for di, k, t in sol.flows)
++    port = sum(paths[di][k].port_cost_per_teu * t for di, k, t in sol.flows)
++    fx = sum(models[s].weekly_fixed_cost(f) for s, f in sol.frequencies.items() if f > 0)
++    return rev - port - fx
++
++
++CFG = ls.LocalSearchConfig(enabled=True)
++
++
++class TestConfig:
++    def test_default_disabled(self, monkeypatch):
++        for k in (ls.ENV_ENABLED, ls.ENV_RESERVE, ls.ENV_MOVES):
++            monkeypatch.delenv(k, raising=False)
++        assert ls.config_from_environment().enabled is False
++
++    def test_parsing_and_errors(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_RESERVE, "15")
++        monkeypatch.setenv(ls.ENV_MOVES, "add,drop")
++        c = ls.config_from_environment()
++        assert c.enabled and c.reserve_sec == 15.0 and c.moves == ("add", "drop")
++        monkeypatch.setenv(ls.ENV_MOVES, "swap")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++        monkeypatch.setenv(ls.ENV_MOVES, "add")
++        monkeypatch.setenv(ls.ENV_RESERVE, "soon")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++        monkeypatch.setenv(ls.ENV_RESERVE, "15")
++        monkeypatch.setenv(ls.ENV_ENABLED, "maybe")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++
++    def test_reserve_never_exceeds_half_the_budget(self):
++        assert ls.reserve_for(ls.LocalSearchConfig(enabled=True, reserve_sec=25.0), 120.0) == 25.0
++        assert ls.reserve_for(ls.LocalSearchConfig(enabled=True, reserve_sec=25.0), 30.0) == 15.0
++
++
++class TestDisabledByDefault:
++    def test_plan_is_unchanged_and_says_so(self, monkeypatch):
++        monkeypatch.delenv(ls.ENV_ENABLED, raising=False)
++        pr = _problem(_demands())
++        plan = NetworkPlanner(pr).plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok
++        assert plan.local_search == {"enabled": False, "applied": False, "reason": "disabled"}
++        assert plan.stage_timing["milp_budget_sec"] == 60.0
++        assert "local_search_sec" not in plan.stage_timing
++        assert plan.reconciliation["local_search"]["enabled"] is False
++
++
++class TestMoves:
++    def test_improves_a_poor_incumbent_and_never_exceeds_the_brute_force_optimum(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})          # a poor, feasible plan
++        sol, models = plan.solution, plan.models
++        before = _profit(sol, models, pr.demands, plan.paths)
++        served_before = sum(t for _, _, t in sol.flows)
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert rep["applied"] is True and rep["moves"]
++        after = _profit(sol, models, pr.demands, plan.paths)
++        assert after > before + 1000.0
++        assert rep["profit_before"] == pytest.approx(before, rel=1e-9, abs=1e-3)
++        assert rep["profit_after"] == pytest.approx(after, rel=1e-9, abs=1e-3)
++        assert sum(t for _, _, t in sol.flows) >= served_before - 1e-6        # never serves less
++        # brute force over f in {0,1,2}^3 (exact MILP with imposed frequencies, CBC)
++        best = float("-inf")
++        for f in itertools.product((0, 1, 2), repeat=len(models)):
++            fx = {models[i].service_id: f[i] for i in range(len(models))}
++            got = nm.solve_network(models, pr.demands, plan.paths, limits, fixed_frequencies=
++                                   {i: f[i] for i in range(len(models))}, time_limit_sec=30.0)
++            if got.usable:
++                best = max(best, got.objective_value)
++        assert after <= best + 1.0                                            # a local optimum, not above the global one
++        assert after >= before - 1e-6
++
++    def test_final_plan_passes_the_independent_ledger_through_the_planner(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_RESERVE, "20")
++        pr = _problem(_demands())
++        planner = NetworkPlanner(pr)
++        plan = planner.plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++        assert plan.local_search["enabled"] is True
++        assert plan.stage_timing["milp_budget_sec"] == 40.0                    # 60 - 20: split, not extended
++        assert plan.status in ("feasible", "optimal")
++        if plan.local_search.get("applied"):
++            assert plan.status == "feasible"                                   # never claims optimality
++        assert plan.ledger.operating_profit == pytest.approx(plan.solution.objective_value, abs=1e-3)
++
++    def test_move_that_adds_coverage_but_loses_money_is_not_accepted(self):
++        # the only OD that the unoperated service could serve pays less than its fixed cost
++        pr = _problem([Demand("A", "B", 1500.0, 1000.0), Demand("B", "C", 20.0, 50.0)])
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        served_before = sum(t for _, _, t in sol.flows)
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert not any(m["move"] == "add" and "bc" in m["service"] for m in rep["moves"])
++        assert sum(t for _, _, t in sol.flows) >= served_before - 1e-6
++        if rep["applied"]:
++            assert rep["gain_usd"] > 0
++
++    def test_drop_that_would_lose_coverage_is_refused(self):
++        # a loss-making service whose cargo nothing else can carry (and no other move can make up
++        # for it): dropping it raises profit but would lower served TEU - the coverage floor forbids it
++        pr = _problem([Demand("A", "B", 600.0, 1000.0), Demand("B", "C", 30.0, 60.0)])
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1, "bc": 1})
++        sol, models = plan.solution, plan.models
++        served_before = sum(t for _, _, t in sol.flows)
++        bc = next(i for i, m in enumerate(models) if m.service_id == "bc")
++        assert sol.frequencies.get(bc, 0) == 1
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert sol.frequencies.get(bc, 0) == 1
++        assert sum(t for _, _, t in sol.flows) >= served_before - 1e-6
++        assert not any(m["move"] == "drop" and m["service"] == "bc" for m in rep["moves"])
++
++    def test_class_inventory_blocks_an_add(self):
++        pr = _problem(_demands(), quantity=1)           # one vessel in total
++        planner, plan, limits, all_paths = _setup(pr)
++        sol, models = plan.solution, plan.models
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        used = sum(models[s].vessels(f) for s, f in sol.frequencies.items() if f > 0)
++        assert used <= 1
++
++    def test_expired_deadline_changes_nothing(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        before = (dict(sol.frequencies), list(sol.flows))
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() - 1.0)
++        assert rep["applied"] is False and rep["terminated_by"] in ("deadline", "deadline_before_search")
++        assert (dict(sol.frequencies), list(sol.flows)) == before
++
++    def test_incomplete_incumbent_is_reported_not_guessed(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        sol.flows = []
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert rep["applied"] is False and rep["terminated_by"] == "no_incumbent"
++
++    def test_moves_can_be_restricted(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        cfg = ls.LocalSearchConfig(enabled=True, moves=("freq",))
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=cfg,
++                              deadline=time.perf_counter() + 60.0)
++        assert all(m["move"] in ("up", "down") for m in rep["moves"])
++
++
++class TestInteractions:
++    def test_flow_reoptimisation_after_a_move_never_lowers_profit(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert rep["applied"]
++        p0 = _profit(sol, models, pr.demands, plan.paths)
++
++        def full():
++            operated = [s for s, f in sol.frequencies.items() if f > 0]
++            cfg = dataclasses.replace(planner.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED,
++                                      multi_hop_min_alternatives=10 ** 9)
++            return build_paths(pr.demands, models, planner.port_lookup, planner.assumptions,
++                               max_paths_per_od=10 ** 9, config=cfg, only_services=operated)
++        reoptimize_flows(models, pr.demands, plan.paths, sol, full)
++        assert _profit(sol, models, pr.demands, plan.paths) >= p0 - 1e-6
++
++
++class TestVariantsVisibleOnlyToTheSearch:
++    """``LINER_LOCAL_SEARCH_VARIANTS``: alternative-class services are modelled AFTER the MILP and offered
++    to the search only; the MILP's service set is unchanged."""
++
++    def _problem(self):
++        classes = [FleetClass(vessel_class="S", quantity=2, capacity_teu=1000.0, tc_rate_daily=8000.0,
++                              min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                              bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0),
++                   FleetClass(vessel_class="M", quantity=20, capacity_teu=1500.0, tc_rate_daily=9000.0,
++                              min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                              bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)]
++        ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=1000.0, transshipment_cost=0.0,
++                      variable_port_call_cost=0.0) for p in "ABC"]
++        dem = [Demand("A", "B", 800.0, 1500.0), Demand("B", "A", 700.0, 1500.0), Demand("B", "C", 600.0, 1200.0),
++               Demand("C", "B", 500.0, 1200.0)]
++        return Problem(ports=ports, services=[], demands=dem, distance_matrix=DM, fleet=Fleet(classes=classes))
++
++    def test_extra_services_are_modelled_for_the_search_only(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_VARIANTS, "1.0")
++        pr = self._problem()
++        # 5 candidates of the 2-vessel class S: 2.5 candidates per vessel (>= 2: over-subscribed)
++        cands = [Candidate("c0", ("A", "B"), "S"), Candidate("c1", ("B", "C"), "S"),
++                 Candidate("c2", ("A", "B", "C"), "S"), Candidate("c3", ("A", "C"), "S"),
++                 Candidate("c4", ("A", "C", "B"), "S")]
++        plan = NetworkPlanner(pr).plan(cands, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++        assert plan.solution.n_services_considered <= len(cands)             # the MILP never saw the variants
++        v = plan.local_search.get("variants")
++        assert v is not None and v["added"] >= 1 and v["modelled"] == v["added"]
++        assert any(m.service_id.startswith("lv") for m in plan.models)
++        for a in plan.local_search["variant_additions"]:
++            assert a["service_id"].startswith("lv") and a["vessel_class"] == "M"
++
++    def test_off_by_default(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.delenv(ls.ENV_VARIANTS, raising=False)
++        pr = self._problem()
++        cands = [Candidate("c0", ("A", "B"), "S"), Candidate("c1", ("B", "C"), "S")]
++        plan = NetworkPlanner(pr).plan(cands, demands=pr.demands, time_limit_sec=30.0)
++        assert "variants" not in plan.local_search
++        assert not any(m.service_id.startswith("lv") for m in plan.models)
++
++    def test_parsing(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_VARIANTS, "0.25")
++        assert ls.variants_from_environment() == 0.25
++        for bad in ("-1", "2", "x"):
++            monkeypatch.setenv(ls.ENV_VARIANTS, bad)
++            with pytest.raises(ValueError):
++                ls.variants_from_environment()
++
++
++class TestMultiHopEvaluator:
++    def test_parsing(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.delenv(ls.ENV_MULTIHOP, raising=False)
++        assert ls.config_from_environment().multi_hop is False
++        monkeypatch.setenv(ls.ENV_MULTIHOP, "1")
++        assert ls.config_from_environment().multi_hop is True
++        monkeypatch.setenv(ls.ENV_MULTIHOP, "maybe")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++
++    def test_plan_with_the_richer_evaluator_is_ledger_verified(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_MULTIHOP, "1")
++        pr = _problem(_demands())
++        plan = NetworkPlanner(pr).plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++
++
++class TestSearchOnlyVariantFloor:
++    """``LINER_LOCAL_SEARCH_VARIANTS_FLOOR``: its own floor, independent of ``LINER_CLASS_VARIANTS_FLOOR``."""
++
++    def test_parsing(self, monkeypatch):
++        monkeypatch.delenv(ls.ENV_VARIANTS_FLOOR, raising=False)
++        assert ls.variants_floor_from_environment() is None
++        monkeypatch.setenv(ls.ENV_VARIANTS_FLOOR, "-250000")
++        assert ls.variants_floor_from_environment() == -250000.0
++        for bad in ("5", "x", "nan", "-inf"):
++            monkeypatch.setenv(ls.ENV_VARIANTS_FLOOR, bad)
++            with pytest.raises(ValueError):
++                ls.variants_floor_from_environment()
++
++    def test_floor_admits_more_variants_and_the_plan_stays_verified(self, monkeypatch):
++        helper = TestVariantsVisibleOnlyToTheSearch()
++        pr = helper._problem()
++        cands = [Candidate("c0", ("A", "B"), "S"), Candidate("c1", ("B", "C"), "S"),
++                 Candidate("c2", ("A", "B", "C"), "S")]
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_VARIANTS, "1.0")
++        monkeypatch.delenv(ls.ENV_VARIANTS_FLOOR, raising=False)
++        base = NetworkPlanner(pr).plan(cands, demands=pr.demands, time_limit_sec=30.0)
++        monkeypatch.setenv(ls.ENV_VARIANTS_FLOOR, "-1e12")
++        wide = NetworkPlanner(pr).plan(cands, demands=pr.demands, time_limit_sec=30.0)
++        assert base.ok and wide.ok and wide.ledger.valid and wide.reconciliation["reconciled"] is True
++        vb, vw = base.local_search.get("variants"), wide.local_search.get("variants")
++        assert vw is not None and vw["standalone_profit_floor"] == -1e12
++        assert (vb or {}).get("standalone_profit_floor", 0.0) == 0.0
++        assert vw["added"] >= (vb or {}).get("added", 0)
++
++
++class TestIdleServicePrune:
++    """A service that carries no cargo in the final flows is dropped (found by the hold-out gate: the
++    last search move opened a service the final re-routing then left empty)."""
++
++    def test_an_empty_service_is_dropped_and_profit_rises_by_its_fixed_cost(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1, "bc": 1})
++        sol, models, paths = plan.solution, plan.models, plan.paths
++        used = {s for di, k, t in sol.flows for s in paths[di][k].services}
++        idle_si = next(i for i in range(len(models)) if i not in used)
++        # make that unused service "operated" at f = 1 (the state the gate saw) and book its cost
++        before_profit = _profit(sol, models, pr.demands, paths)
++        sol.frequencies = {**{s: f for s, f in sol.frequencies.items() if f > 0}, idle_si: 1}
++        m = models[idle_si]
++        comp = dict(sol.objective_components)
++        comp["vessel_cost"] = comp.get("vessel_cost", 0.0) + m.vessel_week_cost * m.vessels(1)
++        comp["fuel_cost"] = comp.get("fuel_cost", 0.0) + m.fuel_cost_per_rotation
++        comp["port_fixed_cost"] = comp.get("port_fixed_cost", 0.0) + m.port_fixed_per_rotation
++        sol.objective_components = comp
++        sol.objective_value -= m.weekly_fixed_cost(1)
++        assert _profit(sol, models, pr.demands, paths) == pytest.approx(before_profit - m.weekly_fixed_cost(1))
++        rep = ls.prune_idle_services(models, paths, sol)
++        assert rep["applied"] is True and [d["service"] for d in rep["dropped"]] == [m.service_id]
++        assert idle_si not in sol.frequencies and idle_si not in sol.vessels
++        assert _profit(sol, models, pr.demands, paths) == pytest.approx(before_profit)
++        assert sol.objective_value == pytest.approx(before_profit, rel=1e-9, abs=1e-3)
++        assert rep["gain_usd"] == pytest.approx(m.weekly_fixed_cost(1))
++
++    def test_nothing_is_dropped_when_every_service_carries_cargo(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr)
++        before = dict(plan.solution.frequencies)
++        rep = ls.prune_idle_services(plan.models, plan.paths, plan.solution)
++        assert rep == {"applied": False, "dropped": [], "gain_usd": 0.0}
++        assert dict(plan.solution.frequencies) == before
++
++
++class TestRegionalAttributionOfSearchOnlyVariants:
++    """Every operated service - search-only variants included - lands in exactly one region, so the
++    regional costs add up to the network ledger (the gate that found the defect: a cargo-less ``lv``
++    service had no owner and its cost vanished from the regional partition)."""
++
++    def test_regional_totals_equal_the_ledger_with_search_only_variants(self, monkeypatch):
++        from src.network.reconcile import reconcile
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_VARIANTS, "1.0")
++        monkeypatch.setenv(ls.ENV_VARIANTS_FLOOR, "-1e12")
++        helper = TestVariantsVisibleOnlyToTheSearch()
++        pr = helper._problem()
++        pools = {"R1": [{"id": "c0", "ports": ["A", "B"], "vessel_class": "S"},
++                        {"id": "c2", "ports": ["A", "B", "C"], "vessel_class": "S"}],
++                 "R2": [{"id": "c1", "ports": ["B", "C"], "vessel_class": "S"}]}
++        region_of_od = {("A", "B"): "R1", ("B", "A"): "R1", ("B", "C"): "R2", ("C", "B"): "R2"}
++        res = reconcile(pr, pools, region_of_od, ["R1", "R2"], time_limit_sec=40.0)
++        assert res.ok, res.message
++        led = res.network_ledger["weekly_usd"]
++        reg_profit = sum(u["weekly_profit"] for u in res.region_updates.values())
++        reg_cost = sum(u["total_cost"] for u in res.region_updates.values())
++        assert reg_profit == pytest.approx(led["operating_profit"], rel=1e-9, abs=1e-3)
++        assert reg_cost == pytest.approx(led["total_operating_cost"], rel=1e-9, abs=1e-3)
++        listed = {x["id"] for u in res.region_updates.values() for x in u["selected_services"]}
++        assert listed == {s["id"] for s in res.network_ledger["plan"]["services"]}
++
++    def test_owner_registration_for_search_only_variants(self):
++        from src.network.reconcile import _register_variant_owners
++        owner = {"asia_1": "Asia", "cv0001": "Europe"}
++        proposers = {"asia_1": ["Asia", "Europe"], "cv0001": ["Europe"]}
++        _register_variant_owners([{"service_id": "lv0000", "rotation_of": "asia_1"},
++                                  {"service_id": "lv0001", "rotation_of": "cv0001"},
++                                  {"service_id": "lv0002", "rotation_of": "unknown"}], owner, proposers)
++        assert owner["lv0000"] == "Asia" and proposers["lv0000"] == ["Asia", "Europe"]
++        assert owner["lv0001"] == "Europe" and proposers["lv0001"] == ["Europe"]
++        assert owner["lv0002"] is None and proposers["lv0002"] == []          # unknown source: no invented owner
++        _register_variant_owners(None, owner, proposers)                       # nothing to register: no error
++
++    def test_a_service_without_cargo_or_proposer_is_never_dropped_from_the_partition(self):
++        from src.network.reconcile import _fallback_owner
++        regions = {"Asia": 1, "Europe": 2}
++        names = ["Asia", "Europe"]
++        assert _fallback_owner(["Europe", "Asia"], "Asia", regions, names) == "Europe"      # first proposer
++        assert _fallback_owner([], "Europe", regions, names) == "Europe"                    # rotation owner
++        assert _fallback_owner(["Mars"], "Mars", regions, names) == "Asia"                  # nothing known: first region
++        assert _fallback_owner([], None, regions, names) == "Asia"
++        assert _fallback_owner([], None, {}, []) is None                                    # no regions at all
++
+diff --git a/tests/test_milp_vub.py b/tests/test_milp_vub.py
+new file
+--- /dev/null
++++ b/tests/test_milp_vub.py
+@@ -0,0 +1,205 @@
++"""C1 - the optional valid inequality  q[od, p] <= weekly_teu[od] * f[s]  (``LINER_MILP_VUB``).
++
++Contract
++  * default OFF: the model is exactly the baseline model (no extra rows, formulation flag false);
++  * valid: it removes no integer-feasible point - checked by enumerating every integer
++    frequency vector of small instances and comparing the optimum of the baseline and of the
++    strengthened model point by point, and by comparing the unrestricted integer optima;
++  * stronger: the LP relaxation bound is never weaker (maximisation: never larger) and is
++    strictly smaller when demand is far below one vessel's capacity;
++  * covers multi-service (transfer) paths: one row per service of the path;
++  * skipped when frequencies are imposed (redundant there), and the skip is reported.
++"""
++import itertools
++import sys
++from pathlib import Path
++
++import pulp
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import src.network.network_milp as nm
++from src.network.paths import build_paths
++from src.network.plan import Candidate, NetworkPlanner
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++DM = {"A": {"B": 1000.0, "C": 1600.0}, "B": {"A": 1200.0, "C": 600.0},
++      "C": {"A": 1600.0, "B": 600.0}}
++CANDS = [Candidate("ab", ("A", "B"), "V"), Candidate("abc", ("A", "B", "C"), "V"),
++         Candidate("bc", ("B", "C"), "V")]
++
++
++def _problem(demands, capacity=1000.0, quantity=5, port_call=1000.0):
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=port_call,
++                  transshipment_cost=0.0, variable_port_call_cost=0.0) for p in "ABC"]
++    v = FleetClass(vessel_class="V", quantity=quantity, capacity_teu=capacity, tc_rate_daily=8000.0,
++                   min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                   bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM,
++                   fleet=Fleet(classes=[v]))
++
++
++INSTANCES = {
++    # demand >> capacity per sailing: several weekly departures are needed
++    "heavy": lambda: _problem([Demand("A", "B", 2500.0, 1000.0), Demand("B", "A", 1800.0, 1000.0),
++                               Demand("B", "C", 1200.0, 900.0)]),
++    # demand far below one vessel's capacity: the LP can run services at a tiny fraction
++    "light": lambda: _problem([Demand("A", "B", 120.0, 1000.0), Demand("B", "A", 90.0, 1000.0),
++                               Demand("B", "C", 60.0, 900.0), Demand("A", "C", 80.0, 1500.0)]),
++    # includes an A->C transfer path (two services)
++    "transfer": lambda: _problem([Demand("A", "B", 400.0, 1000.0), Demand("B", "C", 300.0, 900.0),
++                                  Demand("A", "C", 350.0, 1600.0)], capacity=600.0),
++}
++
++
++def _model(name):
++    pr = INSTANCES[name]()
++    planner = NetworkPlanner(pr)
++    models, rejected = planner.build_models(CANDS)
++    assert models and not rejected
++    paths, _ = build_paths(pr.demands, models, planner.port_lookup, planner.assumptions,
++                           max_paths_per_od=10, config=planner.path_config)
++    limits = {c.vessel_class: c.quantity for c in pr.fleet.classes}
++    return pr, planner, models, paths, limits
++
++
++def _build(name, vub, *, integer=True, fixed=None):
++    pr, _pl, models, paths, limits = _model(name)
++    res = nm._build_and_solve(models, pr.demands, paths, limits, list(range(len(models))),
++                              integer=integer, penalty=0.0, fixed=fixed, initial=None,
++                              max_departures_cap=None, time_limit_sec=30.0, threads=None,
++                              solve=False, vub=vub)
++    return res, models, pr, paths
++
++
++class TestFlag:
++    def test_default_off_and_parsing(self, monkeypatch):
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        assert nm.vub_enabled() is False
++        for v, want in (("1", True), ("true", True), ("ON", True), ("0", False), ("off", False), ("", False)):
++            monkeypatch.setenv("LINER_MILP_VUB", v)
++            assert nm.vub_enabled() is want
++        monkeypatch.setenv("LINER_MILP_VUB", "maybe")
++        with pytest.raises(ValueError, match="LINER_MILP_VUB"):
++            nm.vub_enabled()
++
++    def test_default_model_is_the_baseline_model(self, monkeypatch):
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        pr, planner, models, paths, limits = _model("light")
++        base = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=30.0)
++        assert base.formulation["vub_applied"] is False
++        assert base.formulation["vub_rows_integer_problem"] == 0
++        res, *_ = _build("light", vub=False)
++        assert res["vub_rows"] == 0 and not any(k.startswith("vub_") for k in res["prob"].constraints)
++
++
++class TestRowsAndSkips:
++    def test_one_row_per_service_of_each_path(self):
++        res, models, pr, paths = _build("transfer", vub=True)
++        expect = sum(len(set(p.services)) for plist in paths.values() for p in plist)
++        assert res["vub_rows"] == expect > 0
++        # a transfer path (two services) contributes two rows
++        n_transfer = sum(1 for plist in paths.values() for p in plist if len(set(p.services)) == 2)
++        assert n_transfer >= 1
++        names = [k for k in res["prob"].constraints if k.startswith("vub_")]
++        assert len(names) == expect
++
++    def test_rows_use_the_od_demand(self):
++        res, models, pr, paths = _build("light", vub=True)
++        prob = res["prob"]
++        for name, con in prob.constraints.items():
++            if not name.startswith("vub_"):
++                continue
++            _, di, k, si = name.split("_")
++            coeffs = {v.name: c for v, c in con.items()}
++            assert coeffs[f"q_{di}_{k}"] == pytest.approx(1.0)
++            assert coeffs[f"f_{si}"] == pytest.approx(-pr.demands[int(di)].weekly_teu)
++            assert con.sense == pulp.LpConstraintLE and con.constant == 0
++
++    def test_skipped_with_imposed_frequencies(self, monkeypatch):
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        pr, planner, models, paths, limits = _model("light")
++        sol = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=30.0,
++                               fixed_frequencies={0: 1, 1: 1, 2: 1})
++        assert sol.formulation["vub_requested"] is True
++        assert sol.formulation["vub_applied"] is False
++        assert sol.formulation["vub_rows_integer_problem"] == 0
++        res, *_ = _build("light", vub=True, fixed={0: 1, 1: 1, 2: 1})
++        assert res["vub_rows"] == 0
++
++
++class TestValidity:
++    @pytest.mark.parametrize("name", ["heavy", "light", "transfer"])
++    def test_unrestricted_integer_optimum_is_unchanged(self, name, monkeypatch):
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        pr, planner, models, paths, limits = _model(name)
++        base = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0, lp_guided=False)
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        vub = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0, lp_guided=False)
++        assert base.status == "optimal" and vub.status == "optimal"
++        assert vub.formulation["vub_applied"] is True and vub.formulation["vub_rows_integer_problem"] > 0
++        assert vub.objective_value == pytest.approx(base.objective_value, rel=1e-9, abs=1e-6)
++
++    @pytest.mark.parametrize("name", ["heavy", "transfer"])
++    def test_no_integer_point_is_cut(self, name):
++        """Fix every integer frequency vector (f in {0,1,2}^services) and compare the optimum of the
++        baseline and of the strengthened model: they must be equal at EVERY point (feasible or not)."""
++        base, models, *_ = _build(name, vub=False)
++        strong, *_ = _build(name, vub=True)
++        assert strong["vub_rows"] > 0
++        idx = base["active"]
++        assert idx == strong["active"]
++
++        def optimum(res, point):
++            for si, val in zip(idx, point):
++                res["f"][si].lowBound = res["f"][si].upBound = float(val)
++            res["prob"].solve(nm._solver(30.0, None, False))
++            st = res["prob"].status
++            return st, (pulp.value(res["prob"].objective) if st == pulp.LpStatusOptimal else None)
++
++        checked = 0
++        for point in itertools.product((0, 1, 2), repeat=len(idx)):
++            ub = [models[si].max_departures(5) for si in idx]
++            if any(p > u for p, u in zip(point, ub)):
++                continue
++            s0, o0 = optimum(base, point)
++            s1, o1 = optimum(strong, point)
++            assert s0 == s1, f"feasibility differs at f={point}"
++            if o0 is not None:
++                assert o1 == pytest.approx(o0, rel=1e-9, abs=1e-6), f"optimum differs at f={point}"
++            checked += 1
++        assert checked >= 8
++
++
++class TestBound:
++    @pytest.mark.parametrize("name", ["heavy", "light", "transfer"])
++    def test_lp_bound_is_not_weaker(self, name, monkeypatch):
++        pr, planner, models, paths, limits = _model(name)
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        b0 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0).relaxation_bound
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        b1 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0).relaxation_bound
++        assert b0 is not None and b1 is not None
++        assert b1 <= b0 + 1e-6 * max(1.0, abs(b0))              # maximisation: a stronger bound is smaller
++
++    def test_lp_bound_is_strictly_stronger_when_demand_is_far_below_capacity(self, monkeypatch):
++        pr, planner, models, paths, limits = _model("light")
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        b0 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0).relaxation_bound
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        s1 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0)
++        assert s1.relaxation_bound < b0 - 1.0
++        # and the bound is still a valid upper bound of the plan it produced
++        assert s1.relaxation_bound >= s1.objective_value - 1e-6
++
++
++class TestPlanIsLedgerVerified:
++    @pytest.mark.parametrize("name", ["heavy", "light", "transfer"])
++    def test_strengthened_plan_passes_the_independent_ledger(self, name, monkeypatch):
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        pr = INSTANCES[name]()
++        plan = NetworkPlanner(pr).plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++        assert plan.reconciliation["formulation"]["vub_applied"] is True
++        assert plan.ledger.operating_profit == pytest.approx(plan.solution.objective_value, abs=1e-3)
+diff --git a/tests/test_multi_agent_coordination.py b/tests/test_multi_agent_coordination.py
+--- a/tests/test_multi_agent_coordination.py
++++ b/tests/test_multi_agent_coordination.py
+@@ -576,22 +576,21 @@
+ 
+ class TestConsumptionPathways:
+     """5 tests verifying cross-agent data flows through the orchestrator."""
++    # NOTE (campaign 2026-10-12, Phase 8): the orchestrator no longer owns a ServiceGeneratorAgent - the
++    # regional agents generate their own candidates - so the tests below do not patch it any more.
+ 
+     @patch("src.agents.orchestrator_agent.ConsensusEngine")
+     @patch("src.agents.orchestrator_agent.CoordinatorAgent")
+     @patch("src.agents.orchestrator_agent.RegionalAgent")
+-    @patch("src.agents.orchestrator_agent.ServiceGeneratorAgent")
+     @patch("src.agents.orchestrator_agent.PortClustering")
+     @patch("src.agents.orchestrator_agent.RegionalSplitter")
+     def test_coordinator_receives_regional_policies(
+-        self, mock_splitter_cls, mock_cluster_cls, mock_svc_cls,
++        self, mock_splitter_cls, mock_cluster_cls,
+         mock_reg_cls, mock_coord_cls, mock_ce_cls, sample_problem, sample_problems
+     ):
+         """Coordinator must receive regional_policies in its input_data."""
+         # Setup mocks
+         mock_analyze = MagicMock(return_value="Size: Small\nComplexity Drivers:\n- test\nDemand Concentration: moderate\nDecomposition Rationale: test")
+-        mock_svc = mock_svc_cls.return_value
+-        mock_svc.process.return_value = {"archetype_params": None}
+         mock_cluster = mock_cluster_cls.return_value
+         mock_cluster.cluster_ports.return_value = {0: ["CNSHA"], 1: ["NLRTM"], 2: ["USLAX"]}
+         mock_splitter = mock_splitter_cls.return_value
+@@ -640,7 +639,10 @@
+             "notes": "confidence=0.9500",
+         }
+ 
+-        orch = OrchestratorAgent.__new__(OrchestratorAgent)
++        # constructed through __init__ (RegionalAgent / CoordinatorAgent / ConsensusEngine are patched at the
++        # module level above): process() reads state that only __init__ sets (_previous_consensus,
++        # consensus_engine, shared_context, iteration_results ...)
++        orch = OrchestratorAgent()
+         orch.name = "orchestrator"
+         orch.evaluator = MagicMock()
+         mock_reg2 = mock_reg_cls.return_value
+@@ -667,27 +669,29 @@
+         with patch.object(OrchestratorAgent, "analyze_problem", return_value="Size: Small\nComplexity Drivers:\n- test\nDemand Concentration: moderate\nDecomposition Rationale: test"):
+             orch.process({"problem": sample_problem})
+ 
+-        # Verify coordinator received regional_policies
++        # Current contract (orchestrator_agent.py, "Consensus Engine reconciliation"): the regional
++        # policies built from the regional results are handed to the CONSENSUS ENGINE together with the
++        # coordinator's decisions; the coordinator itself receives the regional solutions.
+         coord_call = mock_coord.process.call_args
+         assert coord_call is not None, "Coordinator.process() was not called"
+-        input_data = coord_call[0][0]
+-        assert "regional_policies" in input_data, (
+-            "Coordinator must receive regional_policies"
++        assert "regional_solutions" in coord_call[0][0], "Coordinator must receive the regional solutions"
++        ce_call = mock_ce.process.call_args
++        assert ce_call is not None, "ConsensusEngine.process() was not called"
++        assert ce_call.kwargs.get("regional_policies"), (
++            "ConsensusEngine must receive the regional policies"
+         )
++        assert "coordinator_decisions" in ce_call.kwargs
+ 
+     @patch("src.agents.orchestrator_agent.ConsensusEngine")
+     @patch("src.agents.orchestrator_agent.CoordinatorAgent")
+     @patch("src.agents.orchestrator_agent.RegionalAgent")
+-    @patch("src.agents.orchestrator_agent.ServiceGeneratorAgent")
+     @patch("src.agents.orchestrator_agent.PortClustering")
+     @patch("src.agents.orchestrator_agent.RegionalSplitter")
+     def test_regional_agent_receives_coordinator_objectives(
+-        self, mock_splitter_cls, mock_cluster_cls, mock_svc_cls,
++        self, mock_splitter_cls, mock_cluster_cls,
+         mock_reg_cls, mock_coord_cls, mock_ce_cls, sample_problem, sample_problems
+     ):
+         """Regional agent must receive coordinator_objectives in input_data."""
+-        mock_svc = mock_svc_cls.return_value
+-        mock_svc.process.return_value = {"archetype_params": None}
+         mock_cluster = mock_cluster_cls.return_value
+         mock_cluster.cluster_ports.return_value = {0: ["CNSHA"], 1: ["NLRTM"], 2: ["USLAX"]}
+         mock_splitter = mock_splitter_cls.return_value
+@@ -719,7 +723,10 @@
+             "final_archetype_params": copy.deepcopy(DEFAULT_ARCHETYPE_PARAMS),
+             "conflicts_resolved": [], "conflicts_remaining": [], "notes": ""}
+ 
+-        orch = OrchestratorAgent.__new__(OrchestratorAgent)
++        # constructed through __init__ (RegionalAgent / CoordinatorAgent / ConsensusEngine are patched at the
++        # module level above): process() reads state that only __init__ sets (_previous_consensus,
++        # consensus_engine, shared_context, iteration_results ...)
++        orch = OrchestratorAgent()
+         orch.name = "orchestrator"
+         orch.evaluator = MagicMock()
+         orch.regional_agents = [mock_reg, mock_reg, mock_reg]
+@@ -732,31 +739,28 @@
+                           return_value="Size: Small\nComplexity Drivers:\n- test\nDemand Concentration: moderate\nDecomposition Rationale: test"):
+             orch.process({"problem": sample_problem})
+ 
+-        # Verify regional agent received coordinator_objectives
++        # Current contract: regional agents receive {"problem": <regional Problem>}; the objective
++        # weights (consensus-adjusted after every iteration) are attributes of the Problem that the
++        # RegionalSplitter splits at the start of each iteration.
+         reg_call = mock_reg.process.call_args
+         assert reg_call is not None, "RegionalAgent.process() was not called"
+-        input_data = reg_call[0][0]
+-        assert "coordinator_objectives" in input_data, (
+-            "Regional agent must receive coordinator_objectives"
+-        )
+-        obj = input_data["coordinator_objectives"]
+-        assert "profit_weight" in obj
+-        assert "coverage_weight" in obj
+-        assert "cost_weight" in obj
++        assert "problem" in reg_call[0][0], "Regional agent must receive its problem"
++        assert mock_splitter_cls.call_args_list, "RegionalSplitter was not constructed"
++        split_problem = mock_splitter_cls.call_args_list[-1][0][0]
++        assert split_problem is sample_problem
++        for w in ("profit_weight", "coverage_weight", "cost_weight"):
++            assert getattr(split_problem, w) > 0.0, f"{w} missing on the problem that is split"
+ 
+     @patch("src.agents.orchestrator_agent.ConsensusEngine")
+     @patch("src.agents.orchestrator_agent.CoordinatorAgent")
+     @patch("src.agents.orchestrator_agent.RegionalAgent")
+-    @patch("src.agents.orchestrator_agent.ServiceGeneratorAgent")
+     @patch("src.agents.orchestrator_agent.PortClustering")
+     @patch("src.agents.orchestrator_agent.RegionalSplitter")
+     def test_consensus_engine_called_after_agents(
+-        self, mock_splitter_cls, mock_cluster_cls, mock_svc_cls,
++        self, mock_splitter_cls, mock_cluster_cls,
+         mock_reg_cls, mock_coord_cls, mock_ce_cls, sample_problem, sample_problems
+     ):
+         """Consensus engine process() must be called after all agents."""
+-        mock_svc = mock_svc_cls.return_value
+-        mock_svc.process.return_value = {"archetype_params": None}
+         mock_cluster = mock_cluster_cls.return_value
+         mock_cluster.cluster_ports.return_value = {0: ["CNSHA"], 1: ["NLRTM"], 2: ["USLAX"]}
+         mock_splitter = mock_splitter_cls.return_value
+@@ -788,7 +792,10 @@
+             "final_archetype_params": copy.deepcopy(DEFAULT_ARCHETYPE_PARAMS),
+             "conflicts_resolved": [], "conflicts_remaining": [], "notes": ""}
+ 
+-        orch = OrchestratorAgent.__new__(OrchestratorAgent)
++        # constructed through __init__ (RegionalAgent / CoordinatorAgent / ConsensusEngine are patched at the
++        # module level above): process() reads state that only __init__ sets (_previous_consensus,
++        # consensus_engine, shared_context, iteration_results ...)
++        orch = OrchestratorAgent()
+         orch.name = "orchestrator"
+         orch.evaluator = MagicMock()
+         orch.regional_agents = [mock_reg, mock_reg, mock_reg]
+@@ -813,11 +820,10 @@
+     @patch("src.agents.orchestrator_agent.ConsensusEngine")
+     @patch("src.agents.orchestrator_agent.CoordinatorAgent")
+     @patch("src.agents.orchestrator_agent.RegionalAgent")
+-    @patch("src.agents.orchestrator_agent.ServiceGeneratorAgent")
+     @patch("src.agents.orchestrator_agent.PortClustering")
+     @patch("src.agents.orchestrator_agent.RegionalSplitter")
+     def test_final_policy_matches_consensus(
+-        self, mock_splitter_cls, mock_cluster_cls, mock_svc_cls,
++        self, mock_splitter_cls, mock_cluster_cls,
+         mock_reg_cls, mock_coord_cls, mock_ce_cls, sample_problem, sample_problems
+     ):
+         """Problem weights at end should match consensus final_weight_adjustments."""
+@@ -826,8 +832,6 @@
+             "coverage_weight": 0.45,
+             "cost_weight": 0.10,
+         }
+-        mock_svc = mock_svc_cls.return_value
+-        mock_svc.process.return_value = {"archetype_params": None}
+         mock_cluster = mock_cluster_cls.return_value
+         mock_cluster.cluster_ports.return_value = {0: ["CNSHA"], 1: ["NLRTM"], 2: ["USLAX"]}
+         mock_splitter = mock_splitter_cls.return_value
+@@ -859,7 +863,10 @@
+             "final_archetype_params": copy.deepcopy(DEFAULT_ARCHETYPE_PARAMS),
+             "conflicts_resolved": [], "conflicts_remaining": [], "notes": ""}
+ 
+-        orch = OrchestratorAgent.__new__(OrchestratorAgent)
++        # constructed through __init__ (RegionalAgent / CoordinatorAgent / ConsensusEngine are patched at the
++        # module level above): process() reads state that only __init__ sets (_previous_consensus,
++        # consensus_engine, shared_context, iteration_results ...)
++        orch = OrchestratorAgent()
+         orch.name = "orchestrator"
+         orch.evaluator = MagicMock()
+         orch.regional_agents = [mock_reg, mock_reg, mock_reg]
+@@ -879,8 +886,7 @@
+ 
+     def test_service_generator_receives_coordinator_objectives(self):
+         """ServiceGeneratorAgent should accept coordinator_objectives in input."""
+-        agent = ServiceGeneratorAgent.__new__(ServiceGeneratorAgent)
+-        agent.name = "test_svc_gen"
++        agent = ServiceGeneratorAgent(name="test_svc_gen", model="test")     # constructed normally: process() uses ``_metrics``
+         # Minimal test: verify that process() accepts coordinator_objectives key
+         # without error when present.  We patch the LLM call since we don't
+         # have a real problem to run through.
+diff --git a/tests/test_orchestrator.py b/tests/test_orchestrator.py
+--- a/tests/test_orchestrator.py
++++ b/tests/test_orchestrator.py
+@@ -2616,6 +2616,48 @@
+                  f"served TEU {fr['served_teu_before']:,.0f} -> {fr['served_teu_after']:,.0f}")
+     elif isinstance(fr, dict):
+         print_kv("Flow re-optimisation", f"not applied ({fr.get('reason')})")
++
++    # -- N.11 opt-in optimiser flags (campaign 2026-10-12; every one default OFF) ---------------
++    # With no flag set nothing below is asserted except that the plan REPORTS the state; with a flag
++    # set, the contract of that flag is checked on the real end-to-end plan.
++    print(f"\n  {C.BOLD}N.11 Opt-in optimiser flags (C1 inequality, local search, class variants){C.RESET}")
++    import os as _os
++    form = opt.get("formulation") or {}
++    lsr = opt.get("local_search") or {}
++    aug = led.get("candidate_augmentation") or {}
++    assert_true(isinstance(lsr, dict) and "enabled" in lsr,
++                "network_ledger.optimality states whether the local search was enabled", f"{lsr!r}")
++    assert_true(isinstance(form, dict) and "vub_requested" in form,
++                "network_ledger.optimality states the formulation flags in force", f"{form!r}")
++    if form.get("vub_requested"):
++        assert_true(bool(form.get("vub_applied")) and (int(form.get("vub_rows_lp_relaxation", 0)) > 0
++                                                       or int(form.get("vub_rows_integer_problem", 0)) > 0),
++                    "LINER_MILP_VUB: the inequality was added to the model that was solved",
++                    f"formulation={form!r}")
++    if lsr.get("enabled"):
++        limit = float(_os.environ.get("GLOBAL_STAGE_TIME_LIMIT_SEC", "120") or 120.0)
++        tm = opt.get("stage_timing") or {}
++        assert_true(float(tm.get("plan_total_sec", 1e9)) <= limit + 2.0,
++                    "local search: the complete global stage ends within its budget (+2 s tolerance)",
++                    f"plan_total_sec={tm.get('plan_total_sec')!r} limit={limit}")
++        if lsr.get("applied"):
++            assert_true(float(lsr.get("gain_usd", -1.0)) >= 0.0,
++                        "local search never lowers the plan's profit", f"gain={lsr.get('gain_usd')}")
++            assert_true(opt.get("milp_status") != "optimal",
++                        "a plan changed by the local search is not reported 'optimal'",
++                        f"milp_status={opt.get('milp_status')!r}")
++            idle = [x.get("service") for x in (sr.get("services") or []) if float(x.get("carried_teu_legs") or 0.0) <= 0.0]
++            assert_true(not idle, "local search: no operated service is left without cargo", f"idle={idle[:5]}")
++            print_kv("Local search", f"+{float(lsr.get('gain_usd', 0.0)):,.0f} USD/week, {len(lsr.get('moves') or [])} move(s), "
++                     f"{lsr.get('evaluations')} LP evaluations, {tm.get('local_search_sec')} s")
++    if aug.get("added"):
++        adds = aug.get("additions") or []
++        assert_true(len(adds) == int(aug["added"]) and all(a.get("rotation_of") and a.get("source_class")
++                                                         and a.get("vessel_class") for a in adds),
++                    "LINER_CLASS_VARIANTS: every added candidate carries its provenance",
++                    f"added={aug.get('added')} listed={len(adds)}")
++        print_kv("Class variants", f"{aug['added']} candidate(s) added; {aug.get('variants_positive_standalone')} "
++                 f"with positive stand-alone profit of {aug.get('variants_feasible')} feasible")
+     return {"verified": True, "recomputed": rc}
+ 
+ 
+diff --git a/tests/test_regional_agent_activation.py b/tests/test_regional_agent_activation.py
+--- a/tests/test_regional_agent_activation.py
++++ b/tests/test_regional_agent_activation.py
+@@ -425,6 +425,8 @@
+ 
+     # ── _filter_services ────────────────────────────────────────────────
+ 
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the service filter takes no policy margin any more (RegionalAgent._filter_services(problem, adaptive_budget)). Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
++
+     def test_default_policy_filter_services(self, problem):
+         """Default min_service_margin (0.05) should pass most services with good revenue."""
+         agent = RegionalAgent(name="test_influence", region="Test", model="test")
+@@ -442,6 +444,8 @@
+         assert "S004" in service_ids
+         assert "S005" not in service_ids  # This one fails the margin check
+ 
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the service filter takes no policy margin any more (RegionalAgent._filter_services(problem, adaptive_budget)). Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
++
+     def test_high_margin_stricter_filter(self, problem):
+         """Higher min_service_margin filters out more services."""
+         agent = RegionalAgent(name="test_influence", region="Test", model="test")
+@@ -458,6 +462,8 @@
+         assert "S001" in high_ids
+         assert "S003" in high_ids
+ 
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the service filter takes no policy margin any more (RegionalAgent._filter_services(problem, adaptive_budget)). Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
++
+     def test_no_margin_filter(self, problem):
+         """min_margin=0.0 keeps all services that have positive gross revenue."""
+         agent = RegionalAgent(name="test_influence", region="Test", model="test")
+@@ -544,6 +550,8 @@
+         assert abs(w_cost - expected_cost) < 0.01, f"Expected {expected_cost:.4f}, got {w_cost:.4f}"
+ 
+     # ── Full process with mocks ─────────────────────────────────────────
++
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the regional policy is derived from regional metrics (rule-based); the LLM JSON is not applied. Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
+ 
+     def test_different_policies_produce_different_outputs(self, problem):
+         """Different regional policies yield different process() outputs."""
+@@ -681,6 +689,8 @@
+ 
+     # ── AI_APPLIED ──────────────────────────────────────────────────────
+ 
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: no LLM policy is applied, so AI_APPLIED is not emitted by the regional agent. Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
++
+     def test_ai_applied_logged(self):
+         """Valid LLM JSON output logs AI_APPLIED."""
+         agent = RegionalAgent(name="test_log_app", region="LogTest", model="test")
+@@ -702,6 +712,8 @@
+ 
+     # ── AI_REJECTED on bad JSON ─────────────────────────────────────────
+ 
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the LLM output is not parsed as a policy, so AI_REJECTED cannot arise from it. Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
++
+     def test_ai_rejected_on_bad_json(self):
+         """LLM returning bad JSON logs AI_REJECTED."""
+         agent = RegionalAgent(name="test_log_rej", region="LogTest", model="test")
+@@ -722,6 +734,8 @@
+                                     assert "AI_REJECTED" in tags, f"AI_REJECTED not found in {tags}"
+ 
+     # ── AI_FALLBACK on exception ────────────────────────────────────────
++
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: an LLM exception no longer touches the policy; AI_FALLBACK is emitted on validator failure. Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
+ 
+     def test_ai_fallback_on_exception(self):
+         """Exception in LLM call logs AI_FALLBACK."""
+@@ -893,6 +907,8 @@
+ 
+     # ── Group B: AI-simulated policy ────────────────────────────────────
+ 
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the LLM-simulated policy is not applied (rule-based policy). Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
++
+     def test_group_b_ai_policy(self, agent, problem):
+         """Group B: run with AI-generated regional policy (simulated)."""
+         ai_policy_json = json.dumps({
+@@ -913,6 +929,8 @@
+         print(f"\n  Group B (AI) metrics: {json.dumps(metrics, indent=2)}")
+ 
+     # ── Cross-group comparison with delta reporting ─────────────────────
++
++    @pytest.mark.xfail(strict=True, reason="OBSOLETE under the accepted architecture: the LLM-simulated policy is not applied (rule-based policy). Replacement coverage: tests/test_regional_policy_architecture.py. Retirement awaits owner confirmation.")
+ 
+     def test_group_comparison_with_deltas(self, agent, problem):
+         """Compare Group A vs Group B metrics side by side with delta reporting."""
+diff --git a/tests/test_regional_policy_architecture.py b/tests/test_regional_policy_architecture.py
+new file
+--- /dev/null
++++ b/tests/test_regional_policy_architecture.py
+@@ -0,0 +1,143 @@
++"""Regional policy under the ACCEPTED architecture (replacement coverage for the retired AI-policy tests).
++
++Background (campaign 2026-10-12, Phase 8).  ``tests/test_regional_agent_activation.py`` was written for
++an earlier design in which the LLM's regional policy JSON drove the regional agent (``_filter_services``
++took a ``min_margin`` argument; ``AI_APPLIED`` / ``AI_REJECTED`` were emitted for the LLM's policy).
++The accepted architecture derives the regional policy from measured regional metrics
++(``source = rule-based``, ``RegionalAgent.process``), validates it with
++``validate_regional_policy``, and applies the service filter selected by ``LINER_REGIONAL_FILTER``
++(``src/services/regional_filter.py``); the LLM only writes explanatory text.  The retired tests'
++expectations therefore describe behaviour the system intentionally no longer has.
++
++These tests pin the CURRENT contract so the retirement leaves no coverage gap:
++  * the legacy filter's per-service margin test and corridor test are unchanged;
++  * the filter takes no policy margin (a policy value cannot change which services are kept);
++  * the regional policy in the result is rule-based, validated, tagged ``AI_VALIDATED``, and does not
++    depend on what the LLM returned (nor on the LLM failing);
++  * a validation failure falls back to ``DEFAULT_REGIONAL_POLICY`` and is tagged ``AI_FALLBACK``.
++"""
++import inspect
++import json
++import sys
++from pathlib import Path
++from unittest.mock import MagicMock, patch
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.agents import regional_agent as ra_module
++from src.agents.regional_agent import RegionalAgent
++from src.optimization.adaptive_budget import AdaptiveBudget, compute_complexity_signals
++from src.optimization.data import Demand, Port, Problem, Service
++from src.validation.regional_policy_validator import DEFAULT_REGIONAL_POLICY
++
++_EMPTY_MILP = {"status": "Optimal", "profit": 0, "cost": 0, "transship_cost": 0, "port_cost": 0,
++               "total_cost": 0, "coverage": 0, "satisfied_demand": 0, "direct_demand": 0,
++               "transship_demand": 0, "total_demand": 0, "unserved_demand": 0, "selected_services": []}
++
++
++def _problem():
++    ports = [Port(id=f"P{i:03d}", name=f"Port_{i}", latitude=10.0 + i, longitude=20.0 + i * 0.5,
++                  handling_cost=50 + i * 10, port_call_cost=1000 + i * 50) for i in range(1, 13)]
++    demands = [
++        Demand(origin="P001", destination="P002", weekly_teu=5000.0, revenue_per_teu=150.0),
++        Demand(origin="P001", destination="P003", weekly_teu=3000.0, revenue_per_teu=150.0),
++        Demand(origin="P005", destination="P006", weekly_teu=8000.0, revenue_per_teu=150.0),
++        Demand(origin="P010", destination="P011", weekly_teu=2000.0, revenue_per_teu=150.0),
++        Demand(origin="P002", destination="P004", weekly_teu=4000.0, revenue_per_teu=150.0),
++        Demand(origin="P003", destination="P007", weekly_teu=3000.0, revenue_per_teu=150.0),
++    ]
++    dm = {f"P{i:03d}": {f"P{j:03d}": 100.0 for j in range(1, 13)} for i in range(1, 13)}
++    prob = Problem(ports=ports, services=[], demands=demands, distance_matrix=dm)
++    prob.services = [
++        Service(id="S001", ports=["P001", "P002"], capacity=5000, weekly_cost=150000),
++        Service(id="S002", ports=["P001", "P003"], capacity=3000, weekly_cost=200000),
++        Service(id="S003", ports=["P005", "P006"], capacity=8000, weekly_cost=100000),
++        Service(id="S004", ports=["P001", "P002", "P003"], capacity=6000, weekly_cost=180000),
++        Service(id="S005", ports=["P010", "P011"], capacity=2000, weekly_cost=250000),
++        Service(id="S006", ports=["P008", "P009"], capacity=9000, weekly_cost=1000),   # covers no demand
++    ]
++    return prob
++
++
++def _budget(problem):
++    return AdaptiveBudget.from_signals(compute_complexity_signals(
++        num_ports=len(problem.ports), demands=problem.demands, fleet=None))
++
++
++class TestLegacyFilterContract:
++    @pytest.fixture(autouse=True)
++    def _legacy(self, monkeypatch):
++        monkeypatch.setenv("LINER_REGIONAL_FILTER", "legacy")
++
++    def test_margin_test_and_corridor_test(self):
++        """capacity x 0.5 x 150 > weekly cost, and both ports of a demand corridor on the rotation."""
++        pr = _problem()
++        agent = RegionalAgent(name="arch", region="Test", model="test")
++        kept = {s.id for s in agent._filter_services(pr, _budget(pr)).services}
++        # S001: 375,000 > 150,000   S002: 225,000 > 200,000   S003: 600,000 > 100,000   S004: 450,000 > 180,000
++        assert {"S001", "S002", "S003", "S004"} <= kept
++        assert "S005" not in kept            # 150,000 < 250,000 : fails the margin test
++        assert "S006" not in kept            # no corridor: fails the coverage test
++
++    def test_filter_takes_no_policy_margin(self):
++        params = list(inspect.signature(RegionalAgent._filter_services).parameters)
++        assert params == ["self", "problem", "adaptive_budget"], params
++
++
++def _run(agent, problem, llm):
++    """RegionalAgent.process with the heavy collaborators mocked; returns (result, info-call list)."""
++    with patch.object(agent, "call_llm", **llm):
++        with patch("src.agents.regional_agent.ServiceGeneratorAgent") as svc:
++            svc.return_value.process.return_value = {"services": []}
++            with patch("src.agents.regional_agent.HierarchicalGA") as ga:
++                ga.return_value.run.return_value = {"services": [], "frequencies": [],
++                                                    "coverage_estimate": 0.0, "skip_milp": False}
++                with patch("src.agents.regional_agent.HubMILP") as milp:
++                    milp.return_value.solve.return_value = dict(_EMPTY_MILP)
++                    with patch.object(agent, "split_by_hubs", return_value={"hub": problem.ports}):
++                        with patch.object(agent, "_filter_services", return_value=problem):
++                            with patch.object(ra_module.logger, "info") as info:
++                                out = agent.process({"problem": problem})
++    return out, info
++
++
++def _tags(info: MagicMock):
++    tags = []
++    for call in info.call_args_list:
++        args, kwargs = call
++        if "tag" in kwargs:
++            tags.append(kwargs["tag"])
++        elif args and isinstance(args[0], str) and "tag=%s" in args[0]:
++            idx = args[0].split("tag=%s")[0].count("%s")
++            if 1 + idx < len(args):
++                tags.append(args[1 + idx])
++    return tags
++
++
++class TestRuleBasedPolicy:
++    def test_policy_is_validated_and_tagged(self):
++        agent = RegionalAgent(name="arch_a", region="Test", model="test")
++        out, info = _run(agent, _problem(), dict(side_effect=Exception("LLM provider unavailable")))
++        assert "AI_VALIDATED" in _tags(info)
++        pol = out["regional_policy"]
++        for k in ("coverage_priority", "profit_priority", "min_service_margin", "vessel_bias"):
++            assert k in pol
++        assert 0.0 <= pol["coverage_priority"] <= 1.0 and 0.0 <= pol["profit_priority"] <= 1.0
++
++    def test_policy_does_not_depend_on_the_llm_text(self):
++        aggressive = json.dumps({"coverage_priority": 0.95, "profit_priority": 0.05, "min_service_margin": 0.3,
++                                 "vessel_bias": "large", "hub_focus": ["P001"], "notes": "x"})
++        a, _ = _run(RegionalAgent(name="arch_b1", region="Test", model="test"), _problem(),
++                    dict(return_value=aggressive))
++        b, _ = _run(RegionalAgent(name="arch_b2", region="Test", model="test"), _problem(),
++                    dict(return_value="not json at all {{{"))
++        assert a["regional_policy"] == b["regional_policy"]
++
++    def test_validation_failure_falls_back_to_the_default_policy(self):
++        agent = RegionalAgent(name="arch_c", region="Test", model="test")
++        with patch.object(ra_module, "validate_regional_policy", side_effect=ValueError("bad policy")):
++            out, info = _run(agent, _problem(), dict(return_value="{}"))
++        assert "AI_FALLBACK" in _tags(info)
++        assert out["regional_policy"] == DEFAULT_REGIONAL_POLICY
+diff --git a/tests/test_rng_control.py b/tests/test_rng_control.py
+new file
+--- /dev/null
++++ b/tests/test_rng_control.py
+@@ -0,0 +1,149 @@
++"""Task 17 - opt-in, centralised random-number control (``LINER_SEED``, src/utils/rng.py).
++
++Contract
++  * ``LINER_SEED`` unset: the process-global generators are used exactly as before (the existing
++    tests that seed ``random`` / ``numpy.random`` themselves keep working);
++  * set: every stochastic component draws from its own generator derived from (seed, component,
++    region, call index) - identical across runs, and independent of the order components run in
++    (the orchestrator runs regions in a thread pool, so a shared global generator is not).
++"""
++import random
++import sys
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.utils import rng as rngmod
++from src.optimization.frequency_ga import FrequencyGA
++from src.optimization.service_ga import ServiceGA
++from src.services.candidate_service_generator import CandidateServiceGenerator
++from tests.test_ga import _build_problem
++
++
++@pytest.fixture(scope="module")
++def problem():
++    return _build_problem(seed=4242)
++
++
++class TestSeedHandling:
++    def test_unset_is_none_and_global_generators(self, monkeypatch):
++        monkeypatch.delenv("LINER_SEED", raising=False)
++        assert rngmod.seed_from_environment() is None
++        s = rngmod.streams("service_ga", "Asia#1")
++        assert s.py is random and s.np is np.random and s.seed is None
++
++    def test_parsing_and_errors(self, monkeypatch):
++        monkeypatch.setenv("LINER_SEED", "17")
++        assert rngmod.seed_from_environment() == 17
++        monkeypatch.setenv("LINER_SEED", "-1")
++        with pytest.raises(ValueError):
++            rngmod.seed_from_environment()
++        monkeypatch.setenv("LINER_SEED", "abc")
++        with pytest.raises(ValueError):
++            rngmod.seed_from_environment()
++
++    def test_derived_seeds_are_stable_and_label_dependent(self):
++        a = rngmod.derive_seed(7, "service_ga", "Asia#1")
++        assert a == rngmod.derive_seed(7, "service_ga", "Asia#1")
++        assert a != rngmod.derive_seed(7, "service_ga", "Asia#2")
++        assert a != rngmod.derive_seed(7, "frequency_ga", "Asia#1")
++        assert a != rngmod.derive_seed(8, "service_ga", "Asia#1")
++        # pinned value: the derivation must never depend on PYTHONHASHSEED or the platform
++        assert rngmod.derive_seed(7, "service_ga", "Asia#1") == 4587962692285842661
++
++    def test_seeded_streams_repeat(self, monkeypatch):
++        monkeypatch.setenv("LINER_SEED", "5")
++        s1, s2 = rngmod.streams("x", "r"), rngmod.streams("x", "r")
++        assert [s1.py.random() for _ in range(5)] == [s2.py.random() for _ in range(5)]
++        assert list(s1.np.integers(0, 100, 5)) == list(s2.np.integers(0, 100, 5))
++        assert s1.seed == s2.seed is not None
++
++
++class TestComponentsAreReproducible:
++    def _service_ga(self, problem, seed):
++        return ServiceGA(problem, pop_size=20, generations=6, rng=random.Random(seed),
++                         np_rng=np.random.default_rng(seed)).run()
++
++    def test_service_ga_same_seed_same_result_whatever_the_global_state(self, problem):
++        a = self._service_ga(problem, 11)
++        random.seed(999)                       # disturb the global generators between runs
++        np.random.seed(999)
++        random.random()
++        b = self._service_ga(problem, 11)
++        assert a == b
++
++    def test_seeded_components_never_touch_the_global_generators(self, problem):
++        """With its own generators a component must leave ``random`` / ``numpy.random`` untouched: that is
++        what makes its result independent of every other thread's draws."""
++        random.seed(123)
++        np.random.seed(123)
++        py_state, np_state = random.getstate(), np.random.get_state()
++        mask = ServiceGA(problem, pop_size=20, generations=3, rng=random.Random(5),
++                         np_rng=np.random.default_rng(5)).run()
++        FrequencyGA(problem, mask, pop_size=20, generations=3, rng=random.Random(5)).run()
++        CandidateServiceGenerator(problem, rng=random.Random(5)).generate_services(20)
++        assert random.getstate() == py_state
++        after = np.random.get_state()
++        assert after[0] == np_state[0] and (after[1] == np_state[1]).all() and after[2:] == np_state[2:]
++
++    def test_the_streams_of_two_seeds_differ(self):
++        a, b = random.Random(11), random.Random(12)
++        assert [a.random() for _ in range(5)] != [b.random() for _ in range(5)]
++        x, y = np.random.default_rng(11), np.random.default_rng(12)
++        assert list(x.integers(0, 10 ** 9, 5)) != list(y.integers(0, 10 ** 9, 5))
++
++    def test_order_independence(self, problem):
++        """Two components drawing from their own streams give the same results in either order
++        (the property a shared global generator lacks under a thread pool)."""
++        def run(order):
++            out = {}
++            for name in order:
++                out[name] = self._service_ga(problem, {"A": 21, "B": 22}[name])
++            return out
++        assert run(["A", "B"]) == run(["B", "A"])
++
++    def test_frequency_ga_same_seed_same_result(self, problem):
++        mask = self._service_ga(problem, 31)
++        f1 = FrequencyGA(problem, mask, pop_size=20, generations=6, rng=random.Random(3)).run()
++        f2 = FrequencyGA(problem, mask, pop_size=20, generations=6, rng=random.Random(3)).run()
++        assert list(f1) == list(f2)
++
++    def test_candidate_generator_same_seed_same_pool(self, problem):
++        def pool(seed):
++            g = CandidateServiceGenerator(problem, rng=random.Random(seed))
++            return [tuple(getattr(s, "ports", ())) for s in g.generate_services(40)]
++        assert pool(5) == pool(5)
++
++    def test_unseeded_generators_still_honour_global_seeding(self, problem):
++        random.seed(77)
++        np.random.seed(77)
++        a = ServiceGA(problem, pop_size=20, generations=6).run()
++        random.seed(77)
++        np.random.seed(77)
++        b = ServiceGA(problem, pop_size=20, generations=6).run()
++        assert a == b
++
++
++class TestCandidateGeneratorStreamsPerRegionAndCall:
++    """Found by the full-pipeline comparison (Phase 7): with one stream label for every region and every
++    iteration, a seeded run produced the SAME candidate pool in all iterations, collapsing the
++    best-of-three exploration.  Each (region, call) now has its own repeatable stream."""
++
++    def test_labels_give_distinct_but_repeatable_streams(self, monkeypatch):
++        monkeypatch.setenv("LINER_SEED", "5")
++        from src.utils.rng import streams
++        a1 = [streams("candidate_generator", "Asia#1").py.random() for _ in range(3)]
++        a1b = [streams("candidate_generator", "Asia#1").py.random() for _ in range(3)]
++        a2 = [streams("candidate_generator", "Asia#2").py.random() for _ in range(3)]
++        e1 = [streams("candidate_generator", "Europe#1").py.random() for _ in range(3)]
++        assert a1 == a1b and a1 != a2 and a1 != e1
++
++    def test_regional_agent_labels_each_call(self):
++        import inspect
++        from src.agents import regional_agent as ra
++        src = inspect.getsource(ra.RegionalAgent.process)
++        assert 'svc_agent.rng_label = f"{self.region}#{self._svc_calls}"' in src
++
+diff --git a/tests/test_service_generator_activation.py b/tests/test_service_generator_activation.py
+--- a/tests/test_service_generator_activation.py
++++ b/tests/test_service_generator_activation.py
+@@ -11,6 +11,7 @@
+ import json
+ import sys
+ import math
++from contextlib import contextmanager
+ from pathlib import Path
+ from typing import Dict, Any, List, Optional
+ from unittest.mock import patch, MagicMock, ANY
+@@ -29,6 +30,7 @@
+     MIX_KEYS,
+     VALID_VESSEL_BIASES,
+ )
++from src.agents import service_generator_agent as _sga_module
+ from src.agents.service_generator_agent import ServiceGeneratorAgent
+ from src.data.network_loader import NetworkLoader
+ from src.optimization.data import Problem, Port, Service, Demand
+@@ -38,6 +40,16 @@
+ # ===========================================================================
+ # Helpers
+ # ===========================================================================
++
++@contextmanager
++def _patched_info():
++    """Capture ``info`` of BOTH loggers the pipeline uses: the project logger
++    (``src.utils.logger.logger``: the validators, kwargs style) and the agent module's stdlib logger
++    (``logger.info('event | tag=%s ...', TAG)``)."""
++    shared = MagicMock()
++    with patch.object(logger, "info", new=shared), patch.object(_sga_module.logger, "info", new=shared):
++        yield shared
++
+ 
+ def create_minimal_problem(
+     num_ports: int = 15,
+@@ -532,7 +544,7 @@
+ 
+     def test_ai_validated_on_valid_params(self):
+         """Valid params log AI_VALIDATED."""
+-        with patch.object(logger, "info") as mock_info:
++        with _patched_info() as mock_info:
+             raw = {
+                 "archetype_mix": {
+                     "direct_ratio": 0.50,
+@@ -555,14 +567,14 @@
+ 
+     def test_ai_rejected_on_none(self):
+         """None input logs AI_REJECTED."""
+-        with patch.object(logger, "info") as mock_info:
++        with _patched_info() as mock_info:
+             validate_archetype_params(None, source="test")
+             tags = self._extract_tags(mock_info)
+             assert "AI_REJECTED" in tags, f"AI_REJECTED not found in {tags}"
+ 
+     def test_ai_rejected_on_empty_dict(self):
+         """Empty dict logs AI_REJECTED."""
+-        with patch.object(logger, "info") as mock_info:
++        with _patched_info() as mock_info:
+             validate_archetype_params({}, source="test")
+             tags = self._extract_tags(mock_info)
+             assert "AI_REJECTED" in tags, f"AI_REJECTED not found in {tags}"
+@@ -571,14 +583,14 @@
+ 
+     def test_ai_fallback_on_none(self):
+         """None input eventually logs AI_FALLBACK (from fallback fn)."""
+-        with patch.object(logger, "info") as mock_info:
++        with _patched_info() as mock_info:
+             validate_archetype_params(None, source="test")
+             tags = self._extract_tags(mock_info)
+             assert "AI_FALLBACK" in tags, f"AI_FALLBACK not found in {tags}"
+ 
+     def test_ai_fallback_on_empty_dict(self):
+         """Empty dict logs AI_FALLBACK."""
+-        with patch.object(logger, "info") as mock_info:
++        with _patched_info() as mock_info:
+             validate_archetype_params({}, source="test")
+             tags = self._extract_tags(mock_info)
+             assert "AI_FALLBACK" in tags, f"AI_FALLBACK not found in {tags}"
+@@ -606,7 +618,7 @@
+         })
+ 
+         with patch.object(agent, "call_llm", return_value=valid_json):
+-            with patch.object(logger, "info") as mock_info:
++            with _patched_info() as mock_info:
+                 result = agent.process({"problem": problem})
+                 tags = self._extract_tags(mock_info)
+                 assert "AI_GENERATED" in tags, f"AI_GENERATED not found in {tags}"
+@@ -634,7 +646,7 @@
+         })
+ 
+         with patch.object(agent, "call_llm", return_value=valid_json):
+-            with patch.object(logger, "info") as mock_info:
++            with _patched_info() as mock_info:
+                 result = agent.process({"problem": problem})
+                 tags = self._extract_tags(mock_info)
+                 assert "AI_APPLIED" in tags, f"AI_APPLIED not found in {tags}"
+@@ -662,7 +674,7 @@
+         })
+ 
+         with patch.object(agent, "call_llm", return_value=valid_json):
+-            with patch.object(logger, "info") as mock_info:
++            with _patched_info() as mock_info:
+                 agent.process({"problem": problem})
+                 tags = self._extract_tags(mock_info)
+                 for required in ("AI_GENERATED", "AI_VALIDATED", "AI_APPLIED"):
+@@ -680,6 +692,11 @@
+                 tags.append(kwargs["tag"])
+             elif len(args) >= 2 and isinstance(args[1], dict):
+                 tags.append(args[1].get("tag", ""))
++            elif args and isinstance(args[0], str) and "tag=%s" in args[0]:
++                # stdlib-logging style used by the agents: logger.info('event | tag=%s ...', TAG, ...)
++                idx = args[0].split("tag=%s")[0].count("%s")
++                if 1 + idx < len(args):
++                    tags.append(args[1 + idx])
+         return tags
+ 
+ 
+diff --git a/tests/test_setup.py b/tests/test_setup.py
+--- a/tests/test_setup.py
++++ b/tests/test_setup.py
+@@ -7,11 +7,16 @@
+ def test_config ():
+     """Test configuration loads correctly"""
+     print("\n=== Testing Configuration ===")
+-    print(f"API Key present: {'Yes' if Config.OPENROUTER_API_KEY else 'No'}")
++    # The OpenRouter provider was retired (providers: groq, cerebras, google); ``LLM_API_KEY`` is the
++    # backward-compatible alias of whichever provider key is present (src/utils/config.py).
++    print(f"API Key present: {'Yes' if Config.LLM_API_KEY else 'No'}")
+     print(f"Orchestrator model: {Config.ORCHESTRATOR_MODEL}")
+     print(f"Regional model: {Config.REGIONAL_MODEL}")
+     print(f"GA Population: {Config.GA_POPULATION_SIZE}")
+     print(f"GA Generations: {Config.GA_GENERATIONS}")
++    assert isinstance(Config.ORCHESTRATOR_MODEL, str) and Config.ORCHESTRATOR_MODEL
++    assert isinstance(Config.REGIONAL_MODEL, str) and Config.REGIONAL_MODEL
++    assert Config.GA_POPULATION_SIZE > 0 and Config.GA_GENERATIONS > 0
+     print("✓ Configuration working!")
+     
+ def test_logger():

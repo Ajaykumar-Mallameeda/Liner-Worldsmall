@@ -1,0 +1,108 @@
+"""Phase 5 acceptance tables: dev seeds (0-9, tags D5_*), hold-out seeds (10-19, tags H5_*) and the pooled 20.
+
+usage: python -I pool_paired.py <out.md> [arm ...]     (default arms: base ls e fin)
+Reads evidence/outputs/D5_<arm>_seed<S>.json and H5_<arm>_seed<S>.json (last run of each file).
+For every ordered pair of listed arms (A, B) with A listed after B in the order given: B - A is NOT computed;
+the differences are  later arm - earlier arm  for the pairs named in PAIRS below.
+"""
+import json
+import math
+import statistics as st
+import sys
+from pathlib import Path
+
+OUT = Path(r"C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\reports\campaign_20261012_1815\evidence\outputs")
+outfile = Path(sys.argv[1])
+ARMS = sys.argv[2:] or ["base", "ls", "e", "fin"]
+PAIRS = [("fin", "base"), ("fin", "ls"), ("fin", "e"), ("e", "ls"), ("e", "base"), ("ls", "base")]
+PAIRS = [(a, b) for a, b in PAIRS if a in ARMS and b in ARMS]
+
+
+def load(prefix, arm, seed):
+    p = OUT / f"{prefix}_{arm}_seed{seed}.json"
+    if not p.exists():
+        return None
+    d = json.loads(p.read_text(encoding="utf-8"))
+    runs = d.get("runs") or []
+    if not runs or not runs[-1].get("ok"):
+        return None
+    r = runs[-1]
+    led = r.get("ledger") or {}
+    rr = r.get("regional_reconciliation") or {}
+    return {"profit": led.get("profit"), "cov": led.get("coverage_pct"), "served": led.get("served_teu"),
+            "margin": led.get("margin_pct"), "svc": led.get("services"), "ves": led.get("vessels"),
+            "valid": led.get("valid") is True and not (led.get("violations") or []),
+            "reg": rr.get("accounting_verified") is True, "wall": r.get("wall_sec_total"),
+            "recon": (led.get("reconciliation") or {}).get("reconciled") is True,
+            "status": r.get("status")}
+
+
+def table(prefix, seeds):
+    return {arm: {s: load(prefix, arm, s) for s in seeds} for arm in ARMS}
+
+
+def stats(x):
+    n = len(x)
+    m = st.mean(x)
+    sd = st.stdev(x) if n > 1 else 0.0
+    t = m / (sd / math.sqrt(n)) if sd > 0 else float("inf") if m != 0 else 0.0
+    return m, sd, t
+
+
+def block(title, data, seeds):
+    L = [f"### {title}", ""]
+    L.append("| arm | n | profit M/wk mean (sd) | min / max | margin % | coverage % | served TEU | services / vessels | ledger+0 viol | regional verified | reconciled | stage s mean (max) |")
+    L.append("|---|---:|---|---|---:|---:|---:|---|---:|---:|---:|---|")
+    for arm in ARMS:
+        rows = [data[arm][s] for s in seeds if data[arm][s]]
+        if not rows:
+            L.append(f"| {arm} | 0 | – | – | – | – | – | – | – | – | – | – |")
+            continue
+        pr = [r["profit"] / 1e6 for r in rows]
+        m, sd, _ = stats(pr)
+        L.append(f"| {arm} | {len(rows)} | {m:.2f} ({sd:.2f}) | {min(pr):.2f} / {max(pr):.2f} | {st.mean(r['margin'] for r in rows):.1f} | "
+                 f"{st.mean(r['cov'] for r in rows):.1f} | {st.mean(r['served'] for r in rows):,.0f} | "
+                 f"{st.mean(r['svc'] for r in rows):.1f} / {st.mean(r['ves'] for r in rows):.1f} | "
+                 f"{sum(r['valid'] for r in rows)}/{len(rows)} | {sum(r['reg'] for r in rows)}/{len(rows)} | {sum(r['recon'] for r in rows)}/{len(rows)} | "
+                 f"{st.mean(r['wall'] for r in rows):.1f} ({max(r['wall'] for r in rows):.1f}) |")
+    L += ["", "| paired (later − earlier) | n | Δ profit M mean (sd) | seeds higher | min / max | Δ coverage pp | coverage better / worse | t | rule (mean > 0 and ≥ 8/10-equivalent) |",
+          "|---|---:|---|---:|---|---:|---|---:|---|"]
+    for a, b in PAIRS:
+        d, dc, ok_seeds = [], [], 0
+        for s in seeds:
+            ra, rb = data[a][s], data[b][s]
+            if ra and rb:
+                d.append((ra["profit"] - rb["profit"]) / 1e6)
+                dc.append(ra["cov"] - rb["cov"])
+        if not d:
+            continue
+        m, sd, t = stats(d)
+        pos = sum(1 for x in d if x > 0)
+        need = math.ceil(0.8 * len(d))
+        rule = "PASS" if (m > 0 and pos >= need) else "fail"
+        L.append(f"| {a} − {b} | {len(d)} | {m:+.2f} ({sd:.2f}) | {pos}/{len(d)} | {min(d):+.2f} / {max(d):+.2f} | {st.mean(dc):+.2f} | "
+                 f"{sum(1 for x in dc if x > 0)} / {sum(1 for x in dc if x < 0)} | {t:.1f} | {rule} |")
+    L.append("")
+    L.append("per-seed Δ profit M (later − earlier):")
+    L.append("")
+    L.append("| pair | " + " | ".join(str(s) for s in seeds) + " |")
+    L.append("|---|" + "---:|" * len(seeds))
+    for a, b in PAIRS:
+        cells = []
+        for s in seeds:
+            ra, rb = data[a][s], data[b][s]
+            cells.append(f"{(ra['profit'] - rb['profit']) / 1e6:+.2f}" if ra and rb else "–")
+        L.append(f"| {a} − {b} | " + " | ".join(cells) + " |")
+    L.append("")
+    return L
+
+
+dev = table("D5", range(0, 10))
+hold = table("H5", range(10, 20))
+pooled = {arm: {**dev[arm], **hold[arm]} for arm in ARMS}
+lines = ["# Phase 5 — paired acceptance tables (generated by `evidence/tools/pool_paired.py`)", ""]
+lines += block("Development seeds 0 – 9 (used to choose the configuration)", dev, range(0, 10))
+lines += block("Hold-out seeds 10 – 19 (never used for any decision)", hold, range(10, 20))
+lines += block("Pooled seeds 0 – 19", pooled, range(0, 20))
+outfile.write_text("\n".join(lines) + "\n", encoding="utf-8")
+print("\n".join(lines))

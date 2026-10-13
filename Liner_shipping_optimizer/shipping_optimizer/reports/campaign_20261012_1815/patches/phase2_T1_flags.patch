@@ -1,0 +1,1394 @@
+diff --git a/src/network/class_variants.py b/src/network/class_variants.py
+new file
+--- /dev/null
++++ b/src/network/class_variants.py
+@@ -0,0 +1,131 @@
++"""Targeted alternative-class candidates for rotations of an over-subscribed vessel class (opt-in).
++
++Problem (measured, reports/expansion_2026_10_12): after the regional filter the candidate pool is
++83 % one class (Feeder_800: 1,288 of 1,551 regional candidates) while that class owns 29 vessels;
++every operated plan exhausts it, and 16 % of the demand is blocked by class inventory although the
++same rotations could be sailed - inside the transit limit - by a class with idle vessels
++(Panamax_2400: 58-59 idle, Panamax_1200: 18-24, Post_panamax: 15-21).  The class screening
++offers one class per rotation (k = 1), so no such variant exists in the pool.
++
++What this does (``LINER_CLASS_VARIANTS`` = fraction of the unique pool to add; 0 / unset = OFF)
++  1. a class is *over-subscribed* when the pool holds at least ``PRESSURE_RATIO`` (2.0) candidates
++     per vessel of the class's inventory; a class is a *target* when it is not over-subscribed;
++  2. every rotation of an over-subscribed class is evaluated in every target class with the
++     canonical stand-alone model (``ClassScreener.evaluate_class``: feasibility, vessels per
++     weekly sailing against the class inventory, ride-feasible cargo inside the transit limit,
++     hire + fuel + port calls at the pinned price);
++  3. only variants with a POSITIVE stand-alone profit are kept (a negative stand-alone service is not
++     added here: nothing in this step can justify its network role), at most one variant per
++     rotation (the best profit per vessel - variants of one rotation are substitutes);
++  4. the best ``fraction * |pool|`` variants by profit per vessel are appended to the pool.
++
++Nothing here prices cargo or accounts cost: variants are ordinary candidates; the global MILP
++decides, with their actual fixed and variable costs, and the independent ledger verifies the plan.
++Every addition is returned with its provenance.
++"""
++
++from __future__ import annotations
++
++import math
++import os
++import time
++from collections import Counter
++from typing import Dict, List, Optional, Sequence, Tuple
++
++ENV_VARIANTS = "LINER_CLASS_VARIANTS"
++PRESSURE_RATIO = 2.0
++
++
++def fraction_from_environment(env: Optional[Dict[str, str]] = None) -> float:
++    """Fraction of the unique pool to add (0 = off).  Malformed values raise ``ValueError``."""
++    raw = ((os.environ if env is None else env).get(ENV_VARIANTS) or "").strip()
++    if not raw:
++        return 0.0
++    try:
++        v = float(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_VARIANTS} must be a fraction in [0, 1], got {raw!r}") from None
++    if not (0.0 <= v <= 1.0) or not math.isfinite(v):
++        raise ValueError(f"{ENV_VARIANTS} must be a fraction in [0, 1], got {v}")
++    return v
++
++
++def augment_candidates(problem, assumptions, candidates: Sequence, *, fraction: float,
++                       deadline: Optional[float] = None) -> Tuple[List, Dict]:
++    """Return (new candidates, report).  ``candidates`` are ``Candidate`` objects (service_id, ports,
++    vessel_class).  Never raises for an unattainable variant: it is counted in the report."""
++    from src.network.plan import Candidate
++    from src.services.class_screening import ClassScreener, ClassScreeningConfig
++
++    t0 = time.perf_counter()
++    rep: Dict = {"requested_fraction": fraction, "pool_unique": len(candidates), "added": 0,
++                 "over_subscribed_classes": {}, "target_classes": [], "rotations_evaluated": 0,
++                 "variants_feasible": 0, "variants_positive_standalone": 0, "variants_already_in_pool": 0,
++                 "additions": [], "sec": 0.0, "stopped_by_deadline": False}
++    if fraction <= 0 or not candidates:
++        return [], rep
++    fleet = problem.fleet
++    inventory = {c.vessel_class: int(c.quantity) for c in fleet.classes}
++    count = Counter(c.vessel_class for c in candidates)
++    ratio = {cls: count.get(cls, 0) / max(1, inventory[cls]) for cls in inventory}
++    over = {cls for cls, r in ratio.items() if r >= PRESSURE_RATIO}
++    targets = [cls for cls in inventory if cls not in over and inventory[cls] > 0]
++    rep["over_subscribed_classes"] = {cls: {"candidates": count.get(cls, 0), "inventory": inventory[cls],
++                                            "ratio": round(ratio[cls], 2)} for cls in sorted(over)}
++    rep["target_classes"] = sorted(targets)
++    if not over or not targets:
++        rep["reason"] = "no over-subscribed class" if not over else "no target class"
++        rep["sec"] = round(time.perf_counter() - t0, 2)
++        return [], rep
++
++    screener = ClassScreener(problem, fleet, assumptions, ClassScreeningConfig(k=1))
++    existing = {(tuple(c.ports), c.vessel_class) for c in candidates}
++    scored: List[Tuple[float, float, str, Tuple[str, ...], str, str, object]] = []
++    for c in candidates:
++        if c.vessel_class not in over:
++            continue
++        if deadline is not None and time.perf_counter() > deadline:
++            rep["stopped_by_deadline"] = True
++            break
++        rep["rotations_evaluated"] += 1
++        best = None
++        for tgt in targets:
++            if (tuple(c.ports), tgt) in existing:
++                rep["variants_already_in_pool"] += 1
++                continue
++            try:
++                ev = screener.evaluate_class(list(c.ports), fleet.get_class(tgt))
++            except Exception:                                           # noqa: BLE001
++                continue
++            if not ev.feasible:
++                continue
++            rep["variants_feasible"] += 1
++            if ev.vessels_at_best > inventory[tgt] or ev.standalone_profit_best <= 0.0:
++                continue
++            rep["variants_positive_standalone"] += 1
++            key = (ev.profit_per_vessel, ev.standalone_profit_best)
++            if best is None or key > best[0]:
++                best = (key, tgt, ev)
++        if best is not None:
++            (ppv, sap), tgt, ev = best
++            scored.append((ppv, sap, c.service_id, tuple(c.ports), c.vessel_class, tgt, ev))
++    scored.sort(key=lambda r: (-r[0], -r[1], r[2]))
++    n_add = min(len(scored), max(1, int(round(fraction * len(candidates)))))
++    new: List = []
++    for rank, (ppv, sap, src_id, ports, src_cls, tgt, ev) in enumerate(scored[:n_add]):
++        cid = f"cv{rank:04d}"
++        new.append(Candidate(cid, ports, tgt))
++        rep["additions"].append({
++            "service_id": cid, "ports": list(ports), "vessel_class": tgt, "rotation_of": src_id,
++            "source_class": src_cls, "standalone_profit_usd_per_week": round(sap, 1),
++            "profit_per_vessel_usd_per_week": round(ppv, 1), "best_frequency": ev.best_frequency,
++            "vessels_at_best": ev.vessels_at_best, "served_teu_best": round(ev.served_teu_best, 1),
++            "fixed_cost_usd_per_week": round(ev.fixed_cost_best, 1), "rank": rank,
++            "reason": "alternative class for a rotation of an over-subscribed class "
++                      f"({src_cls}: {rep['over_subscribed_classes'][src_cls]['ratio']} candidates "
++                      f"per vessel); positive stand-alone profit; best profit per vessel of the "
++                      f"rotation's variants"})
++    rep["added"] = len(new)
++    rep["scored_variants_available"] = len(scored)
++    rep["sec"] = round(time.perf_counter() - t0, 2)
++    return new, rep
+diff --git a/src/network/local_search.py b/src/network/local_search.py
+new file
+--- /dev/null
++++ b/src/network/local_search.py
+@@ -0,0 +1,403 @@
++"""Exact-LP local search over the operated service set (C2, opt-in, default OFF).
++
++Why
++    The time-limited MILP incumbent leaves profit on the table that single, exactly priced
++    moves recover: services whose opening pays for itself once every valid path (not only the
++    10 fastest per OD) is available, services that lose money, and frequencies one sailing off.
++    Measured offline on recorded plans (reports/expansion_2026_10_12): four add moves were
++    worth +1.1 .. +1.3 M USD/week.
++
++What it does
++    Starting from the MILP plan (services, weekly frequencies), repeatedly applies the single
++    move that raises the weekly profit most, until no move gains more than ``min_gain_usd`` or
++    the deadline passes.  Moves (each evaluated EXACTLY):
++
++        add   an unoperated service at one weekly departure
++        drop  an operated service
++        freq  an operated service's frequency +1 / -1
++
++    Profit of a service configuration F = LP_margin(F) - sum_s fixed_cost_s(f_s), where
++    LP_margin is the optimum of the same cargo LP as ``flow_reopt.reoptimize_flows``
++    (max sum (revenue_od - per-TEU charges_p) q_p; OD demand once; capacity of EVERY leg of
++    every service  <= capacity_s * f_s) over all valid, time-feasible paths of the operated
++    services, and fixed_cost_s is ``ServiceModel.weekly_fixed_cost`` (vessel hire of
++    ceil(T f / 7) vessels + fuel + fixed port calls) - the same terms the MILP objective and the
++    independent ledger use.
++
++Hard constraints (a move that breaks one is never evaluated as feasible)
++    * class vessel inventory (sum over operated services of ceil(T f / 7) per class <= limit);
++    * f <= ``ServiceModel.max_departures(limit)``;
++    * leg capacity and OD demand (inside the LP); transit-time limits are in the path set;
++    * served TEU never falls below the incumbent's (or a coverage floor): the search may
++      trade nothing against coverage.
++
++What it does NOT do
++    It never changes a price, cost, constraint or the path rule; it does not run a solver other
++    than an LP; it does not claim optimality (a plan it changes is ``feasible``, its bound is
++    that of the capped MILP).  The independent ledger verifies whatever is returned.
++
++Time
++    The caller gives an absolute deadline (``time.perf_counter()`` instant); no move is started
++    after it.  The stage budget (MILP + this search) is split by the caller.
++"""
++
++from __future__ import annotations
++
++import math
++import os
++import time
++from collections import defaultdict
++from dataclasses import dataclass
++from typing import Dict, List, Optional, Sequence, Tuple
++
++ENV_ENABLED = "LINER_LOCAL_SEARCH"          # 0 | 1  (default 0)
++ENV_RESERVE = "LINER_LOCAL_SEARCH_SEC"      # seconds taken from the stage budget (default 25)
++ENV_MOVES = "LINER_LOCAL_SEARCH_MOVES"      # comma list of add,drop,freq (default all)
++
++ALL_MOVES = ("add", "drop", "freq")
++DEFAULT_RESERVE_SEC = 25.0
++MAX_RESERVE_FRACTION = 0.5                  # never more than half of the stage budget
++MIN_GAIN_USD = 1000.0                       # a move must raise the weekly profit by more than this
++COVERAGE_TOL_TEU = 1e-6
++FLOW_NOISE_TEU = 1e-6
++
++
++@dataclass(frozen=True)
++class LocalSearchConfig:
++    enabled: bool = False
++    reserve_sec: float = DEFAULT_RESERVE_SEC
++    moves: Tuple[str, ...] = ALL_MOVES
++    max_iterations: int = 60
++    min_gain_usd: float = MIN_GAIN_USD
++
++    def __post_init__(self):
++        if not (0.0 < self.reserve_sec <= 3600.0):
++            raise ValueError("local-search reserve must be in (0, 3600] seconds")
++        bad = [m for m in self.moves if m not in ALL_MOVES]
++        if bad or not self.moves:
++            raise ValueError(f"local-search moves must be a non-empty subset of {ALL_MOVES}, got {self.moves!r}")
++
++
++def config_from_environment(env: Optional[Dict[str, str]] = None) -> LocalSearchConfig:
++    """Unset = disabled.  A malformed value raises ``ValueError`` (never silently replaced)."""
++    e = os.environ if env is None else env
++    raw = (e.get(ENV_ENABLED) or "").strip().lower()
++    if raw in ("", "0", "false", "no", "off"):
++        return LocalSearchConfig(enabled=False)
++    if raw not in ("1", "true", "yes", "on"):
++        raise ValueError(f"{ENV_ENABLED} must be 0 or 1, got {raw!r}")
++    kw: Dict = {"enabled": True}
++    r = (e.get(ENV_RESERVE) or "").strip()
++    if r:
++        try:
++            kw["reserve_sec"] = float(r)
++        except ValueError:
++            raise ValueError(f"{ENV_RESERVE} must be a number of seconds, got {r!r}") from None
++    m = (e.get(ENV_MOVES) or "").strip().lower()
++    if m:
++        kw["moves"] = tuple(x.strip() for x in m.split(",") if x.strip())
++    return LocalSearchConfig(**kw)
++
++
++def reserve_for(cfg: LocalSearchConfig, stage_budget_sec: float) -> float:
++    """Seconds of the stage budget given to the search (never more than half of it)."""
++    return min(cfg.reserve_sec, MAX_RESERVE_FRACTION * float(stage_budget_sec))
++
++
++class _Evaluator:
++    """Cargo LP over a fixed column set (all valid paths of the pool)."""
++
++    def __init__(self, models, demands, all_paths: Dict[int, List]):
++        from scipy.optimize import linprog                       # scipy is a pinned requirement
++        from scipy.sparse import coo_matrix
++        import numpy as np
++        self._linprog, self._coo, self._np = linprog, coo_matrix, np
++        self.models, self.demands = models, demands
++        self.cols: List[Tuple[int, object, frozenset, float, Tuple]] = []
++        self.by_service: Dict[int, List[int]] = defaultdict(list)
++        for di, plist in all_paths.items():
++            if not demands[di].weekly_teu > 0:
++                continue
++            for p in plist:
++                j = len(self.cols)
++                legs = tuple((seg.service, leg) for seg in p.segments for leg in seg.legs)
++                self.cols.append((di, p, frozenset(p.services),
++                                  float(demands[di].revenue_per_teu - p.port_cost_per_teu), legs))
++                for s in set(p.services):
++                    self.by_service[s].append(j)
++        self.n_lp = 0
++
++    def columns_for(self, services) -> List[int]:
++        S = frozenset(services)
++        out, seen = [], set()
++        for s in S:
++            for j in self.by_service.get(s, ()):
++                if j not in seen:
++                    seen.add(j)
++                    if self.cols[j][2] <= S:
++                        out.append(j)
++        return out
++
++    def solve(self, freq: Dict[int, int], ids: Sequence[int], floor_teu: float = 0.0,
++              want_flows: bool = False):
++        """(margin, served_teu, {col: q}) of the best routing, or None if the floor is unattainable."""
++        self.n_lp += 1
++        if not ids:
++            return (0.0, 0.0, {}) if floor_teu <= COVERAGE_TOL_TEU else None
++        np = self._np
++        od_row: Dict[int, int] = {}
++        leg_row: Dict[Tuple[int, int], int] = {}
++        rows, cs, b = [], [], []
++        cvec = np.empty(len(ids))
++        for ci, j in enumerate(ids):
++            di, _p, _S, margin, legs = self.cols[j]
++            r = od_row.get(di)
++            if r is None:
++                r = od_row[di] = len(b)
++                b.append(float(self.demands[di].weekly_teu))
++            rows.append(r)
++            cs.append(ci)
++            cvec[ci] = -margin
++            for key in legs:
++                r = leg_row.get(key)
++                if r is None:
++                    r = leg_row[key] = len(b)
++                    b.append(float(self.models[key[0]].capacity_teu * freq[key[0]]))
++                rows.append(r)
++                cs.append(ci)
++        vals = [1.0] * len(rows)
++        n_rows = len(b)
++        if floor_teu > COVERAGE_TOL_TEU:                      # sum q >= floor  <=>  -sum q <= -floor
++            for ci in range(len(ids)):
++                rows.append(n_rows)
++                cs.append(ci)
++                vals.append(-1.0)
++            b.append(-float(floor_teu))
++            n_rows += 1
++        A = self._coo((vals, (rows, cs)), shape=(n_rows, len(ids))).tocsr()
++        r = self._linprog(cvec, A_ub=A, b_ub=np.array(b), bounds=(0, None), method="highs")
++        if not r.success:
++            return None
++        flows = {}
++        if want_flows:
++            for ci, j in enumerate(ids):
++                if r.x[ci] > FLOW_NOISE_TEU:
++                    flows[j] = float(r.x[ci])
++        return float(-r.fun), float(r.x.sum()), flows
++
++
++def local_search(models, demands, paths: Dict[int, List], sol, class_limits: Dict[str, int],
++                 build_all_paths, *, config: LocalSearchConfig, deadline: float,
++                 min_served_teu: float = 0.0) -> Dict:
++    """Improve ``sol`` in place when (and only when) the exact evaluator shows a gain; return a report.
++
++    ``build_all_paths()`` -> (dict od -> [OdPath], stats): every valid time-feasible path of the pool.
++    ``deadline`` is a ``time.perf_counter()`` instant; no evaluation starts after it."""
++    t_start = time.perf_counter()
++    rep: Dict = {"applied": False, "reason": "", "moves": [], "evaluations": 0, "iterations": 0,
++                 "profit_before": None, "profit_after": None, "served_before": None, "served_after": None,
++                 "gain_usd": 0.0, "setup_sec": 0.0, "search_sec": 0.0, "terminated_by": "",
++                 "reserve_sec": config.reserve_sec, "moves_enabled": list(config.moves)}
++    f0 = {si: int(fr) for si, fr in sol.frequencies.items() if fr > 0}
++    if not f0 or not sol.flows:
++        rep.update(reason="no operated service", terminated_by="no_incumbent")
++        return rep
++    try:
++        full, _stats = build_all_paths()
++        ev = _Evaluator(models, demands, full)
++    except Exception as exc:                                         # noqa: BLE001
++        rep.update(reason=f"evaluator unavailable: {type(exc).__name__}: {exc}", terminated_by="error")
++        return rep
++    rep["setup_sec"] = round(time.perf_counter() - t_start, 2)
++    if time.perf_counter() >= deadline:
++        rep.update(reason="deadline reached during set-up", terminated_by="deadline_before_search")
++        return rep
++
++    def vessels_used(freq) -> Dict[str, int]:
++        used: Dict[str, int] = defaultdict(int)
++        for s, f in freq.items():
++            used[models[s].vessel_class] += models[s].vessels(f)
++        return used
++
++    def fixed(freq) -> float:
++        return sum(models[s].weekly_fixed_cost(f) for s, f in freq.items())
++
++    incumbent_served = float(sum(t for _, _, t in sol.flows))
++    floor = max(float(min_served_teu), incumbent_served) - COVERAGE_TOL_TEU
++    cur = dict(f0)
++    cur_ids = ev.columns_for(cur)
++    base = ev.solve(cur, cur_ids, floor)
++    if base is None:
++        rep.update(reason="incumbent infeasible in the evaluator", terminated_by="error")
++        return rep
++    cur_margin, cur_served, _ = base
++    cur_profit = cur_margin - fixed(cur)
++    start_profit = cur_profit
++    rep.update(profit_before=cur_profit, served_before=incumbent_served)
++    used = vessels_used(cur)
++
++    def room(cls: str) -> int:
++        return int(class_limits.get(cls, 0)) - used.get(cls, 0)
++
++    def expired() -> bool:
++        return time.perf_counter() >= deadline
++
++    # ORDERING heuristic for the add moves (not a bound, nothing is pruned on it): gross margin the
++    # service could earn at one weekly departure if every TEU-leg of its capacity earned the best unit
++    # margin of its columns, minus its fixed cost.  Services with no column are never candidates.
++    ub_open: Dict[int, float] = {}
++    for s in range(len(models)):
++        cols = ev.by_service.get(s)
++        if not cols or s in cur:
++            continue
++        best_margin = max(ev.cols[j][3] for j in cols)
++        gross = models[s].capacity_teu * len(models[s].legs) * max(best_margin, 0.0)
++        ub_open[s] = gross - models[s].weekly_fixed_cost(1)
++    add_queue = sorted(ub_open, key=lambda s: -ub_open[s])
++    stale: Dict[int, float] = {}            # last evaluated delta of an add (lazy greedy)
++    t_search = time.perf_counter()
++    terminated = "local_optimum"
++
++    for it in range(config.max_iterations):
++        if expired():
++            terminated = "deadline"
++            break
++        best = None                                          # (profit, kind, service, f, ids, served)
++        # --- operated services: drop / frequency moves (cheap: few services) ---------------------
++        if "drop" in config.moves or "freq" in config.moves:
++            for s, f in list(cur.items()):
++                if expired():
++                    break
++                trial_moves = []
++                if "drop" in config.moves:
++                    trial_moves.append(("drop", s, 0))
++                if "freq" in config.moves:
++                    cls = models[s].vessel_class
++                    if (f + 1 <= models[s].max_departures(int(class_limits.get(cls, 0)))
++                            and room(cls) >= models[s].vessels(f + 1) - models[s].vessels(f)):
++                        trial_moves.append(("up", s, f + 1))
++                    if f > 1:
++                        trial_moves.append(("down", s, f - 1))
++                for kind, s2, f2 in trial_moves:
++                    trial = dict(cur)
++                    if kind == "drop":
++                        trial.pop(s2)
++                        ids = [j for j in cur_ids if s2 not in ev.cols[j][2]]
++                    else:
++                        trial[s2] = f2
++                        ids = cur_ids
++                    got = ev.solve(trial, ids, floor)
++                    rep["evaluations"] += 1
++                    if got is None:
++                        continue
++                    pr = got[0] - fixed(trial)
++                    if best is None or pr > best[0]:
++                        best = (pr, kind, s2, f2, ids, got[1])
++        # --- unoperated services: add at f=1, lazy greedy over the UB-ordered queue -------------
++        if "add" in config.moves and not expired():
++            order = sorted((s for s in add_queue if s not in cur),
++                           key=lambda s: -(stale.get(s, ub_open.get(s, 0.0))))
++            best_add = None
++            for s in order:
++                if expired():
++                    break
++                # lazy: stale values are optimistic upper bounds only if they were measured at an
++                # earlier (smaller) network; skip when even the stale value cannot beat the best
++                if best_add is not None and stale.get(s, float("inf")) + 1.0 < best_add[0] - cur_profit:
++                    continue
++                cls = models[s].vessel_class
++                if room(cls) < models[s].vessels(1) or models[s].max_departures(int(class_limits.get(cls, 0))) < 1:
++                    continue
++                S = set(cur) | {s}
++                ids = cur_ids + [j for j in ev.by_service.get(s, ()) if ev.cols[j][2] <= S]
++                trial = dict(cur)
++                trial[s] = 1
++                got = ev.solve(trial, ids, floor)
++                rep["evaluations"] += 1
++                if got is None:
++                    continue
++                pr = got[0] - fixed(trial)
++                stale[s] = pr - cur_profit
++                if best_add is None or pr > best_add[0]:
++                    best_add = (pr, "add", s, 1, ids, got[1])
++            if best_add is not None and (best is None or best_add[0] > best[0]):
++                best = best_add
++        if best is None:
++            terminated = "deadline" if expired() else "local_optimum"
++            break
++        if best[0] <= cur_profit + config.min_gain_usd:
++            terminated = "deadline" if expired() else "local_optimum"
++            break
++        pr, kind, s, f, ids, srv = best
++        if kind == "drop":
++            cur.pop(s)
++        else:
++            cur[s] = f
++        cur_ids = ids            # add: extended; drop: filtered; up/down: unchanged (same service set)
++        used = vessels_used(cur)
++        rep["moves"].append({"iter": it, "move": kind, "service": models[s].service_id, "f": f,
++                             "profit": round(pr, 1), "gain": round(pr - cur_profit, 1),
++                             "served_teu": round(srv, 1),
++                             "t_sec": round(time.perf_counter() - t_start, 2)})
++        cur_profit, cur_served = pr, srv
++        rep["iterations"] = it + 1
++    else:
++        terminated = "max_iterations"
++    rep["search_sec"] = round(time.perf_counter() - t_search, 2)
++    rep["terminated_by"] = terminated
++    rep["profit_after"] = cur_profit
++    rep["served_after"] = cur_served
++    rep["gain_usd"] = cur_profit - start_profit
++    if not rep["moves"] or cur_profit <= start_profit + config.min_gain_usd:
++        rep["reason"] = "no move raises the weekly profit"
++        rep["profit_after"] = start_profit
++        rep["served_after"] = incumbent_served
++        rep["gain_usd"] = 0.0
++        return rep
++
++    # ---- apply: final exact routing at the final configuration (flows over the evaluator's paths) --
++    final_ids = ev.columns_for(cur)
++    got = ev.solve(cur, final_ids, floor, want_flows=True)
++    if got is None:
++        rep.update(reason="final routing infeasible", terminated_by="error", profit_after=start_profit,
++                   served_after=incumbent_served, gain_usd=0.0)
++        return rep
++    margin, served_final, carrying = got
++    known = {(di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments)): k
++             for di, plist in paths.items() for k, p in enumerate(plist)}
++    new_flows: List[Tuple[int, int, float]] = []
++    served_by_od: Dict[int, float] = defaultdict(float)
++    appended = 0
++    for j, val in carrying.items():
++        di, p = ev.cols[j][0], ev.cols[j][1]
++        key = (di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments))
++        k = known.get(key)
++        if k is None:
++            paths.setdefault(di, [])
++            paths[di].append(p)
++            k = len(paths[di]) - 1
++            known[key] = k
++            appended += 1
++        new_flows.append((di, k, val))
++        served_by_od[di] += val
++    revenue = sum(demands[di].revenue_per_teu * t for di, _k, t in new_flows)
++    port = sum(paths[di][k].port_cost_per_teu * t for di, k, t in new_flows)
++    comp = dict(sol.objective_components)
++    comp["revenue"], comp["per_teu_port_cost"] = revenue, port
++    comp["vessel_cost"] = sum(models[s].vessel_week_cost * models[s].vessels(f) for s, f in cur.items())
++    comp["fuel_cost"] = sum(models[s].fuel_cost_per_rotation * f for s, f in cur.items())
++    comp["port_fixed_cost"] = sum(models[s].port_fixed_per_rotation * f for s, f in cur.items())
++    pen = comp.get("unserved_penalty", 0.0)
++    sol.frequencies = {s: int(f) for s, f in cur.items()}
++    sol.vessels = {s: int(models[s].vessels(f)) for s, f in cur.items()}
++    sol.objective_value = (revenue - port - comp["vessel_cost"] - comp["fuel_cost"]
++                           - comp["port_fixed_cost"] - pen)
++    sol.objective_components = comp
++    sol.flows = sorted(new_flows)
++    sol.unserved = {di: max(0.0, float(demands[di].weekly_teu) - served_by_od.get(di, 0.0))
++                    for di, d in enumerate(demands) if d.weekly_teu > 0}
++    rep.update(applied=True, reason="services / frequencies changed by exact-LP moves",
++               paths_added=appended, profit_after=margin - fixed(cur), served_after=served_final,
++               gain_usd=(margin - fixed(cur)) - start_profit, lp_evaluations=ev.n_lp,
++               services_after=len(cur), vessels_after=sum(used.values()))
++    return rep
+diff --git a/src/network/network_milp.py b/src/network/network_milp.py
+--- a/src/network/network_milp.py
++++ b/src/network/network_milp.py
+@@ -29,6 +29,15 @@
+     The restriction can exclude better integer solutions, so the result is a
+     feasible plan with a stated bound, not a proof of optimality: ``status`` is
+     ``"optimal"`` only if the restricted MILP closed AND no service was dropped.
++
++Optional strengthening (``LINER_MILP_VUB``, default OFF)
++    adds the valid inequality  q[od, p] <= weekly_teu[od] * f[s]  for every path p of an OD and
++    every service s the path rides ("variable upper bound" / VUB).  It is implied by the integer
++    model (q <= demand, and an operated service has f >= 1; a service with f = 0 carries nothing)
++    so it removes no integer-feasible point; it only removes fractional LP points that run a
++    service at a small fraction of a weekly sailing.  It is applied to the LP relaxation (bound
++    and LP-guided restriction) and to the integer problem alike, and only for free-frequency
++    solves (with imposed frequencies it is redundant and skipped).
+ 
+ Backend (``NETWORK_MILP_BACKEND``, default ``cbc``)
+     ``cbc``    the bundled CBC through PuLP, as above (the production default).
+@@ -87,6 +96,11 @@
+     vessel_slack_cost_usd: float = 0.0
+     solver_backend: str = "cbc"
+     mip_gap: Optional[float] = None              # relative gap reported by the backend (HiGHS)
++    # which optional formulation changes were applied (LINER_MILP_VUB ...); empty = the baseline model
++    formulation: Dict = field(default_factory=dict)
++    # set when the integer problem used a path set rebuilt for the LP-support services
++    # (``path_rebuild``): flows then index THIS dict, not the caller's ``paths_by_od``
++    paths_by_od: Optional[Dict] = None
+ 
+     @property
+     def usable(self) -> bool:
+@@ -131,6 +145,20 @@
+ 
+ def _backend_name() -> str:
+     return (os.environ.get("NETWORK_MILP_BACKEND") or "cbc").strip().lower()
++
++
++ENV_VUB = "LINER_MILP_VUB"
++
++
++def vub_enabled(env: Optional[Dict[str, str]] = None) -> bool:
++    """``LINER_MILP_VUB``: add the valid inequality q <= demand * f (see the module docstring).
++    Unset / empty / 0 = off (the baseline model).  A malformed value raises ``ValueError``."""
++    raw = ((os.environ if env is None else env).get(ENV_VUB) or "").strip().lower()
++    if raw in ("", "0", "false", "no", "off"):
++        return False
++    if raw in ("1", "true", "yes", "on"):
++        return True
++    raise ValueError(f"{ENV_VUB} must be 0 or 1, got {raw!r}")
+ 
+ 
+ def _solve_highs(res, deadline: float) -> dict:
+@@ -217,6 +245,7 @@
+     port_capacity: Optional[Dict[str, float]] = None,
+     min_served_fraction: Optional[float] = None,
+     solve: bool = True,
++    vub: bool = False,
+ ):
+     """Build the model over ``services`` (indices) and solve it (``solve=False``: build
+     only, the caller solves with another backend). Returns a dict with
+@@ -287,6 +316,14 @@
+                 leg_load[(seg.service, leg)].append(v)
+     for (si, leg), vs in leg_load.items():
+         prob += pulp.lpSum(vs) <= models[si].capacity_teu * f[si], f"cap_{si}_{leg}"
++    vub_rows = 0
++    if vub and fixed is None:
++        # q[od, p] <= weekly_teu[od] * f[s]  for every service s of path p (valid: see module docstring)
++        for (di, k), v in q.items():
++            d_teu = float(demands[di].weekly_teu)
++            for si in set(path_of[(di, k)].services):
++                prob += v <= d_teu * f[si], f"vub_{di}_{k}_{si}"
++                vub_rows += 1
+     for si in active:
+         prob += 7 * n[si] >= models[si].cycle_time_days * f[si], f"veh_{si}"
+     by_class: Dict[str, List[int]] = defaultdict(list)
+@@ -315,7 +352,8 @@
+ 
+     out = dict(prob=prob, f=f, n=n, q=q, u=u, active=active, terms=dict(
+         revenue=revenue, per_teu_port=per_teu_port, vessel_cost=vessel_cost,
+-        fuel_cost=fuel_cost, port_fixed=port_fixed, pen=pen), status=None, error=None)
++        fuel_cost=fuel_cost, port_fixed=port_fixed, pen=pen), status=None, error=None,
++        vub_rows=vub_rows)
+     if not q or not solve:
+         return out
+     try:
+@@ -342,6 +380,7 @@
+     total_vessel_limit: Optional[int] = None,
+     port_capacity: Optional[Dict[str, float]] = None,
+     min_served_fraction: Optional[float] = None,
++    path_rebuild=None,
+ ) -> NetworkSolution:
+     """Solve the network design problem. Never raises for solver outcomes: the
+     status field says what happened and ``usable`` says whether values may be used."""
+@@ -380,7 +419,11 @@
+         lp_guided = fixed_frequencies is None
+     services = referenced
+     dropped = False
++    paths_int = paths_by_od
+     budget = max(1.0, time_limit_sec)
++    vub = vub_enabled() and fixed_frequencies is None
++    sol.formulation = {"vub_requested": vub_enabled(), "vub_applied": vub, "vub_rows_integer_problem": 0,
++                       "vub_rows_lp_relaxation": 0}
+ 
+     # ---- phase 1: LP relaxation (bound + service restriction) -----------------------
+     if lp_guided and fixed_frequencies is None:
+@@ -390,7 +433,8 @@
+                               time_limit_sec=min(60.0, budget * 0.4), threads=threads,
+                               total_vessel_limit=total_vessel_limit,
+                               port_capacity=port_capacity,
+-                              min_served_fraction=min_served_fraction)
++                              min_served_fraction=min_served_fraction, vub=vub)
++        sol.formulation["vub_rows_lp_relaxation"] = int(lp.get("vub_rows", 0))
+         if lp["error"] or lp["prob"].status != pulp.LpStatusOptimal:
+             lp_guided = False        # fall back to the unrestricted integer solve
+         else:
+@@ -399,6 +443,18 @@
+             dropped = len(used) < len(lp["active"])
+             services = used
+             sol.n_services_restricted_to = len(used)
++            if path_rebuild is not None and used:
++                # restriction-aware path set (opt-in): the integer problem can only use paths whose
++                # services are all in ``used``, so the per-OD path budget is re-spent on those
++                try:
++                    paths_int = path_rebuild(used)
++                    sol.paths_by_od = paths_int
++                    sol.formulation["path_include_paths_integer_problem"] = sum(
++                        len(v) for v in paths_int.values())
++                except Exception as exc:                                  # noqa: BLE001
++                    paths_int = paths_by_od
++                    sol.paths_by_od = None
++                    sol.formulation["path_include_error"] = f"{type(exc).__name__}: {exc}"
+             if not used:
+                 # the relaxation operates nothing: the empty network is the answer
+                 sol.status, sol.solver_status = "optimal", "lp_operates_nothing"
+@@ -416,14 +472,15 @@
+         sol.n_services_restricted_to = len(services)
+ 
+     # ---- phase 2: integer problem on the (restricted) service set --------------------
+-    res = _build_and_solve(models, demands, paths_by_od, class_vessel_limit, services,
++    res = _build_and_solve(models, demands, paths_int, class_vessel_limit, services,
+                            integer=True, penalty=unserved_penalty_per_teu,
+                            fixed=fixed_frequencies, initial=initial_frequencies,
+                            max_departures_cap=max_departures_cap, time_limit_sec=budget,
+                            threads=threads, total_vessel_limit=total_vessel_limit,
+                            port_capacity=port_capacity,
+                            min_served_fraction=min_served_fraction,
+-                           solve=not use_highs)
++                           solve=not use_highs, vub=vub)
++    sol.formulation["vub_rows_integer_problem"] = int(res.get("vub_rows", 0))
+     highs_msg = ""
+     if use_highs:
+         info = _solve_highs(res, t0 + max(1.0, time_limit_sec))
+diff --git a/src/network/paths.py b/src/network/paths.py
+--- a/src/network/paths.py
++++ b/src/network/paths.py
+@@ -65,6 +65,7 @@
+ ENV_HYBRID_SLOTS = "LINER_PATH_HYBRID_SLOTS"        # cost-aware slots of the hybrid rule
+ ENV_FLOW_REOPT = "LINER_FLOW_REOPT"                 # 1: re-route cargo over ALL valid paths
+ ENV_FLOOR_REPAIR = "LINER_PROFIT_FLOOR_REPAIR"      # 1: switch off losing services below the floor
++ENV_PATH_INCLUDE = "LINER_PATH_INCLUDE"             # K >= 1: restriction-aware path set (opt-in, default 0)
+ 
+ SELECT_FASTEST = "fastest"
+ SELECT_COST_AWARE = "cost_aware"
+@@ -133,6 +134,23 @@
+ 
+     def describe(self) -> Dict:
+         return dict(self.__dict__)
++
++
++def path_include_from_environment(env: Optional[Dict[str, str]] = None) -> int:
++    """``LINER_PATH_INCLUDE=K``: after the LP relaxation has chosen the services the integer problem
++    may use, rebuild the per-OD path set from the paths that ride ONLY those services, keeping the
++    K fastest per OD (the path slots of the baseline are partly spent on paths through services the
++    restricted problem cannot use).  Unset / 0 = off.  Malformed values raise ``ValueError``."""
++    raw = ((os.environ if env is None else env).get(ENV_PATH_INCLUDE) or "").strip()
++    if not raw:
++        return 0
++    try:
++        k = int(raw)
++    except ValueError:
++        raise ValueError(f"{ENV_PATH_INCLUDE} must be a non-negative integer, got {raw!r}") from None
++    if k < 0 or k > 1000:
++        raise ValueError(f"{ENV_PATH_INCLUDE} must be in [0, 1000], got {k}")
++    return k
+ 
+ 
+ def config_from_environment(env: Optional[Dict[str, str]] = None) -> PathConfig:
+diff --git a/src/network/plan.py b/src/network/plan.py
+--- a/src/network/plan.py
++++ b/src/network/plan.py
+@@ -22,9 +22,13 @@
+ )
+ from src.network.flow_reopt import reoptimize_flows, repair_profit_floor
+ from src.network.ledger import Ledger, LedgerFlow, LedgerService, compute_ledger
++from src.network.local_search import (
++    config_from_environment as local_search_config_from_environment, local_search, reserve_for,
++)
+ from src.network.network_milp import NetworkSolution, solve_network
+ from src.network.paths import (
+-    DEFAULT_MAX_PATHS_PER_OD, OdPath, PathConfig, PathStats, build_paths, config_from_environment,
++    BUDGET_FIXED, DEFAULT_MAX_PATHS_PER_OD, SELECT_FASTEST, OdPath, PathConfig, PathStats, build_paths,
++    config_from_environment, path_include_from_environment,
+ )
+ 
+ logger = logging.getLogger(__name__)
+@@ -53,6 +57,8 @@
+     infeasibility: List[Dict] = field(default_factory=list)         # structured causes
+     fuel_prices: Dict[str, Dict] = field(default_factory=dict)      # service_id -> applied price
+     flow_reopt: Dict = field(default_factory=dict)                  # Task 20 flow re-optimisation
++    local_search: Dict = field(default_factory=dict)                # C2 exact-LP local search (opt-in)
++    stage_timing: Dict = field(default_factory=dict)                # seconds per step of the stage
+ 
+     @property
+     def ok(self) -> bool:
+@@ -168,24 +174,54 @@
+         if initial_frequencies:
+             init = {index[s]: int(f) for s, f in initial_frequencies.items() if s in index}
+ 
++        # Opt-in exact-LP local search (C2, ``LINER_LOCAL_SEARCH``): it takes its time from the SAME
++        # stage budget - the MILP gets the budget minus the reserve and the search runs until
++        # (start of the solve + budget) - so the complete stage never exceeds ``time_limit_sec``.
++        ls_cfg = local_search_config_from_environment()
++        ls_applicable = bool(ls_cfg.enabled and fixed is None and not unserved_penalty_per_teu
++                             and port_capacity is None and not total_vessel_limit)
++        milp_budget = time_limit_sec
++        if ls_applicable:
++            milp_budget = max(1.0, time_limit_sec - reserve_for(ls_cfg, time_limit_sec))
++        res.local_search = ({"enabled": True, "applied": False, "reason": "not run"} if ls_applicable
++                            else {"enabled": bool(ls_cfg.enabled), "applied": False,
++                                  "reason": ("not applicable to this solve" if ls_cfg.enabled
++                                             else "disabled")})
++        timing: Dict[str, float] = {"model_and_paths_sec": round(time.perf_counter() - t0, 3)}
++        include_k = path_include_from_environment() if fixed is None else 0
++        path_rebuild = None
++        if include_k > 0:
++            import dataclasses as _dc
++            cfg_inc = _dc.replace(self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED)
++
++            def path_rebuild(services_used):
++                return build_paths(demands, models, self.port_lookup, self.assumptions,
++                                   max_paths_per_od=include_k, config=cfg_inc,
++                                   only_services=sorted(services_used))[0]
++        t_solve0 = time.perf_counter()
+         sol = solve_network(
+             models, demands, paths, limits,
+             unserved_penalty_per_teu=unserved_penalty_per_teu,
+             fixed_frequencies=fixed, initial_frequencies=init,
+-            time_limit_sec=time_limit_sec, lp_guided=lp_guided,
++            time_limit_sec=milp_budget, lp_guided=lp_guided,
+             total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
+-            min_served_fraction=min_served_fraction,
++            min_served_fraction=min_served_fraction, path_rebuild=path_rebuild,
+         )
++        if sol.paths_by_od is not None:
++            paths = sol.paths_by_od                  # the path set the integer problem actually used
++            res.paths = paths
++            sol.formulation["path_include_k"] = include_k
++        timing["milp_sec"] = round(time.perf_counter() - t_solve0, 3)
++        timing["milp_budget_sec"] = round(milp_budget, 1)
+         res.solution = sol
+         res.status = sol.status
+         res.message = sol.message
+         res.flow_reopt = {"applied": False, "reason": "disabled"}
+-        if ((self.path_config.reoptimize_flows or self.path_config.repair_profit_floor)
++        if ((self.path_config.reoptimize_flows or self.path_config.repair_profit_floor or ls_applicable)
+                 and sol.usable and fixed is None
+                 and not unserved_penalty_per_teu and port_capacity is None
+                 and not total_vessel_limit):
+             import dataclasses
+-            from src.network.paths import BUDGET_FIXED, SELECT_FASTEST
+             cfg_all = dataclasses.replace(
+                 self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED,
+                 multi_hop_min_alternatives=(10 ** 9 if self.path_config.max_transfers >= 2
+@@ -206,20 +242,39 @@
+                          * sum(d.weekly_teu for d in demands if d.weekly_teu > 0)
+                          if min_served_fraction else 0.0)
+             res.flow_reopt = {"applied": False, "reason": "disabled"}
++            if ls_applicable:
++                cfg_ls = dataclasses.replace(self.path_config, selection=SELECT_FASTEST,
++                                             budget=BUDGET_FIXED)
++
++                def _ls_paths():
++                    return build_paths(demands, models, self.port_lookup, self.assumptions,
++                                       max_paths_per_od=10 ** 9, config=cfg_ls)
++
++                t_ls = time.perf_counter()
++                res.local_search = local_search(models, demands, paths, sol, limits, _ls_paths,
++                                                config=ls_cfg, deadline=t_solve0 + float(time_limit_sec),
++                                                min_served_teu=floor_teu)
++                res.local_search["enabled"] = True
++                timing["local_search_sec"] = round(time.perf_counter() - t_ls, 3)
++            t_ro = time.perf_counter()
+             if self.path_config.reoptimize_flows:
+                 res.flow_reopt = reoptimize_flows(models, demands, paths, sol, _all_paths,
+                                                   min_served_teu=floor_teu)
++            timing["flow_reopt_sec"] = round(time.perf_counter() - t_ro, 3)
++            t_rp = time.perf_counter()
+             if self.path_config.repair_profit_floor and not min_served_fraction:
+                 res.flow_reopt["repair"] = repair_profit_floor(models, demands, paths, sol, _all_paths)
++            timing["repair_sec"] = round(time.perf_counter() - t_rp, 3)
+             changed = bool(res.flow_reopt.get("applied")
+-                           or (res.flow_reopt.get("repair") or {}).get("applied"))
++                           or (res.flow_reopt.get("repair") or {}).get("applied")
++                           or res.local_search.get("applied"))
+             if changed and sol.status == "optimal":
+                 # the capped model's proven optimum has been improved on with paths outside it:
+                 # the plan is feasible, and no optimality over the full path set is proven
+                 sol.status = res.status = "feasible"
+                 sol.message = (sol.message + "; " if sol.message else "") + \
+-                    "flows re-optimised over the full valid path set (optimality of the capped " \
+-                    "model no longer claimed)"
++                    "plan improved outside the solved model (flow re-optimisation / local search / " \
++                    "repair): optimality of the capped model no longer claimed"
+                 res.message = sol.message
+         if sol.status == "infeasible":
+             res.infeasibility = self._diagnose_infeasibility(
+@@ -232,6 +287,7 @@
+             return res
+ 
+         # ---- independent ledger from the plan alone -----------------------------
++        t_ledger = time.perf_counter()
+         led_services = [
+             LedgerService(models[si].service_id, models[si].ports, models[si].vessel_class, int(f))
+             for si, f in sol.frequencies.items() if f > 0
+@@ -290,6 +346,9 @@
+         # vessels: the MILP may carry more vessels than the minimum when unprofitable? no -
+         # minimisation of cost drives n to ceil(T f/7); a difference is flagged, not hidden.
+         scale = max(1.0, abs(led_profit), abs(milp_profit))
++        timing["ledger_sec"] = round(time.perf_counter() - t_ledger, 3)
++        timing["plan_total_sec"] = round(time.perf_counter() - t0, 3)
++        res.stage_timing = timing
+         res.reconciliation = {
+             "milp_profit_before_penalty": milp_profit,
+             "ledger_operating_profit": led_profit,
+@@ -303,6 +362,9 @@
+             "vessel_slack_removed": sol.vessel_slack_removed,
+             "vessel_slack_cost_usd": sol.vessel_slack_cost_usd,
+             "flow_reoptimisation": dict(res.flow_reopt),
++            "local_search": dict(res.local_search),
++            "stage_timing": dict(res.stage_timing),
++            "formulation": dict(getattr(sol, "formulation", {}) or {}),
+             "runtime_sec": round(time.perf_counter() - t0, 3),
+         }
+         return res
+diff --git a/src/network/reconcile.py b/src/network/reconcile.py
+--- a/src/network/reconcile.py
++++ b/src/network/reconcile.py
+@@ -31,6 +31,9 @@
+ from typing import Dict, List, Optional, Sequence, Tuple
+ 
+ from src.network.economics import EconomicsAssumptions, assumptions_for_problem
++from src.network.class_variants import (
++    augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
++)
+ from src.network.plan import Candidate, NetworkPlanner, PlanResult
+ from src.services.class_screening import config_from_environment as _class_screen_config
+ from src.services.demand_coherent import config_from_environment as _demand_loop_config
+@@ -168,6 +171,24 @@
+         planner = NetworkPlanner(problem, assumptions=assumptions, max_paths_per_od=max_paths_per_od)
+     except ValueError as exc:
+         return GlobalStageResult(False, "invalid_input", str(exc))
++
++    # Opt-in targeted alternative-class candidates (``LINER_CLASS_VARIANTS`` = fraction of the pool).
++    # The original candidates are untouched; the additions are listed with their provenance and
++    # the time the step takes is taken out of the stage budget (the stage never exceeds it).
++    class_variant_report = None
++    cv_fraction = _class_variant_fraction()
++    if cv_fraction > 0:
++        t_cv = time.perf_counter()
++        extra, class_variant_report = _augment_candidates(problem, assumptions, cands, fraction=cv_fraction,
++                                                          deadline=t_cv + 0.25 * float(time_limit_sec))
++        src_owner = {c.service_id: owner.get(c.service_id) for c in cands}
++        for add in class_variant_report.get("additions", []):
++            sid = add["service_id"]
++            base_owner = src_owner.get(add["rotation_of"])
++            owner[sid] = base_owner
++            proposers[sid] = list(proposers.get(add["rotation_of"], [base_owner] if base_owner else []))
++        cands = list(cands) + list(extra)
++        time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_cv))
+ 
+     initial = None
+     if hints:
+@@ -424,10 +445,15 @@
+             "mip_gap_reported_by_backend": sol.mip_gap,
+             "bound_applies_to": "the model over the retained (capped) path set",
+             "flow_reoptimisation": dict(plan.flow_reopt),
++            # optional formulation changes in force (LINER_MILP_VUB ...): empty = the baseline model
++            "formulation": dict(getattr(sol, "formulation", {}) or {}),
++            "local_search": dict(getattr(plan, "local_search", {}) or {}),
++            "stage_timing": dict(getattr(plan, "stage_timing", {}) or {}),
+             "note": ("a feasible plan with a stated upper bound; not a proof of optimality "
+                      "unless status is 'optimal'"),
+         },
+         "path_model": plan.path_stats.to_dict() if plan.path_stats else {},
++        "candidate_augmentation": class_variant_report or {"enabled": False},
+         "violations": list(led.violations),
+         "assumptions": {
+             "port_stay_hours": a.port_stay_hours,
+diff --git a/tests/test_local_search.py b/tests/test_local_search.py
+new file
+--- /dev/null
++++ b/tests/test_local_search.py
+@@ -0,0 +1,237 @@
++"""C2 - exact-LP local search over the operated service set (``LINER_LOCAL_SEARCH``, default OFF).
++
++Contract
++  * default OFF: nothing changes, the plan reports ``local_search.enabled = False``;
++  * every move is evaluated with the exact cargo LP (same terms as the MILP objective / ledger);
++    a move that breaks fleet inventory, capacity, a transit limit or the coverage floor is never
++    accepted; a move that adds served TEU but lowers profit is never accepted;
++  * the search starts from a feasible plan and ends no worse (profit) and never serves less;
++  * the deadline is hard (no move after it), and the stage budget is split, not extended;
++  * the final plan passes the independent ledger; its status is ``feasible`` (never ``optimal``).
++"""
++import dataclasses
++import itertools
++import sys
++import time
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import src.network.local_search as ls
++import src.network.network_milp as nm
++from src.network.flow_reopt import reoptimize_flows
++from src.network.paths import BUDGET_FIXED, SELECT_FASTEST, build_paths
++from src.network.plan import Candidate, NetworkPlanner
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++DM = {"A": {"B": 1000.0, "C": 1600.0}, "B": {"A": 1200.0, "C": 600.0},
++      "C": {"A": 1600.0, "B": 600.0}}
++CANDS = [Candidate("ab", ("A", "B"), "V"), Candidate("abc", ("A", "B", "C"), "V"),
++         Candidate("bc", ("B", "C"), "V")]
++
++
++def _problem(demands, capacity=1000.0, quantity=40, port_call=1000.0):
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=port_call,
++                  transshipment_cost=0.0, variable_port_call_cost=0.0) for p in "ABC"]
++    v = FleetClass(vessel_class="V", quantity=quantity, capacity_teu=capacity, tc_rate_daily=8000.0,
++                   min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                   bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM,
++                   fleet=Fleet(classes=[v]))
++
++
++def _demands():
++    return [Demand("A", "B", 1500.0, 1000.0), Demand("B", "A", 1200.0, 1000.0),
++            Demand("B", "C", 800.0, 900.0), Demand("A", "C", 300.0, 1500.0)]
++
++
++def _setup(problem, fixed=None, **kw):
++    planner = NetworkPlanner(problem)
++    plan = planner.plan(CANDS, demands=problem.demands, fixed_frequencies=fixed, time_limit_sec=60.0, **kw)
++    assert plan.ok, plan.message
++    cfg = dataclasses.replace(planner.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED)
++    limits = {c.vessel_class: c.quantity for c in problem.fleet.classes}
++
++    def all_paths():
++        return build_paths(problem.demands, plan.models, planner.port_lookup, planner.assumptions,
++                           max_paths_per_od=10 ** 9, config=cfg)
++    return planner, plan, limits, all_paths
++
++
++def _profit(sol, models, demands, paths):
++    rev = sum(demands[di].revenue_per_teu * t for di, k, t in sol.flows)
++    port = sum(paths[di][k].port_cost_per_teu * t for di, k, t in sol.flows)
++    fx = sum(models[s].weekly_fixed_cost(f) for s, f in sol.frequencies.items() if f > 0)
++    return rev - port - fx
++
++
++CFG = ls.LocalSearchConfig(enabled=True)
++
++
++class TestConfig:
++    def test_default_disabled(self, monkeypatch):
++        for k in (ls.ENV_ENABLED, ls.ENV_RESERVE, ls.ENV_MOVES):
++            monkeypatch.delenv(k, raising=False)
++        assert ls.config_from_environment().enabled is False
++
++    def test_parsing_and_errors(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_RESERVE, "15")
++        monkeypatch.setenv(ls.ENV_MOVES, "add,drop")
++        c = ls.config_from_environment()
++        assert c.enabled and c.reserve_sec == 15.0 and c.moves == ("add", "drop")
++        monkeypatch.setenv(ls.ENV_MOVES, "swap")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++        monkeypatch.setenv(ls.ENV_MOVES, "add")
++        monkeypatch.setenv(ls.ENV_RESERVE, "soon")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++        monkeypatch.setenv(ls.ENV_RESERVE, "15")
++        monkeypatch.setenv(ls.ENV_ENABLED, "maybe")
++        with pytest.raises(ValueError):
++            ls.config_from_environment()
++
++    def test_reserve_never_exceeds_half_the_budget(self):
++        assert ls.reserve_for(ls.LocalSearchConfig(enabled=True, reserve_sec=25.0), 120.0) == 25.0
++        assert ls.reserve_for(ls.LocalSearchConfig(enabled=True, reserve_sec=25.0), 30.0) == 15.0
++
++
++class TestDisabledByDefault:
++    def test_plan_is_unchanged_and_says_so(self, monkeypatch):
++        monkeypatch.delenv(ls.ENV_ENABLED, raising=False)
++        pr = _problem(_demands())
++        plan = NetworkPlanner(pr).plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok
++        assert plan.local_search == {"enabled": False, "applied": False, "reason": "disabled"}
++        assert plan.stage_timing["milp_budget_sec"] == 60.0
++        assert "local_search_sec" not in plan.stage_timing
++        assert plan.reconciliation["local_search"]["enabled"] is False
++
++
++class TestMoves:
++    def test_improves_a_poor_incumbent_and_never_exceeds_the_brute_force_optimum(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})          # a poor, feasible plan
++        sol, models = plan.solution, plan.models
++        before = _profit(sol, models, pr.demands, plan.paths)
++        served_before = sum(t for _, _, t in sol.flows)
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert rep["applied"] is True and rep["moves"]
++        after = _profit(sol, models, pr.demands, plan.paths)
++        assert after > before + 1000.0
++        assert rep["profit_before"] == pytest.approx(before, rel=1e-9, abs=1e-3)
++        assert rep["profit_after"] == pytest.approx(after, rel=1e-9, abs=1e-3)
++        assert sum(t for _, _, t in sol.flows) >= served_before - 1e-6        # never serves less
++        # brute force over f in {0,1,2}^3 (exact MILP with imposed frequencies, CBC)
++        best = float("-inf")
++        for f in itertools.product((0, 1, 2), repeat=len(models)):
++            fx = {models[i].service_id: f[i] for i in range(len(models))}
++            got = nm.solve_network(models, pr.demands, plan.paths, limits, fixed_frequencies=
++                                   {i: f[i] for i in range(len(models))}, time_limit_sec=30.0)
++            if got.usable:
++                best = max(best, got.objective_value)
++        assert after <= best + 1.0                                            # a local optimum, not above the global one
++        assert after >= before - 1e-6
++
++    def test_final_plan_passes_the_independent_ledger_through_the_planner(self, monkeypatch):
++        monkeypatch.setenv(ls.ENV_ENABLED, "1")
++        monkeypatch.setenv(ls.ENV_RESERVE, "20")
++        pr = _problem(_demands())
++        planner = NetworkPlanner(pr)
++        plan = planner.plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++        assert plan.local_search["enabled"] is True
++        assert plan.stage_timing["milp_budget_sec"] == 40.0                    # 60 - 20: split, not extended
++        assert plan.status in ("feasible", "optimal")
++        if plan.local_search.get("applied"):
++            assert plan.status == "feasible"                                   # never claims optimality
++        assert plan.ledger.operating_profit == pytest.approx(plan.solution.objective_value, abs=1e-3)
++
++    def test_move_that_adds_coverage_but_loses_money_is_not_accepted(self):
++        # the only OD that the unoperated service could serve pays less than its fixed cost
++        pr = _problem([Demand("A", "B", 1500.0, 1000.0), Demand("B", "C", 20.0, 50.0)])
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        served_before = sum(t for _, _, t in sol.flows)
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert not any(m["move"] == "add" and "bc" in m["service"] for m in rep["moves"])
++        assert sum(t for _, _, t in sol.flows) >= served_before - 1e-6
++        if rep["applied"]:
++            assert rep["gain_usd"] > 0
++
++    def test_drop_that_would_lose_coverage_is_refused(self):
++        # a loss-making service whose cargo nothing else can carry (and no other move can make up
++        # for it): dropping it raises profit but would lower served TEU - the coverage floor forbids it
++        pr = _problem([Demand("A", "B", 600.0, 1000.0), Demand("B", "C", 30.0, 60.0)])
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1, "bc": 1})
++        sol, models = plan.solution, plan.models
++        served_before = sum(t for _, _, t in sol.flows)
++        bc = next(i for i, m in enumerate(models) if m.service_id == "bc")
++        assert sol.frequencies.get(bc, 0) == 1
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert sol.frequencies.get(bc, 0) == 1
++        assert sum(t for _, _, t in sol.flows) >= served_before - 1e-6
++        assert not any(m["move"] == "drop" and m["service"] == "bc" for m in rep["moves"])
++
++    def test_class_inventory_blocks_an_add(self):
++        pr = _problem(_demands(), quantity=1)           # one vessel in total
++        planner, plan, limits, all_paths = _setup(pr)
++        sol, models = plan.solution, plan.models
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        used = sum(models[s].vessels(f) for s, f in sol.frequencies.items() if f > 0)
++        assert used <= 1
++
++    def test_expired_deadline_changes_nothing(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        before = (dict(sol.frequencies), list(sol.flows))
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() - 1.0)
++        assert rep["applied"] is False and rep["terminated_by"] in ("deadline", "deadline_before_search")
++        assert (dict(sol.frequencies), list(sol.flows)) == before
++
++    def test_incomplete_incumbent_is_reported_not_guessed(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        sol.flows = []
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert rep["applied"] is False and rep["terminated_by"] == "no_incumbent"
++
++    def test_moves_can_be_restricted(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        cfg = ls.LocalSearchConfig(enabled=True, moves=("freq",))
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=cfg,
++                              deadline=time.perf_counter() + 60.0)
++        assert all(m["move"] in ("up", "down") for m in rep["moves"])
++
++
++class TestInteractions:
++    def test_flow_reoptimisation_after_a_move_never_lowers_profit(self):
++        pr = _problem(_demands())
++        planner, plan, limits, all_paths = _setup(pr, fixed={"ab": 1})
++        sol, models = plan.solution, plan.models
++        rep = ls.local_search(models, pr.demands, plan.paths, sol, limits, all_paths, config=CFG,
++                              deadline=time.perf_counter() + 60.0)
++        assert rep["applied"]
++        p0 = _profit(sol, models, pr.demands, plan.paths)
++
++        def full():
++            operated = [s for s, f in sol.frequencies.items() if f > 0]
++            cfg = dataclasses.replace(planner.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED,
++                                      multi_hop_min_alternatives=10 ** 9)
++            return build_paths(pr.demands, models, planner.port_lookup, planner.assumptions,
++                               max_paths_per_od=10 ** 9, config=cfg, only_services=operated)
++        reoptimize_flows(models, pr.demands, plan.paths, sol, full)
++        assert _profit(sol, models, pr.demands, plan.paths) >= p0 - 1e-6
+diff --git a/tests/test_milp_vub.py b/tests/test_milp_vub.py
+new file
+--- /dev/null
++++ b/tests/test_milp_vub.py
+@@ -0,0 +1,205 @@
++"""C1 - the optional valid inequality  q[od, p] <= weekly_teu[od] * f[s]  (``LINER_MILP_VUB``).
++
++Contract
++  * default OFF: the model is exactly the baseline model (no extra rows, formulation flag false);
++  * valid: it removes no integer-feasible point - checked by enumerating every integer
++    frequency vector of small instances and comparing the optimum of the baseline and of the
++    strengthened model point by point, and by comparing the unrestricted integer optima;
++  * stronger: the LP relaxation bound is never weaker (maximisation: never larger) and is
++    strictly smaller when demand is far below one vessel's capacity;
++  * covers multi-service (transfer) paths: one row per service of the path;
++  * skipped when frequencies are imposed (redundant there), and the skip is reported.
++"""
++import itertools
++import sys
++from pathlib import Path
++
++import pulp
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++import src.network.network_milp as nm
++from src.network.paths import build_paths
++from src.network.plan import Candidate, NetworkPlanner
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++DM = {"A": {"B": 1000.0, "C": 1600.0}, "B": {"A": 1200.0, "C": 600.0},
++      "C": {"A": 1600.0, "B": 600.0}}
++CANDS = [Candidate("ab", ("A", "B"), "V"), Candidate("abc", ("A", "B", "C"), "V"),
++         Candidate("bc", ("B", "C"), "V")]
++
++
++def _problem(demands, capacity=1000.0, quantity=5, port_call=1000.0):
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=port_call,
++                  transshipment_cost=0.0, variable_port_call_cost=0.0) for p in "ABC"]
++    v = FleetClass(vessel_class="V", quantity=quantity, capacity_teu=capacity, tc_rate_daily=8000.0,
++                   min_speed=10.0, design_speed=12.0, max_speed=14.0,
++                   bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM,
++                   fleet=Fleet(classes=[v]))
++
++
++INSTANCES = {
++    # demand >> capacity per sailing: several weekly departures are needed
++    "heavy": lambda: _problem([Demand("A", "B", 2500.0, 1000.0), Demand("B", "A", 1800.0, 1000.0),
++                               Demand("B", "C", 1200.0, 900.0)]),
++    # demand far below one vessel's capacity: the LP can run services at a tiny fraction
++    "light": lambda: _problem([Demand("A", "B", 120.0, 1000.0), Demand("B", "A", 90.0, 1000.0),
++                               Demand("B", "C", 60.0, 900.0), Demand("A", "C", 80.0, 1500.0)]),
++    # includes an A->C transfer path (two services)
++    "transfer": lambda: _problem([Demand("A", "B", 400.0, 1000.0), Demand("B", "C", 300.0, 900.0),
++                                  Demand("A", "C", 350.0, 1600.0)], capacity=600.0),
++}
++
++
++def _model(name):
++    pr = INSTANCES[name]()
++    planner = NetworkPlanner(pr)
++    models, rejected = planner.build_models(CANDS)
++    assert models and not rejected
++    paths, _ = build_paths(pr.demands, models, planner.port_lookup, planner.assumptions,
++                           max_paths_per_od=10, config=planner.path_config)
++    limits = {c.vessel_class: c.quantity for c in pr.fleet.classes}
++    return pr, planner, models, paths, limits
++
++
++def _build(name, vub, *, integer=True, fixed=None):
++    pr, _pl, models, paths, limits = _model(name)
++    res = nm._build_and_solve(models, pr.demands, paths, limits, list(range(len(models))),
++                              integer=integer, penalty=0.0, fixed=fixed, initial=None,
++                              max_departures_cap=None, time_limit_sec=30.0, threads=None,
++                              solve=False, vub=vub)
++    return res, models, pr, paths
++
++
++class TestFlag:
++    def test_default_off_and_parsing(self, monkeypatch):
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        assert nm.vub_enabled() is False
++        for v, want in (("1", True), ("true", True), ("ON", True), ("0", False), ("off", False), ("", False)):
++            monkeypatch.setenv("LINER_MILP_VUB", v)
++            assert nm.vub_enabled() is want
++        monkeypatch.setenv("LINER_MILP_VUB", "maybe")
++        with pytest.raises(ValueError, match="LINER_MILP_VUB"):
++            nm.vub_enabled()
++
++    def test_default_model_is_the_baseline_model(self, monkeypatch):
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        pr, planner, models, paths, limits = _model("light")
++        base = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=30.0)
++        assert base.formulation["vub_applied"] is False
++        assert base.formulation["vub_rows_integer_problem"] == 0
++        res, *_ = _build("light", vub=False)
++        assert res["vub_rows"] == 0 and not any(k.startswith("vub_") for k in res["prob"].constraints)
++
++
++class TestRowsAndSkips:
++    def test_one_row_per_service_of_each_path(self):
++        res, models, pr, paths = _build("transfer", vub=True)
++        expect = sum(len(set(p.services)) for plist in paths.values() for p in plist)
++        assert res["vub_rows"] == expect > 0
++        # a transfer path (two services) contributes two rows
++        n_transfer = sum(1 for plist in paths.values() for p in plist if len(set(p.services)) == 2)
++        assert n_transfer >= 1
++        names = [k for k in res["prob"].constraints if k.startswith("vub_")]
++        assert len(names) == expect
++
++    def test_rows_use_the_od_demand(self):
++        res, models, pr, paths = _build("light", vub=True)
++        prob = res["prob"]
++        for name, con in prob.constraints.items():
++            if not name.startswith("vub_"):
++                continue
++            _, di, k, si = name.split("_")
++            coeffs = {v.name: c for v, c in con.items()}
++            assert coeffs[f"q_{di}_{k}"] == pytest.approx(1.0)
++            assert coeffs[f"f_{si}"] == pytest.approx(-pr.demands[int(di)].weekly_teu)
++            assert con.sense == pulp.LpConstraintLE and con.constant == 0
++
++    def test_skipped_with_imposed_frequencies(self, monkeypatch):
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        pr, planner, models, paths, limits = _model("light")
++        sol = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=30.0,
++                               fixed_frequencies={0: 1, 1: 1, 2: 1})
++        assert sol.formulation["vub_requested"] is True
++        assert sol.formulation["vub_applied"] is False
++        assert sol.formulation["vub_rows_integer_problem"] == 0
++        res, *_ = _build("light", vub=True, fixed={0: 1, 1: 1, 2: 1})
++        assert res["vub_rows"] == 0
++
++
++class TestValidity:
++    @pytest.mark.parametrize("name", ["heavy", "light", "transfer"])
++    def test_unrestricted_integer_optimum_is_unchanged(self, name, monkeypatch):
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        pr, planner, models, paths, limits = _model(name)
++        base = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0, lp_guided=False)
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        vub = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0, lp_guided=False)
++        assert base.status == "optimal" and vub.status == "optimal"
++        assert vub.formulation["vub_applied"] is True and vub.formulation["vub_rows_integer_problem"] > 0
++        assert vub.objective_value == pytest.approx(base.objective_value, rel=1e-9, abs=1e-6)
++
++    @pytest.mark.parametrize("name", ["heavy", "transfer"])
++    def test_no_integer_point_is_cut(self, name):
++        """Fix every integer frequency vector (f in {0,1,2}^services) and compare the optimum of the
++        baseline and of the strengthened model: they must be equal at EVERY point (feasible or not)."""
++        base, models, *_ = _build(name, vub=False)
++        strong, *_ = _build(name, vub=True)
++        assert strong["vub_rows"] > 0
++        idx = base["active"]
++        assert idx == strong["active"]
++
++        def optimum(res, point):
++            for si, val in zip(idx, point):
++                res["f"][si].lowBound = res["f"][si].upBound = float(val)
++            res["prob"].solve(nm._solver(30.0, None, False))
++            st = res["prob"].status
++            return st, (pulp.value(res["prob"].objective) if st == pulp.LpStatusOptimal else None)
++
++        checked = 0
++        for point in itertools.product((0, 1, 2), repeat=len(idx)):
++            ub = [models[si].max_departures(5) for si in idx]
++            if any(p > u for p, u in zip(point, ub)):
++                continue
++            s0, o0 = optimum(base, point)
++            s1, o1 = optimum(strong, point)
++            assert s0 == s1, f"feasibility differs at f={point}"
++            if o0 is not None:
++                assert o1 == pytest.approx(o0, rel=1e-9, abs=1e-6), f"optimum differs at f={point}"
++            checked += 1
++        assert checked >= 8
++
++
++class TestBound:
++    @pytest.mark.parametrize("name", ["heavy", "light", "transfer"])
++    def test_lp_bound_is_not_weaker(self, name, monkeypatch):
++        pr, planner, models, paths, limits = _model(name)
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        b0 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0).relaxation_bound
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        b1 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0).relaxation_bound
++        assert b0 is not None and b1 is not None
++        assert b1 <= b0 + 1e-6 * max(1.0, abs(b0))              # maximisation: a stronger bound is smaller
++
++    def test_lp_bound_is_strictly_stronger_when_demand_is_far_below_capacity(self, monkeypatch):
++        pr, planner, models, paths, limits = _model("light")
++        monkeypatch.delenv("LINER_MILP_VUB", raising=False)
++        b0 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0).relaxation_bound
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        s1 = nm.solve_network(models, pr.demands, paths, limits, time_limit_sec=60.0)
++        assert s1.relaxation_bound < b0 - 1.0
++        # and the bound is still a valid upper bound of the plan it produced
++        assert s1.relaxation_bound >= s1.objective_value - 1e-6
++
++
++class TestPlanIsLedgerVerified:
++    @pytest.mark.parametrize("name", ["heavy", "light", "transfer"])
++    def test_strengthened_plan_passes_the_independent_ledger(self, name, monkeypatch):
++        monkeypatch.setenv("LINER_MILP_VUB", "1")
++        pr = INSTANCES[name]()
++        plan = NetworkPlanner(pr).plan(CANDS, demands=pr.demands, time_limit_sec=60.0)
++        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
++        assert plan.reconciliation["formulation"]["vub_applied"] is True
++        assert plan.ledger.operating_profit == pytest.approx(plan.solution.objective_value, abs=1e-3)

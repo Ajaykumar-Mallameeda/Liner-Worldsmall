@@ -1,0 +1,50 @@
+{
+  "recorded": "2026-10-12",
+  "scope": "Tasks 19-21 overnight run (Tasks 17 and 18 not started)",
+  "decisions": {
+    "decision_1_solver_and_global_stage_budget": {
+      "production_solver_and_budget": {
+        "status": "FROZEN",
+        "value": "PuLP/CBC 2.10.3, LP-guided restriction, single thread; global-stage budget 120 s (GLOBAL_STAGE_TIME_LIMIT_SEC unchanged)",
+        "evidence": "src/network/network_milp.py::_backend_name default 'cbc'; src/agents/orchestrator_agent.py GLOBAL_STAGE_TIME_LIMIT_SEC default 120; every default-configuration run of this mission used CBC 120 s"
+      },
+      "highs_backend_comparison": {
+        "status": "EXPERIMENTAL",
+        "value": "NETWORK_MILP_BACKEND=highs (scipy.optimize.milp), 300 s and 600 s budgets, paired with the frozen configuration on identical pools, seeds, ledger; recorded solver, budget, CPU concurrency (<= 4), seed, pool hash, path hash, objective, dual bound and gap per run",
+        "evidence": "results_matrix.md batches M2 and M8 (and M11 if present); acceptance_report.md section 6"
+      },
+      "promotion_of_highs_or_a_larger_budget": {
+        "status": "OWNER_APPROVAL_REQUIRED",
+        "value": "no default was changed; the recommended configuration is reported separately in acceptance_report.md section 6",
+        "evidence": "a better experimental result is evidence, not authorisation"
+      }
+    },
+    "decision_2_upper_verdict_bands": {
+      "labels_and_thresholds": {
+        "status": "FROZEN",
+        "value": "advisory target 15 % (>= 15 -> Moderate; < 15 -> Poor); 'Good' above 20 % in the executive summary and above 25 % in regional explanations; labels Undefined / Not verified unchanged",
+        "evidence": "src/network/metrics.py, src/agents/orchestrator_agent.py (_margin_report good_above_pct=20.0; _rule_based_explanation good_above_pct=25.0), unchanged by this mission's patch"
+      },
+      "discrepancy_20_vs_25": {
+        "status": "OWNER_APPROVAL_REQUIRED",
+        "value": "unresolved; not harmonised, not corrected, not represented as resolved; the unreferenced BenchmarkBadge carries a third figure (20 %)",
+        "evidence": "tier0_consumer_recertification.md T0-7"
+      }
+    },
+    "decision_3_full_tier0_recertification": {
+      "python_decision_layer": {
+        "status": "FROZEN",
+        "value": "verified by the orchestrator test (independent recomputation, margin band, ledger consumption) on the final tree; unchanged semantics",
+        "evidence": "acceptance_report.md gate 1; orchestrator runs T19O_default_run1..3"
+      },
+      "frontend_and_backend_consumers": {
+        "status": "NOT_VERIFIED",
+        "value": "partly executed (backend REST path, routes/metrics.py, adapter + 6 components + the console view, server-side rendered, on a real output and on derived edge cases); defects T0-1..T0-8 found; WebSocket live path, unified_main replay, several service-level components and a real browser were not executed",
+        "evidence": "tier0_consumer_recertification.md; evidence/comparisons/tier0_consumer_tables.md"
+      },
+      "full_recertification_claimed": false
+    }
+  },
+  "project_complete": false,
+  "reason_project_is_not_complete": "decision 1 (promotion) and decision 2 are unresolved owner decisions and decision 3 is NOT_VERIFIED; Tasks 17 and 18 are separate final-hardening tasks that were not started"
+}

@@ -1,0 +1,3097 @@
+diff --git a/src/agents/orchestrator_agent.py b/src/agents/orchestrator_agent.py
+--- a/src/agents/orchestrator_agent.py
++++ b/src/agents/orchestrator_agent.py
+@@ -402,6 +402,48 @@
+         return {"verdict": verdict, "label": label, "margin_text": text,
+                 "advisory_line": advisory}
+ 
++    @staticmethod
++    def _update_network_feedback(problem, ledger, iteration) -> None:
++        """Elitism (Task 21, ``LINER_ELITISM=1``): keep the operated rotations and the unserved
++        OD demand of the best VERIFIED network seen so far on the problem, so the next
++        iteration's candidate generation can re-offer and edit them (the regional problems
++        are deep copies of ``problem``).  Nothing is stored unless the switch is on; a
++        failure here never affects the run."""
++        try:
++            from src.services.route_operators import config_from_environment as _ro_cfg
++            if not _ro_cfg().elitism:
++                return
++            if not ledger or not ledger.get("verified"):
++                return
++            profit = float(((ledger.get("weekly_usd") or {}).get("operating_profit")) or 0.0)
++            prev = getattr(problem, "network_feedback", None)
++            if prev is not None and profit <= float(prev.get("profit", float("-inf"))):
++                return
++            plan = ledger.get("plan") or {}
++            served: Dict[str, float] = {}
++            for fl in plan.get("flows", []):
++                key = f"{fl['origin']}|{fl['destination']}"
++                served[key] = served.get(key, 0.0) + float(fl["teu"])
++            demand: Dict[str, float] = {}
++            for d in problem.demands:
++                if d.weekly_teu > 0:
++                    key = f"{d.origin}|{d.destination}"
++                    demand[key] = demand.get(key, 0.0) + float(d.weekly_teu)
++            unserved = {k: v - served.get(k, 0.0) for k, v in demand.items()
++                        if v - served.get(k, 0.0) > 1e-6}
++            problem.network_feedback = {
++                "iteration": int(iteration), "profit": profit,
++                "operated": [{"ports": list(s["ports"]), "vessel_class": s["vessel_class"],
++                              "frequency": int(s["frequency_per_week"])}
++                             for s in plan.get("services", [])],
++                "unserved_od_teu": unserved,
++            }
++            logger.info('network_feedback_updated | iteration=%s profit=%s elites=%s unserved_ods=%s',
++                        iteration, f"${profit:,.0f}", len(problem.network_feedback["operated"]),
++                        len(unserved))
++        except Exception as exc:                                    # noqa: BLE001
++            logger.error("network_feedback_failed | %s: %s", type(exc).__name__, exc)
++
+     def _reconcile_iteration(self, problem, regional_problems, agents, regional_results,
+                              iteration) -> Dict:
+         """Run the global stage and rewrite ``regional_results`` in place with the
+@@ -442,6 +484,14 @@
+             return {"verified": False, "status": status, "iteration": iteration,
+                     "message": msg, "violations": []}
+ 
++        fb = getattr(problem, "network_feedback", None)
++        cg = ((stage.network_ledger or {}).get("assumptions") or {}).get("candidate_generation")
++        if isinstance(cg, dict):
++            cg["network_feedback"] = {
++                "used_in_candidate_pool": bool(fb),
++                "from_iteration": fb.get("iteration") if fb else None,
++                "elite_rotations": len(fb.get("operated", [])) if fb else 0,
++            }
+         by_region = {r.get("region"): r for r in regional_results}
+         for region, upd in stage.region_updates.items():
+             r = by_region.get(region)
+@@ -778,6 +828,7 @@
+             #    verified network replaces the (non-additive) regional numbers ──
+             self._iter_network_ledger = self._reconcile_iteration(
+                 problem, regional_problems, agents_to_use, regional_results, iteration)
++            self._update_network_feedback(problem, self._iter_network_ledger, iteration)
+ 
+             # Snapshot metrics after this iteration
+             iter_profit   = sum(r.get("weekly_profit", 0) for r in regional_results)
+diff --git a/src/agents/regional_agent.py b/src/agents/regional_agent.py
+--- a/src/agents/regional_agent.py
++++ b/src/agents/regional_agent.py
+@@ -179,7 +179,7 @@
+         # as it was for them. Replacing the margin guess is a separate decision.
+         own_screened = []
+         for svc in problem.services:
+-            if getattr(svc, "origin_section", "") == "demand_loop":
++            if getattr(svc, "origin_section", "") in ("demand_loop", "elite", "route_operator"):
+                 own_screened.append(svc)
+                 continue
+             port_set = set(svc.ports)
+diff --git a/src/agents/service_generator_agent.py b/src/agents/service_generator_agent.py
+--- a/src/agents/service_generator_agent.py
++++ b/src/agents/service_generator_agent.py
+@@ -13,6 +13,10 @@
+ )
+ from src.services.class_screening import (
+     ClassScreener, config_from_environment as class_screen_config_from_environment,
++)
++from src.services.route_operators import (
++    config_from_environment as route_operator_config_from_environment,
++    generate_operator_rotations,
+ )
+ from src.optimization.data                    import Problem, Service
+ from src.utils.fuel_cost                      import map_capacity_to_vessel_class
+@@ -44,6 +48,8 @@
+         self.last_demand_coherent_report = None
+         # Report of the per-rotation vessel-class screening (None when disabled).
+         self.last_class_screening_report = None
++        # Report of the route-level operators / elitism (Task 21; None when disabled).
++        self.last_route_operator_report = None
+ 
+     def get_system_prompt(self) -> str:
+         return (
+@@ -417,6 +423,43 @@
+             self.last_demand_coherent_report = dc_report
+             logger.info('demand_loop_services_added | proposed=%s emitted=%s grown=%s seeds=%s',
+                         len(proposals), emitted, dc_report.grown_candidates, dc_report.seeds_used)
++
++        # ── G: route-level operators and elitism (Task 21) ──────────────
++        # Edits the rotations that matter (the previous iteration's operated rotations when
++        # the orchestrator supplies them, else the pool's best stand-alone rotations) and
++        # re-offers the elites; every variant is evaluated with the canonical service model.
++        # Disabled unless LINER_ROUTE_OPERATORS > 0 or LINER_ELITISM=1.
++        ro_cfg = route_operator_config_from_environment()
++        self.last_route_operator_report = None
++        if ro_cfg.enabled:
++            from src.network.economics import assumptions_for_problem
++            from src.services.class_screening import ClassScreener as _CS, ClassScreeningConfig as _CSC
++            existing_ro = [(list(s.ports), s.vessel_class) for s in services]
++            feedback = getattr(problem, "network_feedback", None)
++            elite_pool = None
++            if not feedback and ro_cfg.budget > 0:
++                scr = _CS(problem, fleet, assumptions_for_problem(problem), _CSC(k=1))
++                scored = []
++                for s in services:
++                    cls_ = fleet.get_class(s.vessel_class)
++                    if cls_ is None:
++                        continue
++                    ev_ = scr.evaluate_class(list(s.ports), cls_)
++                    if ev_.feasible and ev_.promising:
++                        scored.append((-ev_.standalone_profit_best, len(scored), list(s.ports), s.vessel_class))
++                scored.sort()
++                elite_pool = [(p, c) for _, _, p, c in scored[:ro_cfg.elites]]
++            proposals_ro, ro_report = generate_operator_rotations(
++                problem, fleet, existing_ro, ro_cfg, feedback=feedback, elite_pool=elite_pool)
++            emitted_ro = 0
++            for pr in proposals_ro:
++                sect = "elite" if pr.operator == "elite" else "route_operator"
++                if _emit(list(pr.ports), pr.target_capacity_teu, sect, None,
++                         vessel=fleet.get_class(pr.vessel_class)) is not None:
++                    emitted_ro += 1
++            self.last_route_operator_report = ro_report
++            logger.info('route_operator_services_added | proposed=%s emitted=%s elites=%s variants=%s',
++                        len(proposals_ro), emitted_ro, ro_report.elites_in, ro_report.variants_evaluated)
+ 
+         self.last_candidate_report = report
+         logger.info(
+diff --git a/src/network/flow_reopt.py b/src/network/flow_reopt.py
+new file mode 100644
+--- /dev/null
++++ b/src/network/flow_reopt.py
+@@ -0,0 +1,154 @@
++"""Flow re-optimisation of a fixed network over the FULL valid path set (Task 20).
++
++Why
++    The global MILP chooses services, frequencies, vessels and cargo flows jointly, but only
++    over the ``max_paths_per_od`` paths per OD that ``paths.py`` keeps (10 of ~53,000 valid
++    paths on WorldSmall).  Measured on recorded plans (reports/tasks_19_20_21): holding the
++    plan's services, frequencies and vessels fixed, re-routing the cargo over ALL valid paths
++    adds 1.4 - 2.3 M USD/week and about one point of coverage, because capacity that is
++    already paid for is out of reach of cargo whose usable paths were cut.
++
++What it does
++    With every frequency and vessel count fixed (so every fixed cost is unchanged) it solves
++    the pure LP
++
++        max  sum_p (revenue_od - per-TEU port charges_p) q_p
++        s.t. sum_{p of od} q_p <= weekly demand_od                (each OD at most once)
++             sum_{p rides (s, leg)} q_p <= capacity_s * f_s       (EVERY leg of every service)
++             q_p >= 0, only paths whose services are ALL operated
++
++    over all valid, time-feasible paths of the pool.  The incumbent's own flows are feasible
++    in it, so the optimum is never below the incumbent's profit; the plan is replaced only if
++    the new flows are better by more than a tolerance and the ledger still verifies it (the
++    caller runs the independent ledger on whatever is returned).
++
++What it does NOT do
++    It changes no frequency, vessel count, service, price or constraint; it adds no cargo
++    beyond demand; it cannot create a path the transit-time rule would have rejected (the
++    full set is built by the same ``build_paths``).  It is not a proof of optimality: a plan
++    it improves is reported ``feasible`` even if the MILP over the capped paths had closed.
++
++Solver: PuLP + CBC (the production solver); no other engine is used.
++"""
++
++from __future__ import annotations
++
++import math
++import time
++from collections import defaultdict
++from dataclasses import replace
++from typing import Dict, List, Optional, Sequence, Tuple
++
++import pulp
++
++#: a plan is replaced only if the profit rises by more than this (USD / week)
++MIN_GAIN_USD = 1.0
++#: a routed quantity at or below this is solver noise, not a flow (same as the MILP)
++FLOW_NOISE_TEU = 1e-6
++
++
++def reoptimize_flows(models, demands, paths: Dict[int, List], sol, build_all_paths,
++                     *, time_limit_sec: float = 60.0) -> Dict:
++    """Re-route ``sol`` over the full valid path set; mutates ``paths`` (new paths are
++    appended, existing indices are untouched) and ``sol`` (flows, unserved, objective) only
++    when the profit improves.  Returns a report dict (always)."""
++    t0 = time.perf_counter()
++    rep: Dict = {"applied": False, "reason": "", "gain_usd": 0.0, "paths_considered": 0,
++                 "paths_added": 0, "served_teu_before": 0.0, "served_teu_after": 0.0}
++    f = {si: int(fr) for si, fr in sol.frequencies.items() if fr > 0}
++    if not f or not sol.flows:
++        rep["reason"] = "no operated service"
++        return rep
++    try:
++        full, _stats = build_all_paths()
++    except Exception as exc:                                       # noqa: BLE001
++        rep["reason"] = f"full path set unavailable: {type(exc).__name__}: {exc}"
++        return rep
++
++    # candidate columns: every valid path whose services are all operated
++    known = {(di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments)): k
++             for di, plist in paths.items() for k, p in enumerate(plist)}
++    columns: List[Tuple[int, object, Optional[int]]] = []          # (od, path, index in paths or None)
++    for di, plist in full.items():
++        if not demands[di].weekly_teu > 0:
++            continue
++        for p in plist:
++            if all(s in f for s in p.services):
++                key = (di, tuple(p.services), tuple(p.transfer_ports), tuple(s.legs for s in p.segments))
++                columns.append((di, p, known.get(key)))
++    rep["paths_considered"] = len(columns)
++    if not columns:
++        rep["reason"] = "no valid path through the operated services"
++        return rep
++
++    prob = pulp.LpProblem("FlowReoptimisation", pulp.LpMaximize)
++    q = [pulp.LpVariable(f"r_{j}", lowBound=0) for j in range(len(columns))]
++    prob += pulp.lpSum((demands[di].revenue_per_teu - p.port_cost_per_teu) * q[j]
++                       for j, (di, p, _k) in enumerate(columns))
++    by_od: Dict[int, List[int]] = defaultdict(list)
++    by_leg: Dict[Tuple[int, int], List[int]] = defaultdict(list)
++    for j, (di, p, _k) in enumerate(columns):
++        by_od[di].append(j)
++        for seg in p.segments:
++            for leg in seg.legs:
++                by_leg[(seg.service, leg)].append(j)
++    for di, js in by_od.items():
++        prob += pulp.lpSum(q[j] for j in js) <= float(demands[di].weekly_teu), f"od_{di}"
++    for (si, leg), js in by_leg.items():
++        prob += pulp.lpSum(q[j] for j in js) <= models[si].capacity_teu * f[si], f"cap_{si}_{leg}"
++    try:
++        prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=max(1, int(math.ceil(time_limit_sec)))))
++    except Exception as exc:                                       # noqa: BLE001
++        rep["reason"] = f"LP solver error: {type(exc).__name__}: {exc}"
++        return rep
++    if prob.status != pulp.LpStatusOptimal:
++        rep["reason"] = f"LP status {pulp.LpStatus.get(prob.status, prob.status)}"
++        return rep
++
++    # carrying columns only; (od, path, index in the capped list or None, TEU)
++    carrying: List[Tuple[int, object, Optional[int], float]] = []
++    for j, (di, p, k) in enumerate(columns):
++        val = float(q[j].varValue or 0.0)
++        if val > FLOW_NOISE_TEU:
++            carrying.append((di, p, k, val))
++
++    def spec_margin(rows) -> float:
++        return sum((demands[di].revenue_per_teu - p.port_cost_per_teu) * t for di, p, _k, t in rows)
++
++    old_rows = [(di, paths[di][k], k, t) for di, k, t in sol.flows]
++    old_margin, new_margin = spec_margin(old_rows), spec_margin(carrying)
++    rep["served_teu_before"] = float(sum(t for _, _, _, t in old_rows))
++    rep["served_teu_after"] = float(sum(t for _, _, _, t in carrying))
++    rep["gain_usd"] = new_margin - old_margin
++    rep["lp_sec"] = round(time.perf_counter() - t0, 2)
++    if new_margin <= old_margin + MIN_GAIN_USD:
++        rep["reason"] = "no improvement over the incumbent's flows"
++        return rep
++
++    # ---- accepted: extend the capped lists (existing indices untouched) and replace the flows
++    new_flows: List[Tuple[int, int, float]] = []
++    served_by_od: Dict[int, float] = defaultdict(float)
++    appended = 0
++    for di, p, k, val in carrying:
++        if k is None:
++            paths.setdefault(di, [])
++            paths[di].append(p)
++            k = len(paths[di]) - 1
++            appended += 1
++        new_flows.append((di, k, val))
++        served_by_od[di] += val
++    revenue = sum(demands[di].revenue_per_teu * t for di, _k, t in new_flows)
++    port = sum(paths[di][k].port_cost_per_teu * t for di, k, t in new_flows)
++    comp = dict(sol.objective_components)
++    comp["revenue"], comp["per_teu_port_cost"] = revenue, port
++    pen = comp.get("unserved_penalty", 0.0)
++    sol.objective_value = (revenue - port - comp.get("vessel_cost", 0.0) - comp.get("fuel_cost", 0.0)
++                           - comp.get("port_fixed_cost", 0.0) - pen)
++    sol.objective_components = comp
++    sol.flows = sorted(new_flows)
++    sol.unserved = {di: max(0.0, float(demands[di].weekly_teu) - served_by_od.get(di, 0.0))
++                    for di in sol.unserved}
++    rep["applied"] = True
++    rep["paths_added"] = appended
++    rep["reason"] = "flows re-optimised over the full valid path set"
++    return rep
+diff --git a/src/network/ledger.py b/src/network/ledger.py
+--- a/src/network/ledger.py
++++ b/src/network/ledger.py
+@@ -117,6 +117,7 @@
+     unserved_reported: Optional[Dict[int, float]] = None,
+     speed_factor: float = 1.0,
+     fuel_prices: Optional[Mapping[str, Mapping[str, Any]]] = None,
++    max_transfers: int = 1,
+ ) -> Ledger:
+     """Recompute the economics of a plan and validate it. Never raises for a bad
+     plan: every problem is a structured violation.
+@@ -124,7 +125,11 @@
+     ``bunker_price_usd_per_t`` is the uniform price. When ``fuel_prices`` is given
+     (``service_id -> {"price": USD/t, ...}``) every service is priced at ITS entry and
+     a service without a valid entry is a ``missing_fuel_price`` violation - a missing
+-    price is never replaced by the uniform one."""
++    price is never replaced by the uniform one.
++
++    ``max_transfers`` is the number of transfers a journey may have (a flow has at most
++    ``max_transfers + 1`` segments); 1 reproduces the original two-segment rule.  Every
++    transfer adds the hub dwell to the transit time and the hub charges to the cost."""
+     L = Ledger()
+     bad = L.violations.append
+     stay_days = port_stay_hours / 24.0
+@@ -219,17 +224,31 @@
+             continue
+         d = demands[fl.od]
+         segs = fl.segments
+-        if not segs or len(segs) > 2:
+-            bad({"type": "invalid_path", "od": fl.od, "detail": "needs 1 or 2 segments"})
++        if not segs or len(segs) > max_transfers + 1:
++            bad({"type": "invalid_path", "od": fl.od,
++                 "detail": f"needs 1..{max_transfers + 1} segments"})
+             continue
+         if segs[0][1] != d.origin or segs[-1][2] != d.destination:
+             bad({"type": "invalid_path", "od": fl.od,
+                  "detail": f"path {segs[0][1]}->{segs[-1][2]} does not connect {d.origin}->{d.destination}"})
+             continue
+-        if len(segs) == 2 and segs[0][2] != segs[1][1]:
++        broken = next((k for k in range(len(segs) - 1) if segs[k][2] != segs[k + 1][1]), None)
++        if broken is not None:
+             bad({"type": "invalid_transfer", "od": fl.od,
+-                 "detail": f"arrives {segs[0][2]}, next departs {segs[1][1]}"})
+-            continue
++                 "detail": f"arrives {segs[broken][2]}, next departs {segs[broken + 1][1]}"})
++            continue
++        if len(segs) > 2:
++            # a journey never revisits a port: origin, every transfer port, destination
++            stops = [segs[0][1]] + [s[2] for s in segs]
++            if len(set(stops)) != len(stops):
++                bad({"type": "invalid_path", "od": fl.od,
++                     "detail": f"journey revisits a port: {stops}"})
++                continue
++            sids = [s[0] for s in segs]
++            if len(set(sids)) != len(sids):
++                bad({"type": "invalid_path", "od": fl.od,
++                     "detail": f"journey rides a service twice: {sids}"})
++                continue
+ 
+         transit, ride_days, path_ok = 0.0, [], True
+         for k, (sid, a, b) in enumerate(segs):
+@@ -256,14 +275,15 @@
+             transit += days
+         if not path_ok:
+             continue
+-        if len(segs) == 2:
+-            transit += dwell_days
++        if len(segs) > 1:
++            transit += dwell_days * (len(segs) - 1)
+         limit = getattr(d, "max_transit_days", None)
+         if limit is not None and transit > limit + 1e-9:
+             bad({"type": "transit_time_exceeded", "od": fl.od, "transit_days": transit, "limit_days": limit})
+ 
+         o, t = port_lookup.get(d.origin), port_lookup.get(d.destination)
+-        if o is None or t is None or (len(segs) == 2 and port_lookup.get(segs[0][2]) is None):
++        if o is None or t is None or any(port_lookup.get(segs[k][2]) is None
++                                         for k in range(len(segs) - 1)):
+             bad({"type": "missing_port_record", "od": fl.od})
+             continue
+         L.revenue += fl.teu * d.revenue_per_teu
+@@ -273,8 +293,8 @@
+         path_var = (_num(getattr(o, "handling_cost", 0.0)) + _num(getattr(t, "handling_cost", 0.0))
+                     + _num(getattr(o, "variable_port_call_cost", 0.0))
+                     + _num(getattr(t, "variable_port_call_cost", 0.0)))
+-        if len(segs) == 2:
+-            h = port_lookup.get(segs[0][2])
++        for k in range(len(segs) - 1):
++            h = port_lookup.get(segs[k][2])
+             L.transshipment_cost += fl.teu * _num(getattr(h, "transshipment_cost", 0.0))
+             L.port_variable_cost += fl.teu * 2.0 * _num(getattr(h, "variable_port_call_cost", 0.0))
+             path_var += (_num(getattr(h, "transshipment_cost", 0.0))
+diff --git a/src/network/network_milp.py b/src/network/network_milp.py
+--- a/src/network/network_milp.py
++++ b/src/network/network_milp.py
+@@ -303,8 +303,8 @@
+             pth = path_of[(di, k)]
+             events[pth.segments[0].from_port].append((v, 1.0))
+             events[pth.segments[-1].to_port].append((v, 1.0))
+-            if pth.hub is not None:
+-                events[pth.hub].append((v, 2.0))
++            for hub in pth.transfer_ports:
++                events[hub].append((v, 2.0))
+         for port, terms in events.items():
+             if port in port_capacity:
+                 prob += (pulp.lpSum(c * v for v, c in terms) <= float(port_capacity[port]),
+diff --git a/src/network/paths.py b/src/network/paths.py
+--- a/src/network/paths.py
++++ b/src/network/paths.py
+@@ -1,203 +1,681 @@
+-"""OD path enumeration over closed service rotations.
+-
+-A path carries one OD's cargo either on a single service (``direct``) or on two
+-services connected at a transshipment hub (``transfer``; at most one transfer).
+-Each segment rides a closed rotation forward from its boarding port to its
+-alighting port, wrapping around the closing leg, so the legs it consumes are known
+-exactly (leg-level capacity). Transit time is real:
+-
+-    sailing days of every ridden leg
+-  + one port stay at each intermediate port
+-  + at a hub: minimum transshipment handling time + expected wait for the
+-    connecting departure
+-
+-and a path whose transit time exceeds the OD's ``max_transit_days`` is NEVER built
+-(end-to-end time limit enforced at construction). An OD without a time limit in the
+-source is unconstrained - a limit is not invented.
+-
+-Per-TEU port charges of a path (all USD/TEU, from the Port records):
+-    origin load        handling_cost + variable_port_call_cost
+-    destination unload handling_cost + variable_port_call_cost
+-    transfer at hub    transshipment_cost + 2 * variable_port_call_cost
+-                       (transshipment_cost replaces the discharge+reload lifts)
+-
+-Modelling limits (reported, not hidden): at most one transfer; at most
+-``max_paths_per_od`` paths per OD (direct paths first, then fastest transfers).
+-"""
+-
+-from __future__ import annotations
+-
+-import math
+-from collections import defaultdict
+-from dataclasses import dataclass, field
+-from typing import Dict, List, Optional, Sequence, Tuple
+-
+-from src.network.economics import DEFAULT_ASSUMPTIONS, EconomicsAssumptions, ServiceModel
+-
+-DEFAULT_MAX_PATHS_PER_OD = 10
+-
+-
+-@dataclass(frozen=True)
+-class PathSegment:
+-    service: int                 # index into the model list
+-    legs: Tuple[int, ...]        # leg indices ridden (capacity is consumed on each)
+-    from_port: str
+-    to_port: str
+-    ride_days: float
+-
+-
+-@dataclass(frozen=True)
+-class OdPath:
+-    od: int                      # index into the demand list
+-    kind: str                    # "direct" | "transfer"
+-    segments: Tuple[PathSegment, ...]
+-    hub: Optional[str]
+-    transit_days: float
+-    port_cost_per_teu: float     # all per-TEU port charges on this path
+-
+-    @property
+-    def services(self) -> Tuple[int, ...]:
+-        return tuple(s.service for s in self.segments)
+-
+-
+-@dataclass
+-class PathStats:
+-    od_total: int = 0
+-    od_with_direct: int = 0
+-    od_transfer_only: int = 0
+-    od_without_path: int = 0
+-    od_without_path_time_limit: int = 0     # a connection exists but only beyond the limit
+-    od_without_path_no_connection: int = 0  # no one- or two-service connection exists
+-    od_skipped_missing_port_record: int = 0 # origin/destination has no port record
+-    paths_built: int = 0
+-    paths_dropped_by_cap: int = 0
+-    paths_dropped_by_time_limit: int = 0
+-    max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD
+-
+-    def to_dict(self) -> Dict:
+-        return dict(self.__dict__)
+-
+-
+-def _port_cost(port, name: str) -> float:
+-    v = getattr(port, name, 0.0) if port is not None else 0.0
+-    return float(v) if isinstance(v, (int, float)) and math.isfinite(v) else 0.0
+-
+-
+-def build_paths(
+-    demands: Sequence,
+-    models: Sequence[ServiceModel],
+-    port_lookup: Dict,
+-    assumptions: EconomicsAssumptions = DEFAULT_ASSUMPTIONS,
+-    *,
+-    max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD,
+-) -> Tuple[Dict[int, List[OdPath]], PathStats]:
+-    """Enumerate time-feasible paths for every demand with positive weekly TEU."""
+-    stats = PathStats(max_paths_per_od=max_paths_per_od)
+-
+-    # boarding index: port -> [(service, port position)]
+-    by_port: Dict[str, List[int]] = defaultdict(list)
+-    for si, m in enumerate(models):
+-        for p in m.ports:
+-            by_port[p].append(si)
+-
+-    # ride tables per service: (a, b) -> (legs, days), built lazily
+-    ride_cache: Dict[Tuple[int, str, str], Optional[Tuple[Tuple[int, ...], float]]] = {}
+-
+-    def ride(si: int, a: str, b: str):
+-        key = (si, a, b)
+-        if key not in ride_cache:
+-            ride_cache[key] = models[si].ride(a, b)
+-        return ride_cache[key]
+-
+-    dwell = assumptions.transfer_dwell_days
+-    paths: Dict[int, List[OdPath]] = {}
+-
+-    for di, d in enumerate(demands):
+-        if not (d.weekly_teu > 0):
+-            continue
+-        stats.od_total += 1
+-        o, t = d.origin, d.destination
+-        limit = getattr(d, "max_transit_days", None)
+-        po, pt = port_lookup.get(o), port_lookup.get(t)
+-        if po is None or pt is None:
+-            # port costs are never assumed zero: an OD without records cannot be priced
+-            stats.od_skipped_missing_port_record += 1
+-            stats.od_without_path += 1
+-            continue
+-        base_cost = (_port_cost(po, "handling_cost") + _port_cost(po, "variable_port_call_cost")
+-                     + _port_cost(pt, "handling_cost") + _port_cost(pt, "variable_port_call_cost"))
+-
+-        direct: List[OdPath] = []
+-        transfer: List[OdPath] = []
+-        over_limit = 0
+-
+-        # ---- direct --------------------------------------------------------------
+-        for si in by_port.get(o, ()):
+-            r = ride(si, o, t)
+-            if r is None:
+-                continue
+-            legs, days = r
+-            if limit is not None and days > limit + 1e-9:
+-                over_limit += 1
+-                continue
+-            direct.append(OdPath(
+-                od=di, kind="direct",
+-                segments=(PathSegment(si, legs, o, t, days),),
+-                hub=None, transit_days=days, port_cost_per_teu=base_cost,
+-            ))
+-
+-        # ---- one transfer ---------------------------------------------------------
+-        # reach_to[h] = [(service, legs, days)] for services that go h -> t
+-        reach_to: Dict[str, List[Tuple[int, Tuple[int, ...], float]]] = defaultdict(list)
+-        for s2 in by_port.get(t, ()):
+-            for h in models[s2].ports:
+-                if h in (o, t):
+-                    continue
+-                r2 = ride(s2, h, t)
+-                if r2 is not None:
+-                    reach_to[h].append((s2, r2[0], r2[1]))
+-        if reach_to:
+-            for s1 in by_port.get(o, ()):
+-                for h in models[s1].ports:
+-                    if h in (o, t) or h not in reach_to or h not in port_lookup:
+-                        continue
+-                    r1 = ride(s1, o, h)
+-                    if r1 is None:
+-                        continue
+-                    hub_cost = (_port_cost(port_lookup.get(h), "transshipment_cost")
+-                                + 2.0 * _port_cost(port_lookup.get(h), "variable_port_call_cost"))
+-                    for s2, legs2, days2 in reach_to[h]:
+-                        if s2 == s1:
+-                            continue
+-                        total = r1[1] + dwell + days2
+-                        if limit is not None and total > limit + 1e-9:
+-                            over_limit += 1
+-                            continue
+-                        transfer.append(OdPath(
+-                            od=di, kind="transfer",
+-                            segments=(PathSegment(s1, r1[0], o, h, r1[1]),
+-                                      PathSegment(s2, legs2, h, t, days2)),
+-                            hub=h, transit_days=total, port_cost_per_teu=base_cost + hub_cost,
+-                        ))
+-
+-        direct.sort(key=lambda p: (p.transit_days, p.port_cost_per_teu))
+-        transfer.sort(key=lambda p: (p.transit_days, p.port_cost_per_teu))
+-        kept = (direct + transfer)[:max_paths_per_od]
+-        stats.paths_dropped_by_cap += len(direct) + len(transfer) - len(kept)
+-        stats.paths_dropped_by_time_limit += over_limit
+-
+-        if kept:
+-            paths[di] = kept
+-            stats.paths_built += len(kept)
+-            if direct:
+-                stats.od_with_direct += 1
+-            else:
+-                stats.od_transfer_only += 1
+-        else:
+-            stats.od_without_path += 1
+-            if over_limit:
+-                stats.od_without_path_time_limit += 1
+-            else:
+-                stats.od_without_path_no_connection += 1
+-
+-    return paths, stats
++"""OD path enumeration over closed service rotations.
++
++A path carries one OD's cargo either on a single service (``direct``), on two services
++connected at a transshipment hub (``transfer``; one transfer) or - Task 20, bounded and
++opt-in - on three services connected at two hubs (``transfer2``; two transfers, the hard
++upper bound of the model: ``HARD_MAX_TRANSFERS``).  Each segment rides a closed rotation
++forward from its boarding port to its alighting port, wrapping around the closing leg, so
++the legs it consumes are known exactly (leg-level capacity). Transit time is real:
++
++    sailing days of every ridden leg
++  + one port stay at each intermediate port
++  + at every hub: minimum transshipment handling time + expected wait for the
++    connecting departure
++
++and a path whose transit time exceeds the OD's ``max_transit_days`` is NEVER built
++(end-to-end time limit enforced at construction). An OD without a time limit in the
++source is unconstrained - a limit is not invented.
++
++Per-TEU port charges of a path (all USD/TEU, from the Port records):
++    origin load        handling_cost + variable_port_call_cost
++    destination unload handling_cost + variable_port_call_cost
++    transfer at a hub  transshipment_cost + 2 * variable_port_call_cost
++                       (transshipment_cost replaces the discharge+reload lifts)
++
++Which of the valid paths of an OD enter the optimisation model is a *selection*, because
++the model's size grows with the number of paths (``PathConfig``):
++
++    ``fastest``     (baseline, default) direct paths first, then the fastest transfers,
++                    at most ``max_paths_per_od``.  Transit time is a constraint of the
++                    model, not a benefit, so this order carries no economic information.
++    ``hybrid``      (Task 20) the ``fastest`` rule for all but ``hybrid_cost_slots`` of the
++                    slots, which go to the cheapest remaining paths (cost-aware rule).
++    ``cost_aware``  (Task 20) the paths whose *cost of carrying one TEU* is lowest: the
++                    per-TEU port charges plus the share of the weekly cost of the capacity
++                    the path occupies (full-load slot cost, canonical service model).  A
++                    reuse penalty keeps the retained set from consisting of near-duplicates
++                    of one cheap service; revenue is a property of the OD, not of the path,
++                    so it does not enter the ranking.  The model still decides which of the
++                    retained paths carry cargo; no flow is fixed here.
++
++Modelling limits (reported, not hidden): at most ``max_transfers`` transfers (1 by default;
++2 is the hard bound); at most the per-OD budget of paths per OD.
++"""
++
++from __future__ import annotations
++
++import math
++import os
++from collections import Counter, defaultdict
++from dataclasses import dataclass, field
++from typing import Dict, List, Optional, Sequence, Tuple
++
++from src.network.economics import DEFAULT_ASSUMPTIONS, EconomicsAssumptions, ServiceModel
++
++DEFAULT_MAX_PATHS_PER_OD = 10
++
++#: A journey has at most this many transfers (three services).  Unrestricted path length is
++#: not modelled and cannot be configured.
++HARD_MAX_TRANSFERS = 2
++
++ENV_SELECTION = "LINER_PATH_SELECTION"          # fastest | cost_aware
++ENV_MAX_TRANSFERS = "LINER_MAX_TRANSFERS"       # 1 | 2
++ENV_BUDGET = "LINER_PATH_BUDGET"                # fixed | adaptive
++ENV_MULTI_HOP_MIN_ALT = "LINER_PATH_MULTI_HOP_MIN_ALT"
++ENV_HYBRID_SLOTS = "LINER_PATH_HYBRID_SLOTS"        # cost-aware slots of the hybrid rule
++ENV_FLOW_REOPT = "LINER_FLOW_REOPT"                 # 1: re-route cargo over ALL valid paths
++
++SELECT_FASTEST = "fastest"
++SELECT_COST_AWARE = "cost_aware"
++SELECT_HYBRID = "hybrid"
++BUDGET_FIXED = "fixed"
++BUDGET_ADAPTIVE = "adaptive"
++
++KIND_DIRECT = "direct"
++KIND_TRANSFER = "transfer"
++KIND_TRANSFER2 = "transfer2"
++
++
++@dataclass(frozen=True)
++class PathConfig:
++    """How the path set of the network model is built (see the module docstring)."""
++
++    selection: str = SELECT_FASTEST
++    max_transfers: int = 1
++    budget: str = BUDGET_FIXED
++    #: ``hybrid`` selection: slots (of the per-OD budget) given to the cheapest paths
++    hybrid_cost_slots: int = 3
++    #: after the global MILP, re-route the cargo of the (fixed) network over the full valid
++    #: path set (``src/network/flow_reopt.py``): same services, frequencies and vessels
++    reoptimize_flows: bool = False
++    #: two-transfer paths are enumerated only for an OD with fewer than this many valid
++    #: direct / one-transfer paths ("where needed"); 1 = only ODs with none
++    multi_hop_min_alternatives: int = 1
++    #: at most this many two-transfer paths per OD are kept for selection (cheapest first)
++    multi_hop_pool_per_od: int = 24
++    #: first/last-leg alternatives kept per hub during two-transfer enumeration
++    multi_hop_legs_per_hub: int = 4
++    #: cost-aware reuse penalty, as a fraction of the cheapest path's cost, charged per
++    #: already-retained path that rides the same service
++    diversity_penalty: float = 0.10
++    #: adaptive budget: bounds of the per-OD allocation and the damping exponent
++    adaptive_min_paths: int = 3
++    adaptive_max_paths: int = 20
++    adaptive_value_exponent: float = 0.5
++
++    def __post_init__(self):
++        if self.selection not in (SELECT_FASTEST, SELECT_COST_AWARE, SELECT_HYBRID):
++            raise ValueError(f"path selection must be 'fastest', 'cost_aware' or 'hybrid', "
++                             f"got {self.selection!r}")
++        if self.hybrid_cost_slots < 0:
++            raise ValueError("hybrid_cost_slots must be >= 0")
++        if not (isinstance(self.max_transfers, int) and 0 <= self.max_transfers <= HARD_MAX_TRANSFERS):
++            raise ValueError(f"max_transfers must be an integer in [0, {HARD_MAX_TRANSFERS}] "
++                             f"(unrestricted path length is not supported), got {self.max_transfers!r}")
++        if self.budget not in (BUDGET_FIXED, BUDGET_ADAPTIVE):
++            raise ValueError(f"path budget must be 'fixed' or 'adaptive', got {self.budget!r}")
++        if self.multi_hop_min_alternatives < 0 or self.multi_hop_pool_per_od < 1 \
++                or self.multi_hop_legs_per_hub < 1:
++            raise ValueError("multi-hop limits must be positive")
++        if not (0.0 <= self.diversity_penalty <= 5.0):
++            raise ValueError("diversity_penalty must be in [0, 5]")
++        if not (1 <= self.adaptive_min_paths <= self.adaptive_max_paths):
++            raise ValueError("need 1 <= adaptive_min_paths <= adaptive_max_paths")
++
++    def describe(self) -> Dict:
++        return dict(self.__dict__)
++
++
++def config_from_environment(env: Optional[Dict[str, str]] = None) -> PathConfig:
++    """Path configuration in force.  Every variable is optional; unset = the field default.
++    A malformed value raises ``ValueError`` (never silently replaced)."""
++    e = os.environ if env is None else env
++    kw: Dict = {}
++    sel = (e.get(ENV_SELECTION) or "").strip().lower()
++    if sel:
++        kw["selection"] = sel
++    mt = (e.get(ENV_MAX_TRANSFERS) or "").strip()
++    if mt:
++        try:
++            kw["max_transfers"] = int(mt)
++        except ValueError:
++            raise ValueError(f"{ENV_MAX_TRANSFERS} must be an integer, got {mt!r}") from None
++    bud = (e.get(ENV_BUDGET) or "").strip().lower()
++    if bud:
++        kw["budget"] = bud
++    hs = (e.get(ENV_HYBRID_SLOTS) or "").strip()
++    if hs:
++        try:
++            kw["hybrid_cost_slots"] = int(hs)
++        except ValueError:
++            raise ValueError(f"{ENV_HYBRID_SLOTS} must be an integer, got {hs!r}") from None
++    ro = (e.get(ENV_FLOW_REOPT) or "").strip().lower()
++    if ro in ("1", "true", "yes", "on"):
++        kw["reoptimize_flows"] = True
++    elif ro not in ("", "0", "false", "no", "off"):
++        raise ValueError(f"{ENV_FLOW_REOPT} must be 0 or 1, got {ro!r}")
++    alt = (e.get(ENV_MULTI_HOP_MIN_ALT) or "").strip()
++    if alt:
++        try:
++            kw["multi_hop_min_alternatives"] = int(alt)
++        except ValueError:
++            raise ValueError(f"{ENV_MULTI_HOP_MIN_ALT} must be an integer, got {alt!r}") from None
++    return PathConfig(**kw)
++
++
++@dataclass(frozen=True)
++class PathSegment:
++    service: int                 # index into the model list
++    legs: Tuple[int, ...]        # leg indices ridden (capacity is consumed on each)
++    from_port: str
++    to_port: str
++    ride_days: float
++
++
++@dataclass(frozen=True)
++class OdPath:
++    od: int                      # index into the demand list
++    kind: str                    # "direct" | "transfer" | "transfer2"
++    segments: Tuple[PathSegment, ...]
++    hub: Optional[str]           # first transfer port (None for a direct path)
++    transit_days: float
++    port_cost_per_teu: float     # all per-TEU port charges on this path
++    hubs: Tuple[str, ...] = ()   # every transfer port, in journey order
++    #: full-load slot cost of the capacity this path occupies (USD/TEU); informational and
++    #: used by the cost-aware selection.  None = not computed (baseline selection).
++    slot_cost_per_teu: Optional[float] = None
++
++    @property
++    def services(self) -> Tuple[int, ...]:
++        return tuple(s.service for s in self.segments)
++
++    @property
++    def n_transfers(self) -> int:
++        return len(self.segments) - 1
++
++    @property
++    def transfer_ports(self) -> Tuple[str, ...]:
++        """All transfer ports (``hubs``; falls back to ``hub`` for a hand-built path)."""
++        if self.hubs:
++            return self.hubs
++        return (self.hub,) if self.hub is not None else ()
++
++
++@dataclass
++class PathStats:
++    od_total: int = 0
++    od_with_direct: int = 0
++    od_transfer_only: int = 0
++    od_without_path: int = 0
++    od_without_path_time_limit: int = 0     # a connection exists but only beyond the limit
++    od_without_path_no_connection: int = 0  # no one- or two-service connection exists
++    od_skipped_missing_port_record: int = 0 # origin/destination has no port record
++    paths_built: int = 0
++    paths_dropped_by_cap: int = 0
++    paths_dropped_by_time_limit: int = 0
++    max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD
++    # ---- Task 20 (all zero under the baseline configuration) -----------------------
++    selection: str = SELECT_FASTEST
++    max_transfers: int = 1
++    budget: str = BUDGET_FIXED
++    paths_valid: int = 0                    # valid (time-feasible) paths before the cap
++    od_at_cap: int = 0                      # ODs whose valid paths exceeded their budget
++    od_multi_hop_enumerated: int = 0        # ODs for which two-transfer paths were enumerated
++    od_rescued_by_multi_hop: int = 0        # ODs with no direct / one-transfer path but a two-transfer one
++    paths_multi_hop_valid: int = 0
++    paths_multi_hop_kept: int = 0
++    multi_hop_build_sec: float = 0.0
++    path_build_sec: float = 0.0
++    #: network signals of the candidate network (computed from canonical inputs only; the
++    #: values the budgets / multi-hop policy / report are derived from)
++    signals: Dict = field(default_factory=dict)
++
++    def to_dict(self) -> Dict:
++        return dict(self.__dict__)
++
++
++def _port_cost(port, name: str) -> float:
++    v = getattr(port, name, 0.0) if port is not None else 0.0
++    return float(v) if isinstance(v, (int, float)) and math.isfinite(v) else 0.0
++
++
++class _SlotCosts:
++    """Full-load cost of the capacity a segment occupies.
++
++    One weekly departure of service ``s`` costs ``F_s`` (vessel hire of ``ceil(T/7)``
++    vessels + fuel + fixed port calls: ``ServiceModel.weekly_fixed_cost(1)``) and offers
++    ``C_s`` TEU on every leg.  A TEU that occupies the slot for ``tau`` days of the
++    ``T``-day rotation therefore costs ``F_s * tau / (T * C_s)`` when the vessel is full -
++    a lower bound on its cost on a partly empty service, and the figure a service must
++    earn per TEU to pay for itself.  Everything comes from the canonical service model."""
++
++    def __init__(self, models: Sequence[ServiceModel]):
++        self.models = models
++        self._unit: Dict[int, float] = {}
++
++    def unit(self, si: int) -> float:
++        u = self._unit.get(si)
++        if u is None:
++            m = self.models[si]
++            cyc = m.cycle_days if m.cycle_days > 0 else 1.0
++            u = m.weekly_fixed_cost(1) / (max(m.capacity_teu, 1e-9) * cyc)
++            self._unit[si] = u
++        return u
++
++    def segment(self, si: int, legs: Sequence[int]) -> float:
++        m = self.models[si]
++        slot_days = sum(m.leg_sail_days[l] for l in legs) + m._port_stay_days * len(legs)
++        return self.unit(si) * slot_days
++
++
++def _select_fastest(direct: List[OdPath], transfer: List[OdPath], cap: int) -> List[OdPath]:
++    direct = sorted(direct, key=lambda p: (p.transit_days, p.port_cost_per_teu))
++    transfer = sorted(transfer, key=lambda p: (p.transit_days, p.port_cost_per_teu))
++    return (direct + transfer)[:cap]
++
++
++def _select_cost_aware(cands: List[OdPath], cap: int, penalty: float) -> List[OdPath]:
++    """Greedy selection of ``cap`` paths by carrying cost, with a service-reuse penalty."""
++    def cost(p: OdPath) -> float:
++        return p.port_cost_per_teu + (p.slot_cost_per_teu or 0.0)
++
++    ranked = sorted(cands, key=lambda p: (cost(p), p.transit_days, p.services, p.transfer_ports))
++    if cap >= len(ranked):
++        return ranked
++    lam = penalty * max(cost(ranked[0]), 1.0)
++    used: Counter = Counter()
++    chosen: List[OdPath] = []
++    remaining = ranked
++    while len(chosen) < cap and remaining:
++        if lam > 0.0 and used:
++            best_j, best_v = 0, None
++            for j, p in enumerate(remaining):
++                v = cost(p) + lam * sum(used[s] for s in p.services)
++                if best_v is None or v < best_v - 1e-12:
++                    best_j, best_v = j, v
++        else:
++            best_j = 0
++        p = remaining.pop(best_j)
++        chosen.append(p)
++        for s in p.services:
++            used[s] += 1
++    return chosen
++
++
++def _allocate_budget(rows: List[Tuple[int, int, float]], total: int, cfg: PathConfig) -> Dict[int, int]:
++    """Per-OD path budgets for ``cfg.budget == 'adaptive'``.
++
++    ``rows`` = (od, valid paths, opportunity) with opportunity = demand x (revenue per TEU -
++    cheapest per-TEU port charges): what an OD can contribute at most.  The total number of
++    retained paths equals the baseline's (``total``), so the model has the baseline's size;
++    only its distribution changes - towards the ODs that carry the value, away from ODs of
++    little value, with ``adaptive_min_paths`` / ``adaptive_max_paths`` as bounds."""
++    lo, hi = cfg.adaptive_min_paths, cfg.adaptive_max_paths
++    cap_of = {od: min(hi, n) for od, n, _ in rows}
++    floor_of = {od: min(lo, n) for od, n, _ in rows}
++    w = {od: max(v, 0.0) ** cfg.adaptive_value_exponent + 1e-9 for od, n, v in rows}
++    wsum = sum(w.values()) or 1.0
++    share = {od: total * w[od] / wsum for od in w}
++    k = {od: int(min(cap_of[od], max(floor_of[od], math.floor(share[od])))) for od in w}
++    left = total - sum(k.values())
++    if left > 0:
++        order = sorted(w, key=lambda od: (-(share[od] - k[od]), -w[od], od))
++        while left > 0:
++            moved = False
++            for od in order:
++                if left <= 0:
++                    break
++                if k[od] < cap_of[od]:
++                    k[od] += 1
++                    left -= 1
++                    moved = True
++            if not moved:
++                break
++    elif left < 0:
++        order = sorted(w, key=lambda od: (w[od], od))
++        while left < 0:
++            moved = False
++            for od in order:
++                if left >= 0:
++                    break
++                if k[od] > floor_of[od]:
++                    k[od] -= 1
++                    left += 1
++                    moved = True
++            if not moved:
++                break
++    return k
++
++
++def build_paths(
++    demands: Sequence,
++    models: Sequence[ServiceModel],
++    port_lookup: Dict,
++    assumptions: EconomicsAssumptions = DEFAULT_ASSUMPTIONS,
++    *,
++    max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD,
++    config: Optional[PathConfig] = None,
++) -> Tuple[Dict[int, List[OdPath]], PathStats]:
++    """Enumerate time-feasible paths for every demand with positive weekly TEU and select
++    the ones that enter the network model (``config``; default: the environment)."""
++    import time as _time
++    t_start = _time.perf_counter()
++    cfg = config if config is not None else config_from_environment()
++    stats = PathStats(max_paths_per_od=max_paths_per_od, selection=cfg.selection,
++                      max_transfers=cfg.max_transfers, budget=cfg.budget)
++
++    # boarding index: port -> [service]
++    by_port: Dict[str, List[int]] = defaultdict(list)
++    for si, m in enumerate(models):
++        for p in m.ports:
++            by_port[p].append(si)
++
++    # ride tables per service: (a, b) -> (legs, days), built lazily
++    ride_cache: Dict[Tuple[int, str, str], Optional[Tuple[Tuple[int, ...], float]]] = {}
++
++    def ride(si: int, a: str, b: str):
++        key = (si, a, b)
++        if key not in ride_cache:
++            ride_cache[key] = models[si].ride(a, b)
++        return ride_cache[key]
++
++    dwell = assumptions.transfer_dwell_days
++    need_cost = cfg.selection in (SELECT_COST_AWARE, SELECT_HYBRID) \
++        or cfg.budget == BUDGET_ADAPTIVE or cfg.max_transfers >= 2
++    slots = _SlotCosts(models) if need_cost else None
++
++    def hub_cost(h: str) -> float:
++        p = port_lookup.get(h)
++        return _port_cost(p, "transshipment_cost") + 2.0 * _port_cost(p, "variable_port_call_cost")
++
++    # per-OD valid paths, in discovery order (pass 1)
++    per_od: Dict[int, Tuple[List[OdPath], List[OdPath], List[OdPath]]] = {}
++
++    for di, d in enumerate(demands):
++        if not (d.weekly_teu > 0):
++            continue
++        stats.od_total += 1
++        o, t = d.origin, d.destination
++        limit = getattr(d, "max_transit_days", None)
++        po, pt = port_lookup.get(o), port_lookup.get(t)
++        if po is None or pt is None:
++            # port costs are never assumed zero: an OD without records cannot be priced
++            stats.od_skipped_missing_port_record += 1
++            stats.od_without_path += 1
++            continue
++        base_cost = (_port_cost(po, "handling_cost") + _port_cost(po, "variable_port_call_cost")
++                     + _port_cost(pt, "handling_cost") + _port_cost(pt, "variable_port_call_cost"))
++
++        direct: List[OdPath] = []
++        transfer: List[OdPath] = []
++        multi: List[OdPath] = []
++        over_limit = 0
++
++        # ---- direct --------------------------------------------------------------
++        for si in by_port.get(o, ()):
++            r = ride(si, o, t)
++            if r is None:
++                continue
++            legs, days = r
++            if limit is not None and days > limit + 1e-9:
++                over_limit += 1
++                continue
++            direct.append(OdPath(
++                od=di, kind=KIND_DIRECT,
++                segments=(PathSegment(si, legs, o, t, days),),
++                hub=None, transit_days=days, port_cost_per_teu=base_cost, hubs=(),
++                slot_cost_per_teu=slots.segment(si, legs) if slots else None,
++            ))
++
++        # ---- one transfer ---------------------------------------------------------
++        # reach_to[h] = [(service, legs, days)] for services that go h -> t
++        reach_to: Dict[str, List[Tuple[int, Tuple[int, ...], float]]] = defaultdict(list)
++        for s2 in by_port.get(t, ()):
++            for h in models[s2].ports:
++                if h in (o, t):
++                    continue
++                r2 = ride(s2, h, t)
++                if r2 is not None:
++                    reach_to[h].append((s2, r2[0], r2[1]))
++        if reach_to:
++            for s1 in by_port.get(o, ()):
++                for h in models[s1].ports:
++                    if h in (o, t) or h not in reach_to or h not in port_lookup:
++                        continue
++                    r1 = ride(s1, o, h)
++                    if r1 is None:
++                        continue
++                    hcost = hub_cost(h)
++                    for s2, legs2, days2 in reach_to[h]:
++                        if s2 == s1:
++                            continue
++                        total = r1[1] + dwell + days2
++                        if limit is not None and total > limit + 1e-9:
++                            over_limit += 1
++                            continue
++                        transfer.append(OdPath(
++                            od=di, kind=KIND_TRANSFER,
++                            segments=(PathSegment(s1, r1[0], o, h, r1[1]),
++                                      PathSegment(s2, legs2, h, t, days2)),
++                            hub=h, transit_days=total, port_cost_per_teu=base_cost + hcost,
++                            hubs=(h,),
++                            slot_cost_per_teu=(slots.segment(s1, r1[0]) + slots.segment(s2, legs2))
++                            if slots else None,
++                        ))
++
++        # ---- two transfers (bounded; only where the shorter journeys are too few) -----
++        if cfg.max_transfers >= 2 and (len(direct) + len(transfer)) < cfg.multi_hop_min_alternatives:
++            t_mh = _time.perf_counter()
++            multi, mh_over = _two_transfer_paths(
++                di, o, t, limit, models, by_port, ride, dwell, base_cost, port_lookup,
++                hub_cost, slots, cfg)
++            over_limit += mh_over
++            stats.od_multi_hop_enumerated += 1
++            stats.paths_multi_hop_valid += len(multi)
++            stats.multi_hop_build_sec += _time.perf_counter() - t_mh
++            if multi and not (direct or transfer):
++                stats.od_rescued_by_multi_hop += 1
++
++        stats.paths_dropped_by_time_limit += over_limit
++        stats.paths_valid += len(direct) + len(transfer) + len(multi)
++        if direct or transfer or multi:
++            per_od[di] = (direct, transfer, multi)
++        else:
++            stats.od_without_path += 1
++            if over_limit:
++                stats.od_without_path_time_limit += 1
++            else:
++                stats.od_without_path_no_connection += 1
++
++    # ---- pass 2: budgets and selection ------------------------------------------------
++    caps: Dict[int, int] = {}
++    if cfg.budget == BUDGET_ADAPTIVE and per_od:
++        total = sum(min(max_paths_per_od, len(a) + len(b) + len(c)) for a, b, c in per_od.values())
++        rows = []
++        for di, (a, b, c) in per_od.items():
++            d = demands[di]
++            cheapest_port = min(p.port_cost_per_teu for p in (a + b + c))
++            rows.append((di, len(a) + len(b) + len(c),
++                         d.weekly_teu * max(0.0, float(d.revenue_per_teu) - cheapest_port)))
++        caps = _allocate_budget(rows, total, cfg)
++
++    paths: Dict[int, List[OdPath]] = {}
++    for di, (direct, transfer, multi) in per_od.items():
++        cap = caps.get(di, max_paths_per_od)
++        n_valid = len(direct) + len(transfer) + len(multi)
++        if cfg.selection == SELECT_FASTEST:
++            multi_sorted = sorted(multi, key=lambda p: (p.transit_days, p.port_cost_per_teu))
++            kept = _select_fastest(direct, transfer, cap)
++            if multi_sorted and len(kept) < cap:
++                kept = kept + multi_sorted[:cap - len(kept)]
++        elif cfg.selection == SELECT_HYBRID:
++            n_cost = min(cfg.hybrid_cost_slots, cap)
++            kept = _select_fastest(direct, transfer, cap - n_cost)
++            multi_sorted = sorted(multi, key=lambda p: (p.transit_days, p.port_cost_per_teu))
++            if multi_sorted and len(kept) < cap - n_cost:
++                kept = kept + multi_sorted[:cap - n_cost - len(kept)]
++            have = {(p.services, p.transfer_ports) for p in kept}
++            rest = [p for p in direct + transfer + multi if (p.services, p.transfer_ports) not in have]
++            kept = kept + _select_cost_aware(rest, cap - len(kept), cfg.diversity_penalty)
++        else:
++            kept = _select_cost_aware(direct + transfer + multi, cap, cfg.diversity_penalty)
++        if n_valid > cap:
++            stats.od_at_cap += 1
++        stats.paths_dropped_by_cap += n_valid - len(kept)
++        paths[di] = kept
++        stats.paths_built += len(kept)
++        stats.paths_multi_hop_kept += sum(1 for p in kept if p.kind == KIND_TRANSFER2)
++        if direct:
++            stats.od_with_direct += 1
++        else:
++            stats.od_transfer_only += 1
++    stats.signals = _network_signals(demands, models, per_od, paths, caps, max_paths_per_od)
++    stats.path_build_sec = _time.perf_counter() - t_start
++    return paths, stats
++
++
++def _network_signals(demands, models, per_od, kept, caps, base_cap) -> Dict:
++    """Signals of the candidate network that drive the path budgets and the multi-hop policy
++    (and are reported with the result).  Pure functions of the demand list, the service
++    models and the valid paths; nothing is invented, a quantity that cannot be computed is
++    absent.  Demand weights are weekly TEU."""
++    tot = sum(d.weekly_teu for d in demands if d.weekly_teu > 0) or 0.0
++    if tot <= 0:
++        return {}
++    bins = [("0", 0, 0), ("1", 1, 1), ("2-4", 2, 4), ("5-9", 5, 9), ("10+", 10, 10 ** 9)]
++    od_n = {b: 0 for b, _, _ in bins}
++    teu_n = {b: 0.0 for b, _, _ in bins}
++    direct_teu = 0.0
++    single_service_teu = 0.0                 # every kept path rides one service (no choice)
++    teus = []
++    for di, d in enumerate(demands):
++        if not d.weekly_teu > 0:
++            continue
++        teus.append(d.weekly_teu)
++        a, b, c = per_od.get(di, ([], [], []))
++        n = len(a) + len(b) + len(c)
++        for name, lo, hi in bins:
++            if lo <= n <= hi:
++                od_n[name] += 1
++                teu_n[name] += d.weekly_teu
++                break
++        if a:
++            direct_teu += d.weekly_teu
++        if n == 1:
++            single_service_teu += d.weekly_teu
++    teus.sort(reverse=True)
++    ports_svc: Dict[str, int] = defaultdict(int)
++    for m in models:
++        for p in m.ports:
++            ports_svc[p] += 1
++    counts = sorted(ports_svc.values())
++    hub_use: Counter = Counter()
++    n_transfer_paths = 0
++    for pl in kept.values():
++        for p in pl:
++            for h in p.transfer_ports:
++                hub_use[h] += 1
++            if p.transfer_ports:
++                n_transfer_paths += 1
++    top3 = sum(v for _, v in hub_use.most_common(3))
++    allocs = sorted(caps.values()) if caps else []
++    return {
++        "demand_teu": tot,
++        "od_by_valid_paths": od_n,
++        "demand_share_by_valid_paths": {k: v / tot for k, v in teu_n.items()},
++        "demand_share_with_direct_path": direct_teu / tot,
++        "demand_share_without_any_path": teu_n["0"] / tot,
++        "demand_share_with_a_single_path": single_service_teu / tot,
++        "demand_concentration": {
++            "top10_od_share": sum(teus[:10]) / tot, "top100_od_share": sum(teus[:100]) / tot,
++            "od_count": len(teus),
++            "herfindahl": sum((t / tot) ** 2 for t in teus)},
++        "port_connectivity": {
++            "ports": len(counts), "services_per_port_min": counts[0] if counts else None,
++            "services_per_port_median": counts[len(counts) // 2] if counts else None,
++            "services_per_port_max": counts[-1] if counts else None,
++            "ports_with_at_most_one_service": sum(1 for c in counts if c <= 1)},
++        "transfer_concentration": {
++            "kept_paths_with_transfer": n_transfer_paths,
++            "top3_transfer_port_share": (top3 / max(1, sum(hub_use.values()))),
++            "distinct_transfer_ports": len(hub_use)},
++        "path_budget": {"baseline_per_od": base_cap,
++                         "allocated_min": allocs[0] if allocs else base_cap,
++                         "allocated_max": allocs[-1] if allocs else base_cap,
++                         "allocated_median": allocs[len(allocs) // 2] if allocs else base_cap},
++    }
++
++
++def _two_transfer_paths(di, o, t, limit, models, by_port, ride, dwell, base_cost, port_lookup,
++                        hub_cost, slots, cfg):
++    """Time-feasible journeys ``o -s1-> h1 -s2-> h2 -s3-> t`` with three distinct services
++    and four distinct ports.  Bounded three ways: the ``multi_hop_legs_per_hub`` fastest
++    first / last legs per hub are combined, a combination is abandoned as soon as its fastest
++    possible time exceeds the limit, and only the ``multi_hop_pool_per_od`` cheapest
++    journeys are returned.  Returns (paths, number dropped by the time limit)."""
++    firsts: Dict[str, List[Tuple[float, int, Tuple[int, ...]]]] = defaultdict(list)
++    for s1 in by_port.get(o, ()):
++        for h1 in models[s1].ports:
++            if h1 == o or h1 == t or h1 not in port_lookup:
++                continue
++            r1 = ride(s1, o, h1)
++            if r1 is not None:
++                firsts[h1].append((r1[1], s1, r1[0]))
++    if not firsts:
++        return [], 0
++    lasts: Dict[str, List[Tuple[float, int, Tuple[int, ...]]]] = defaultdict(list)
++    for s3 in by_port.get(t, ()):
++        for h2 in models[s3].ports:
++            if h2 == o or h2 == t or h2 not in port_lookup:
++                continue
++            r3 = ride(s3, h2, t)
++            if r3 is not None:
++                lasts[h2].append((r3[1], s3, r3[0]))
++    if not lasts:
++        return [], 0
++    m = cfg.multi_hop_legs_per_hub
++    for dct in (firsts, lasts):
++        for h, lst in dct.items():
++            lst.sort()
++            del lst[m:]
++
++    out: List[Tuple[float, OdPath]] = []
++    over = 0
++    two_dwell = 2.0 * dwell
++    for h1, f_list in firsts.items():
++        d1_min = f_list[0][0]
++        c1 = hub_cost(h1)
++        for s2 in by_port.get(h1, ()):
++            for h2 in models[s2].ports:
++                if h2 == h1 or h2 not in lasts:
++                    continue
++                r2 = ride(s2, h1, h2)
++                if r2 is None:
++                    continue
++                if limit is not None and d1_min + r2[1] + lasts[h2][0][0] + two_dwell > limit + 1e-9:
++                    over += 1
++                    continue
++                c2 = hub_cost(h2)
++                for d1, s1, l1 in f_list:
++                    if s1 == s2:
++                        continue
++                    for d3, s3, l3 in lasts[h2]:
++                        if s3 == s2 or s3 == s1:
++                            continue
++                        total = d1 + dwell + r2[1] + dwell + d3
++                        if limit is not None and total > limit + 1e-9:
++                            over += 1
++                            continue
++                        slot = (slots.segment(s1, l1) + slots.segment(s2, r2[0])
++                                + slots.segment(s3, l3)) if slots else None
++                        port_c = base_cost + c1 + c2
++                        key = port_c + (slot or 0.0)
++                        out.append((key, OdPath(
++                            od=di, kind=KIND_TRANSFER2,
++                            segments=(PathSegment(s1, l1, o, h1, d1),
++                                      PathSegment(s2, r2[0], h1, h2, r2[1]),
++                                      PathSegment(s3, l3, h2, t, d3)),
++                            hub=h1, transit_days=total, port_cost_per_teu=port_c,
++                            hubs=(h1, h2), slot_cost_per_teu=slot)))
++    out.sort(key=lambda kp: (kp[0], kp[1].transit_days, kp[1].services, kp[1].hubs))
++    return [p for _, p in out[:cfg.multi_hop_pool_per_od]], over
+diff --git a/src/network/plan.py b/src/network/plan.py
+--- a/src/network/plan.py
++++ b/src/network/plan.py
+@@ -20,9 +20,12 @@
+     DEFAULT_ASSUMPTIONS, EconomicsAssumptions, ServiceModel, ServiceModelError,
+     build_service_model,
+ )
++from src.network.flow_reopt import reoptimize_flows
+ from src.network.ledger import Ledger, LedgerFlow, LedgerService, compute_ledger
+ from src.network.network_milp import NetworkSolution, solve_network
+-from src.network.paths import DEFAULT_MAX_PATHS_PER_OD, OdPath, PathStats, build_paths
++from src.network.paths import (
++    DEFAULT_MAX_PATHS_PER_OD, OdPath, PathConfig, PathStats, build_paths, config_from_environment,
++)
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -49,6 +52,7 @@
+     frequencies: Dict[str, int] = field(default_factory=dict)       # service_id -> f (>0 only)
+     infeasibility: List[Dict] = field(default_factory=list)         # structured causes
+     fuel_prices: Dict[str, Dict] = field(default_factory=dict)      # service_id -> applied price
++    flow_reopt: Dict = field(default_factory=dict)                  # Task 20 flow re-optimisation
+ 
+     @property
+     def ok(self) -> bool:
+@@ -57,12 +61,16 @@
+ 
+ class NetworkPlanner:
+     def __init__(self, problem, assumptions: EconomicsAssumptions = DEFAULT_ASSUMPTIONS,
+-                 max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD):
++                 max_paths_per_od: int = DEFAULT_MAX_PATHS_PER_OD,
++                 path_config: Optional[PathConfig] = None):
+         if getattr(problem, "fleet", None) is None or not problem.fleet.classes:
+             raise ValueError("NetworkPlanner needs problem.fleet (no default fleet is assumed)")
+         self.problem = problem
+         self.assumptions = assumptions
+         self.max_paths_per_od = max_paths_per_od
++        # how the path set is selected and how many transfers a journey may have (Task 20);
++        # the environment default is the baseline (fastest paths, one transfer)
++        self.path_config = path_config if path_config is not None else config_from_environment()
+         # A regional problem only lists its own ports, but its services call at ports
+         # of other regions: ``port_catalog`` (all ports) is used when present.
+         catalog = getattr(problem, "port_catalog", None)
+@@ -148,7 +156,8 @@
+                 limits[k] = min(limits.get(k, v), int(v))
+ 
+         paths, pstats = build_paths(demands, models, self.port_lookup, self.assumptions,
+-                                    max_paths_per_od=self.max_paths_per_od)
++                                    max_paths_per_od=self.max_paths_per_od,
++                                    config=self.path_config)
+         res.paths, res.path_stats = paths, pstats
+ 
+         index = {m.service_id: i for i, m in enumerate(models)}
+@@ -170,6 +179,30 @@
+         res.solution = sol
+         res.status = sol.status
+         res.message = sol.message
++        res.flow_reopt = {"applied": False, "reason": "disabled"}
++        if (self.path_config.reoptimize_flows and sol.usable and fixed is None
++                and not unserved_penalty_per_teu and port_capacity is None
++                and not min_served_fraction and not total_vessel_limit):
++            import dataclasses
++            from src.network.paths import BUDGET_FIXED, SELECT_FASTEST
++            cfg_all = dataclasses.replace(
++                self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED,
++                multi_hop_min_alternatives=(10 ** 9 if self.path_config.max_transfers >= 2
++                                            else self.path_config.multi_hop_min_alternatives))
++
++            def _all_paths():
++                return build_paths(demands, models, self.port_lookup, self.assumptions,
++                                   max_paths_per_od=10 ** 9, config=cfg_all)
++
++            res.flow_reopt = reoptimize_flows(models, demands, paths, sol, _all_paths)
++            if res.flow_reopt.get("applied") and sol.status == "optimal":
++                # the capped model's proven optimum has been improved on with paths outside it:
++                # the plan is feasible, and no optimality over the full path set is proven
++                sol.status = res.status = "feasible"
++                sol.message = (sol.message + "; " if sol.message else "") + \
++                    "flows re-optimised over the full valid path set (optimality of the capped " \
++                    "model no longer claimed)"
++                res.message = sol.message
+         if sol.status == "infeasible":
+             res.infeasibility = self._diagnose_infeasibility(
+                 models, fixed, limits, total_vessel_limit, min_served_fraction)
+@@ -214,6 +247,7 @@
+             unserved_reported=sol.unserved,
+             speed_factor=a.speed_factor,
+             fuel_prices=fuel_prices,
++            max_transfers=self.path_config.max_transfers,
+         )
+         for ls in led_services:
+             m = models[index[ls.service_id]]
+@@ -250,6 +284,7 @@
+             "unserved_penalty_per_teu": unserved_penalty_per_teu,
+             "vessel_slack_removed": sol.vessel_slack_removed,
+             "vessel_slack_cost_usd": sol.vessel_slack_cost_usd,
++            "flow_reoptimisation": dict(res.flow_reopt),
+             "runtime_sec": round(time.perf_counter() - t0, 3),
+         }
+         return res
+diff --git a/src/network/reconcile.py b/src/network/reconcile.py
+--- a/src/network/reconcile.py
++++ b/src/network/reconcile.py
+@@ -34,6 +34,7 @@
+ from src.network.plan import Candidate, NetworkPlanner, PlanResult
+ from src.services.class_screening import config_from_environment as _class_screen_config
+ from src.services.demand_coherent import config_from_environment as _demand_loop_config
++from src.services.route_operators import config_from_environment as _route_operator_config
+ from src.services.regional_filter import filter_mode as _regional_filter_mode
+ 
+ logger = logging.getLogger(__name__)
+@@ -44,6 +45,7 @@
+     same source the generator reads), so a result states how its pool was built."""
+     try:
+         dl, cs = _demand_loop_config(), _class_screen_config()
++        ro = _route_operator_config()
+     except ValueError as exc:                                      # misconfigured: say so
+         return {"error": str(exc)}
+     return {
+@@ -56,6 +58,11 @@
+         "class_screening": {
+             "mode": "per_rotation_screening" if cs.enabled else "legacy_nearest_capacity",
+             "alternatives_per_rotation": cs.k if cs.enabled else 1,
++            "time_feasible_class": bool(cs.enabled and cs.time_feasible),
++        },
++        "route_operators": {
++            "variants_per_regional_problem": ro.budget, "elitism": ro.elitism,
++            "elites": ro.elites, "randomness": "none (deterministic for fixed inputs)",
+         },
+         "regional_filter": _regional_filter_mode(),
+     }
+@@ -197,8 +204,8 @@
+         per[r]["served"] += teu
+         per[r]["revenue"] += teu * d.revenue_per_teu
+         trans = 0.0
+-        if path.hub is not None:
+-            trans = pc(path.hub, "transshipment_cost")
++        for hub in path.transfer_ports:
++            trans += pc(hub, "transshipment_cost")
+         per[r]["transship"] += teu * trans
+         per[r]["port_per_teu"] += teu * (path.port_cost_per_teu - trans)
+ 
+@@ -392,6 +399,8 @@
+             if sol.relaxation_bound is not None else None,
+             "solver_backend": sol.solver_backend,
+             "mip_gap_reported_by_backend": sol.mip_gap,
++            "bound_applies_to": "the model over the retained (capped) path set",
++            "flow_reoptimisation": dict(plan.flow_reopt),
+             "note": ("a feasible plan with a stated upper bound; not a proof of optimality "
+                      "unless status is 'optimal'"),
+         },
+@@ -412,7 +421,8 @@
+             "speed_factor": a.speed_factor,
+             "basis": a.basis,
+             "sailing_speed": "class designSpeed (only speed with a source consumption)",
+-            "max_transfers_per_od": 1,
++            "max_transfers_per_od": planner.path_config.max_transfers,
++            "path_selection": planner.path_config.describe(),
+             "capacity_unit": {
+                 "status": getattr(fleet, "capacity_unit_status", "provisional"),
+                 "internal_unit": getattr(fleet, "capacity_unit", "TEU"),
+@@ -426,4 +436,15 @@
+         },
+         "runtime_sec": round(time.perf_counter() - t0, 2),
+     }
++    # strategy / utilisation / unserved-demand report of the verified plan (Task 19): derived
++    # from the routed cargo, reconciled against the ledger inside the report; never an input
++    try:
++        from src.network.strategy_report import build_strategy_report
++        ledger_block["strategy_report"] = build_strategy_report(
++            plan, fleet=problem.fleet, distance_matrix=problem.distance_matrix,
++            speed_factor=assumptions.speed_factor)
++    except Exception as exc:                                       # noqa: BLE001
++        logger.error("strategy_report_failed | %s: %s", type(exc).__name__, exc)
++        ledger_block["strategy_report"] = {"available": False,
++                                           "error": f"{type(exc).__name__}: {exc}"}
+     return GlobalStageResult(True, plan.status, plan.message, plan, updates, ledger_block)
+diff --git a/src/network/strategy_report.py b/src/network/strategy_report.py
+new file mode 100644
+--- /dev/null
++++ b/src/network/strategy_report.py
+@@ -0,0 +1,351 @@
++"""Strategy, utilisation and unserved-demand report of one verified network plan (Task 19).
++
++Everything here is DERIVED from the final routed cargo of a ``PlanResult`` (the MILP solution
++and the independent ledger); nothing is a preassigned quota and nothing feeds back into the
++optimisation.  Each served OD cargo flow is counted once; each leg's utilisation is counted
++once per leg.
++
++Strategy of a flow (descriptive labels, not constraints)
++    direct          the cargo rides one service (no transfer)
++    feeder          one transfer, the two services sail on DIFFERENT capacity tiers: a smaller
++                    vessel consolidates onto / distributes from a larger one
++    hub_and_spoke   one transfer between services of the SAME capacity tier (relay at a hub)
++    multi_hop       two transfers (three services; the model's hard bound)
++
++Accounting of a strategy (USD / week)
++    revenue         flow TEU x the OD's revenue per TEU                          (exact)
++    port charges    flow TEU x the path's per-TEU port charges (origin + destination handling
++                    and port-call charges, transshipment at every hub)               (exact)
++    service cost    the weekly vessel hire + fuel + fixed port calls of a service are shared
++                    by the cargo that occupies its capacity: share = TEU x ride days / (capacity
++                    x frequency x cycle days).  The remainder is IDLE CAPACITY and is reported
++                    on its own, so  sum(strategies) + idle  ==  the ledger's total, exactly.
++    profit          revenue - port charges - allocated service cost; ``idle_capacity_cost`` is
++                    negative on top of it.  The allocation is an attribution convention (the
++                    ledger's totals are the authority).
++
++Utilisation is measured at four levels with the capacity unit of the model (``capacity_teu``
++= the fleet file's ``Capacity FFE`` read as TEU, flagged provisional by the loader):
++    leg      load / (capacity x frequency) of every operated leg
++    service  carried TEU-legs / offered TEU-legs of one service
++    fleet    vessels used / class inventory, per class
++    network  carried TEU-legs / offered TEU-legs (and the same weighted by nautical miles)
++
++Unserved demand is classified by the first cause that applies to the OD's remainder:
++    limit_below_fastest_sailing_time  no path: the OD's transit limit is shorter than the pure
++                                      sailing time at the fastest class (no pool could serve it)
++    no_time_feasible_service_in_pool  no path: attainable at some class speed, no pool candidate
++    capacity_exhausted                a path of operated services exists and a leg is full
++    not_profitable_to_carry           a path of operated services has room; revenue <= its
++                                      per-TEU charges
++    fleet_inventory_exhausted         every path needs a service that is not operated and whose
++                                      class has too few free vessels to start it
++    not_economic_to_open_service      some path could be opened with the free fleet; the
++                                      optimiser judged it not worth its weekly cost
++    unclassified_residual             operated path with room and positive margin (a time-limited
++                                      incumbent gap; reported, never hidden)
++"""
++
++from __future__ import annotations
++
++import math
++from collections import defaultdict
++from typing import Dict, List, Optional
++
++_EPS = 1e-6
++
++STRATEGIES = ("direct", "feeder", "hub_and_spoke", "multi_hop")
++
++
++def classify_flow(path, models) -> str:
++    """Strategy label of a routed path (see the module docstring)."""
++    n = len(path.segments) - 1
++    if n <= 0:
++        return "direct"
++    if n >= 2:
++        return "multi_hop"
++    caps = {round(float(models[s.service].capacity_teu), 6) for s in path.segments}
++    return "feeder" if len(caps) > 1 else "hub_and_spoke"
++
++
++def _pct(sorted_vals: List[float], q: float) -> Optional[float]:
++    if not sorted_vals:
++        return None
++    i = min(len(sorted_vals) - 1, max(0, int(math.ceil(q * len(sorted_vals))) - 1))
++    return sorted_vals[i]
++
++
++def _wquantile(pairs, q):
++    """TEU-weighted quantile of (value, weight) pairs."""
++    pairs = sorted(pairs)
++    tot = sum(w for _, w in pairs)
++    if tot <= 0:
++        return None
++    acc, target = 0.0, q * tot
++    for v, w in pairs:
++        acc += w
++        if acc >= target - 1e-12:
++            return v
++    return pairs[-1][0]
++
++
++def build_strategy_report(plan, *, fleet=None, distance_matrix=None, speed_factor: float = 1.0) -> Dict:
++    """Strategy / utilisation / unserved report of a usable, ledger-checked plan.  Never raises
++    for a plan that has a solution; returns ``{"available": False, ...}`` otherwise."""
++    sol, led = getattr(plan, "solution", None), getattr(plan, "ledger", None)
++    if sol is None or led is None or not getattr(sol, "usable", False):
++        return {"available": False, "reason": "no usable plan"}
++    models, demands, paths = plan.models, plan.demands, plan.paths
++    freq = {si: int(f) for si, f in sol.frequencies.items() if f > 0}
++    sid = [m.service_id for m in models]
++
++    # ---- flows -------------------------------------------------------------------
++    S = {g: dict(flows=0, teu=0.0, revenue=0.0, port_charges=0.0, transfer_teu=0.0,
++                 transit=[], slack=[], violations=0, by_class=defaultdict(float))
++         for g in STRATEGIES}
++    leg_load: Dict = defaultdict(float)
++    slot_days_by_service: Dict[int, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
++    served_by_od: Dict[int, float] = defaultdict(float)
++    n_flows = 0
++    for di, k, teu in sol.flows:
++        if teu <= _EPS:
++            continue
++        p = paths[di][k]
++        d = demands[di]
++        g = classify_flow(p, models)
++        s = S[g]
++        n_flows += 1
++        s["flows"] += 1
++        s["teu"] += teu
++        s["revenue"] += teu * d.revenue_per_teu
++        s["port_charges"] += teu * p.port_cost_per_teu
++        s["transfer_teu"] += teu * (len(p.segments) - 1)
++        for seg in p.segments:
++            for leg in seg.legs:
++                leg_load[(seg.service, leg)] += teu
++            slot_days_by_service[seg.service][g] += teu * seg.ride_days
++            s["by_class"][models[seg.service].vessel_class] += teu
++        s["transit"].append((p.transit_days, teu))
++        lim = getattr(d, "max_transit_days", None)
++        if lim is not None:
++            s["slack"].append(lim - p.transit_days)
++            if p.transit_days > lim + 1e-9:
++                s["violations"] += 1
++        served_by_od[di] += teu
++
++    # ---- service cost allocation ------------------------------------------------------
++    svc_cost_total = 0.0
++    alloc: Dict[str, float] = defaultdict(float)
++    idle_cost = 0.0
++    service_rows = []
++    for si, f in freq.items():
++        m = models[si]
++        n_ves = m.vessels(f)                       # the ledger's (minimum) vessel count
++        cost = n_ves * m.vessel_week_cost + f * m.fuel_cost_per_rotation + f * m.port_fixed_per_rotation
++        svc_cost_total += cost
++        cap_slot_days = m.capacity_teu * f * m.cycle_days
++        used = sum(slot_days_by_service[si].values())
++        share = min(1.0, used / cap_slot_days) if cap_slot_days > 0 else 0.0
++        for g, sd in slot_days_by_service[si].items():
++            alloc[g] += cost * (sd / cap_slot_days if cap_slot_days > 0 else 0.0)
++        idle_cost += cost * (1.0 - share)
++        offered = [m.capacity_teu * f] * len(m.legs)
++        loads = [leg_load.get((si, l), 0.0) for l in range(len(m.legs))]
++        service_rows.append({
++            "service": m.service_id, "class": m.vessel_class, "frequency": f, "vessels": n_ves,
++            "legs": len(m.legs), "capacity_per_leg": m.capacity_teu * f,
++            "offered_teu_legs": sum(offered), "carried_teu_legs": sum(loads),
++            "load_factor": (sum(loads) / sum(offered)) if sum(offered) > 0 else None,
++            "min_leg_load_factor": min((l / o for l, o in zip(loads, offered) if o > 0), default=None),
++            "max_leg_load_factor": max((l / o for l, o in zip(loads, offered) if o > 0), default=None),
++            "idle_capacity_teu_legs": sum(offered) - sum(loads),
++            "slot_time_utilisation": share, "weekly_cost": cost,
++            "n_ports": len(m.ports), "ports": list(m.ports),
++        })
++
++    total_demand = float(led.total_demand_teu)
++    served_total = sum(s["teu"] for s in S.values())
++    by_strategy = {}
++    for g in STRATEGIES:
++        s = S[g]
++        rev, pc, ac = s["revenue"], s["port_charges"], alloc.get(g, 0.0)
++        tr = s["transit"]
++        by_strategy[g] = {
++            "flows": s["flows"],
++            "served_teu": s["teu"],
++            "share_of_served_teu": (s["teu"] / served_total) if served_total > 0 else 0.0,
++            "coverage_contribution_pct": (100.0 * s["teu"] / total_demand) if total_demand > 0 else 0.0,
++            "revenue": rev,
++            "port_charges": pc,
++            "allocated_service_cost": ac,
++            "profit_contribution": rev - pc - ac,
++            "transfers_per_teu": (s["transfer_teu"] / s["teu"]) if s["teu"] > 0 else 0.0,
++            "transit_days_mean": (sum(v * w for v, w in tr) / s["teu"]) if s["teu"] > 0 else None,
++            "transit_days_p50": _wquantile(tr, 0.5),
++            "transit_days_p90": _wquantile(tr, 0.9),
++            "transit_days_max": max((v for v, _ in tr), default=None),
++            "min_slack_to_limit_days": min(s["slack"]) if s["slack"] else None,
++            "transit_violations": s["violations"],
++            "teu_by_vessel_class": dict(s["by_class"]),
++        }
++
++    # ---- reconciliation with the independent ledger ------------------------------------
++    rev_all = sum(s["revenue"] for s in S.values())
++    pc_all = sum(s["port_charges"] for s in S.values())
++    ledger_port = led.handling_cost + led.transshipment_cost + led.port_variable_cost
++    ledger_service = led.vessel_cost + led.fuel_cost + led.port_call_fixed_cost
++    profit_sum = sum(b["profit_contribution"] for b in by_strategy.values()) - idle_cost
++
++    def close(a, b, tol=1e-6):
++        return abs(a - b) <= tol * max(1.0, abs(a), abs(b)) + 1e-3
++    reconciliation = {
++        "revenue_matches_ledger": close(rev_all, led.revenue),
++        "port_charges_match_ledger": close(pc_all, ledger_port),
++        "service_cost_matches_ledger": close(svc_cost_total, ledger_service),
++        "profit_matches_ledger": close(profit_sum, led.operating_profit),
++        "served_teu_matches_ledger": close(served_total, led.served_teu, 1e-6),
++        "revenue": rev_all, "ledger_revenue": led.revenue,
++        "port_charges": pc_all, "ledger_port_charges": ledger_port,
++        "service_cost": svc_cost_total, "ledger_service_cost": ledger_service,
++        "profit": profit_sum, "ledger_profit": led.operating_profit,
++        "each_flow_counted_once": True,
++    }
++    reconciliation["all"] = all(reconciliation[k] for k in (
++        "revenue_matches_ledger", "port_charges_match_ledger", "service_cost_matches_ledger",
++        "profit_matches_ledger", "served_teu_matches_ledger"))
++
++    # ---- utilisation ----------------------------------------------------------------------
++    leg_lf = []
++    offered_total = carried_total = 0.0
++    offered_nm = carried_nm = 0.0
++    for si, f in freq.items():
++        m = models[si]
++        cap = m.capacity_teu * f
++        for l, (_a, _b, nm_) in enumerate(m.legs):
++            load = leg_load.get((si, l), 0.0)
++            leg_lf.append(load / cap if cap > 0 else 0.0)
++            offered_total += cap
++            carried_total += load
++            offered_nm += cap * nm_
++            carried_nm += load * nm_
++    leg_sorted = sorted(leg_lf)
++    fleet_rows = {}
++    for cname in sorted({m.vessel_class for m in models}):
++        inv = next((m.class_inventory for m in models if m.vessel_class == cname), 0)
++        used = int(led.vessels_by_class.get(cname, 0))
++        fleet_rows[cname] = {"vessels_used": used, "inventory": int(inv),
++                             "inventory_utilisation": (used / inv) if inv else None,
++                             "services_operated": sum(1 for si in freq if models[si].vessel_class == cname)}
++    used_total = sum(r["vessels_used"] for r in fleet_rows.values())
++    inv_total = sum(r["inventory"] for r in fleet_rows.values())
++    utilisation = {
++        "capacity_unit": "TEU (fleet file 'Capacity FFE' read as TEU; provisional)",
++        "leg": {"legs": len(leg_lf),
++                "load_factor_mean": (sum(leg_lf) / len(leg_lf)) if leg_lf else None,
++                "p10": _pct(leg_sorted, 0.10), "p50": _pct(leg_sorted, 0.50), "p90": _pct(leg_sorted, 0.90),
++                "legs_at_or_above_95pct": sum(1 for x in leg_lf if x >= 0.95 - 1e-9),
++                "legs_below_30pct": sum(1 for x in leg_lf if x < 0.30),
++                "legs_empty": sum(1 for x in leg_lf if x <= _EPS)},
++        "service": {"services": len(service_rows),
++                    "load_factor_mean": (sum(r["load_factor"] for r in service_rows if r["load_factor"] is not None)
++                                         / max(1, sum(1 for r in service_rows if r["load_factor"] is not None))),
++                    "load_factor_min": min((r["load_factor"] for r in service_rows if r["load_factor"] is not None),
++                                           default=None),
++                    "load_factor_max": max((r["load_factor"] for r in service_rows if r["load_factor"] is not None),
++                                           default=None)},
++        "fleet": {"by_class": fleet_rows, "vessels_used": used_total, "inventory": inv_total,
++                  "inventory_utilisation": (used_total / inv_total) if inv_total else None},
++        "network": {"offered_teu_legs": offered_total, "carried_teu_legs": carried_total,
++                    "idle_capacity_teu_legs": offered_total - carried_total,
++                    "load_factor": (carried_total / offered_total) if offered_total > 0 else None,
++                    "load_factor_nm_weighted": (carried_nm / offered_nm) if offered_nm > 0 else None,
++                    "served_teu_per_vessel": (served_total / used_total) if used_total else None,
++                    "profit_per_vessel": (led.operating_profit / used_total) if used_total else None},
++    }
++
++    # ---- coverage by OD ----------------------------------------------------------------------
++    ods_full = ods_part = ods_none = 0
++    unserved_by_reason: Dict[str, Dict[str, float]] = defaultdict(lambda: {"ods": 0, "teu": 0.0})
++    vmax = None
++    if fleet is not None:
++        speeds = [float(c.design_speed) for c in getattr(fleet, "classes", ()) if c.design_speed]
++        vmax = max(speeds) * speed_factor if speeds else None
++    # spare vessels per class (free inventory) after the plan
++    free = {c: fleet_rows[c]["inventory"] - fleet_rows[c]["vessels_used"] for c in fleet_rows}
++    for di, d in enumerate(demands):
++        if not d.weekly_teu > 0:
++            continue
++        got = served_by_od.get(di, 0.0)
++        rem = d.weekly_teu - got
++        if rem <= 1e-6 * max(1.0, d.weekly_teu):
++            ods_full += 1
++            continue
++        if got > _EPS:
++            ods_part += 1
++        else:
++            ods_none += 1
++        reason = _unserved_reason(di, d, rem, paths, models, freq, leg_load, free, distance_matrix, vmax)
++        unserved_by_reason[reason]["ods"] += 1
++        unserved_by_reason[reason]["teu"] += rem
++    for r in unserved_by_reason.values():
++        r["share_of_total_demand_pct"] = (100.0 * r["teu"] / total_demand) if total_demand > 0 else 0.0
++
++    n_trans = sum(S[g]["transfer_teu"] for g in STRATEGIES)
++    return {
++        "available": True,
++        "definition": "strategies are the realised structure of the routed cargo, not quotas; "
++                      "see src/network/strategy_report.py",
++        "totals": {"flows": n_flows, "served_teu": served_total, "total_demand_teu": total_demand,
++                   "coverage_pct": (100.0 * served_total / total_demand) if total_demand > 0 else 0.0,
++                   "transfers_per_teu": (n_trans / served_total) if served_total > 0 else 0.0,
++                   "service_cost": svc_cost_total, "idle_capacity_cost": idle_cost,
++                   "operating_profit": led.operating_profit},
++        "by_strategy": by_strategy,
++        "reconciliation": reconciliation,
++        "utilisation": utilisation,
++        "coverage_by_od": {"fully_served": ods_full, "partially_served": ods_part, "unserved": ods_none,
++                           "total": ods_full + ods_part + ods_none},
++        "unserved_by_reason": {k: dict(v) for k, v in sorted(unserved_by_reason.items())},
++        "services": sorted(service_rows, key=lambda r: r["service"]),
++    }
++
++
++def _unserved_reason(di, d, remainder, paths, models, freq, leg_load, free_vessels,
++                     distance_matrix, vmax) -> str:
++    plist = paths.get(di)
++    if not plist:
++        lim = getattr(d, "max_transit_days", None)
++        if lim is not None and vmax and distance_matrix is not None:
++            nm_ = (distance_matrix.get(d.origin) or {}).get(d.destination)
++            if isinstance(nm_, (int, float)) and nm_ > 0 and nm_ / (vmax * 24.0) > lim + 1e-9:
++                return "limit_below_fastest_sailing_time"
++        return "no_time_feasible_service_in_pool"
++    best = None                       # (kind, detail) of the most hopeful path
++    openable = False
++    for p in plist:
++        ops = [s.service for s in p.segments]
++        if all(s in freq for s in ops):
++            # operated path: residual capacity on its legs
++            resid = min((models[s.service].capacity_teu * freq[s.service]
++                         - leg_load.get((s.service, leg), 0.0))
++                        for s in p.segments for leg in s.legs)
++            if resid > 1e-6 * max(1.0, remainder):
++                if d.revenue_per_teu <= p.port_cost_per_teu + 1e-9:
++                    best = best or "not_profitable_to_carry"
++                else:
++                    best = "unclassified_residual"
++                    break
++            else:
++                best = best or "capacity_exhausted"
++            continue
++        need: Dict[str, int] = defaultdict(int)
++        for s in ops:
++            if s not in freq:
++                need[models[s].vessel_class] += models[s].vessels(1)
++        if all(free_vessels.get(c, 0) >= n for c, n in need.items()):
++            openable = True
++    if best == "unclassified_residual":
++        return best
++    if best is not None:
++        return best
++    return "not_economic_to_open_service" if openable else "fleet_inventory_exhausted"
+diff --git a/src/optimization/hub_milp.py b/src/optimization/hub_milp.py
+--- a/src/optimization/hub_milp.py
++++ b/src/optimization/hub_milp.py
+@@ -201,7 +201,7 @@
+         led, sol = plan.ledger, plan.solution
+         n_direct = sum(1 for di, k, _ in sol.flows if plan.paths[di][k].kind == "direct")
+         direct_teu = sum(t for di, k, t in sol.flows if plan.paths[di][k].kind == "direct")
+-        transfer_teu = sum(t for di, k, t in sol.flows if plan.paths[di][k].kind == "transfer")
++        transfer_teu = sum(t for di, k, t in sol.flows if plan.paths[di][k].kind != "direct")
+         by_id = {str(s.id): s for s in services}
+ 
+         rows = []
+diff --git a/src/services/class_screening.py b/src/services/class_screening.py
+--- a/src/services/class_screening.py
++++ b/src/services/class_screening.py
+@@ -51,6 +51,7 @@
+ )
+ 
+ ENV_SCREEN = "LINER_CLASS_SCREEN"
++ENV_TIME_FEASIBLE = "LINER_CLASS_TIME_FEASIBLE"
+ 
+ R_INFEASIBLE = "class_infeasible_for_rotation"
+ R_NO_FEASIBLE_CLASS = "no_feasible_class_for_rotation"
+@@ -60,6 +61,7 @@
+ WHY_LEAST_LOSS = "no_profitable_class_least_loss"
+ WHY_LEGACY = "no_direct_cargo_evidence_legacy_class"
+ WHY_LEGACY_UNPROFITABLE = "no_profitable_class_legacy_class_kept"
++WHY_TIME_FEASIBLE = "legacy_class_cannot_meet_transit_limit_time_feasible_class"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -75,6 +77,11 @@
+     # screen). It exists to reproduce the "offer every class" experiment; it is not
+     # a production setting.
+     economic_screen: bool = True
++    # Task 21: a rotation with no profitable class keeps the legacy (nearest-capacity) class -
++    # unless that class cannot carry ANY cargo of the rotation inside the transit limits while
++    # another class can: then the class that can is offered (best stand-alone result among
++    # those).  Off = the Task 10 behaviour exactly.
++    time_feasible: bool = False
+ 
+     def __post_init__(self):
+         if self.k < 0 or self.max_frequency < 1:
+@@ -85,7 +92,7 @@
+         return self.k > 0
+ 
+ 
+-def config_from_environment(env: Optional[Dict[str, str]] = None) -> ClassScreeningConfig:
++def _base_config_from_environment(env: Optional[Dict[str, str]] = None) -> ClassScreeningConfig:
+     """``LINER_CLASS_SCREEN``: alternatives kept per rotation; unset = the default
+     (1); ``0`` = legacy nearest-capacity assignment; ``all`` = diagnostic enumeration
+     of every feasible class (no economic screen)."""
+@@ -102,6 +109,21 @@
+     if k < 0:
+         raise ValueError(f"{ENV_SCREEN} must be >= 0, got {k}")
+     return ClassScreeningConfig(k=k)
++
++
++def config_from_environment(env: Optional[Dict[str, str]] = None) -> ClassScreeningConfig:
++    """The screening configuration in force: ``LINER_CLASS_SCREEN`` (see above) plus
++    ``LINER_CLASS_TIME_FEASIBLE=1`` (Task 21: do not keep a class that cannot meet any
++    transit limit of the rotation when another class can)."""
++    import dataclasses
++    e = os.environ if env is None else env
++    cfg = _base_config_from_environment(env)
++    raw = (e.get(ENV_TIME_FEASIBLE) or "").strip().lower()
++    if raw in ("1", "true", "yes", "on"):
++        return dataclasses.replace(cfg, time_feasible=True)
++    if raw not in ("", "0", "false", "no", "off"):
++        raise ValueError(f"{ENV_TIME_FEASIBLE} must be 0 or 1, got {raw!r}")
++    return cfg
+ 
+ 
+ @dataclass
+@@ -354,7 +376,17 @@
+             else:
+                 has_cargo = any(e.direct_ride_feasible_ods > 0 and e.best_frequency > 0 for e in feasible)
+                 legacy_eval = next((x for x in feasible if x.vessel_class == legacy), None)
+-                if legacy_eval is not None:
++                carriers = [e for e in feasible
++                            if e.direct_ride_feasible_ods > 0 and e.best_frequency > 0]
++                if (self.cfg.time_feasible and legacy_eval is not None
++                        and not (legacy_eval.direct_ride_feasible_ods > 0
++                                 and legacy_eval.best_frequency > 0) and carriers):
++                    # the legacy class cannot carry anything of this rotation inside the
++                    # transit limits; a class that can is offered instead (Task 21)
++                    e = max(carriers, key=lambda x: (x.standalone_profit_best, -x.capacity_teu))
++                    e.selected_because = WHY_TIME_FEASIBLE
++                    selected = [e]
++                elif legacy_eval is not None:
+                     legacy_eval.selected_because = WHY_LEGACY_UNPROFITABLE if has_cargo else WHY_LEGACY
+                     selected = [legacy_eval]
+                 else:
+diff --git a/src/services/regional_filter.py b/src/services/regional_filter.py
+--- a/src/services/regional_filter.py
++++ b/src/services/regional_filter.py
+@@ -57,6 +57,10 @@
+ 
+ R_KEPT = "kept"
+ R_LOOP_EXEMPT = "demand_loop_exempt"
++#: candidate sections that carry their own evidence and budget and so neither pass through
++#: the corridor/cap test nor use up its slots: Task 9 demand-coherent loops and the Task 21
++#: route-operator variants / elites (all absent unless their switch is on)
++EXEMPT_SECTIONS = ("demand_loop", "elite", "route_operator")
+ R_NO_CORRIDOR = "no_corridor"
+ R_CAP = "cut_by_cap_lowest_economics"
+ 
+@@ -107,11 +111,11 @@
+     ``evaluate(service)`` returns the stand-alone weekly profit (USD) of the candidate on its
+     own class from the canonical model, or ``None`` when it cannot be evaluated."""
+     rep = FilterReport(cap=int(max_services), candidates=len(services))
+-    loops = [s for s in services if getattr(s, "origin_section", "") == "demand_loop"]
++    loops = [s for s in services if getattr(s, "origin_section", "") in EXEMPT_SECTIONS]
+     rep.demand_loops_exempt = len(loops)
+     pool = []
+     for s in services:
+-        if getattr(s, "origin_section", "") == "demand_loop":
++        if getattr(s, "origin_section", "") in EXEMPT_SECTIONS:
+             continue
+         ports = set(s.ports)
+         if any(o in ports and d in ports for (o, d) in corridor_set):
+diff --git a/src/services/route_operators.py b/src/services/route_operators.py
+new file mode 100644
+--- /dev/null
++++ b/src/services/route_operators.py
+@@ -0,0 +1,352 @@
++"""Route-level operators and elitism for the candidate pool (Task 21).
++
++Why this exists
++    The candidate pool is built once per iteration from OD pairs (Tasks 9/10) and nothing in
++    the pipeline *edits a rotation* or *remembers* a rotation that the global stage found
++    worth operating: the regional GA only switches existing candidates on and off.  A good
++    structure found in one iteration is therefore not available to the next, and the pool
++    contains no neighbours of the rotations that actually carry the network.
++
++What this does (all behind ``LINER_ROUTE_OPERATORS`` / ``LINER_ELITISM``; off = no effect)
++    elites     the rotations (ports + vessel class) operated by the best verified network of
++               the previous iteration (``problem.network_feedback``), re-offered unchanged -
++               the pipeline-level analogue of GA elitism.  Without feedback (first
++               iteration) the elites are the pool's own rotations with the best canonical
++               stand-alone profit.
++    operators  applied to every elite, each variant evaluated with the CANONICAL service
++               model (``demand_coherent._Evaluator``: cycle, vessels, capacity, ride times,
++               hire, fuel at the pinned price, port calls; transit-time limits respected):
++                 insert   one port with real demand towards the rotation (unserved demand of
++                          the previous network counts fully, served demand is discounted)
++                 remove   the port whose ride-feasible cargo is least
++                 swap     exchange two ports (a different visiting order)
++                 reclass  the same rotation on another vessel class of the fleet
++    selection  variants are ranked by the same complementarity-aware score as Task 9, a
++               rotation already in the pool (same cyclic order and class) is rejected, a
++               near-duplicate (>= ``near_duplicate_jaccard`` port overlap AND the same class)
++               of an already selected variant is rejected, and the number of variants is
++               bounded by ``budget``.  A variant whose stand-alone profit is not positive is
++               kept only if it covers demand no pool service carries directly, and only up to
++               ``complementarity_share`` of the budget.
++
++Nothing here accounts cargo, revenue or cost: candidates only enter the pool; the network MILP
++and the independent ledger decide what is operated.  For fixed inputs the output is
++deterministic (no random draw).
++"""
++
++from __future__ import annotations
++
++import math
++import os
++from collections import Counter, defaultdict
++from dataclasses import dataclass, field
++from typing import Dict, Iterable, List, Optional, Sequence, Tuple
++
++from src.services.demand_coherent import (
++    DemandCoherentConfig, _Demand, _Evaluator, _canonical, covered_directed_ods,
++)
++from src.services.service_feasibility import rotation_ports
++
++ENV_OPERATORS = "LINER_ROUTE_OPERATORS"
++ENV_ELITISM = "LINER_ELITISM"
++
++R_DUPLICATE_OF_POOL = "duplicate_of_existing_rotation"
++R_NEAR_DUPLICATE = "near_duplicate_of_selected_variant"
++R_INFEASIBLE = "infeasible_variant"
++R_NO_VALUE = "no_standalone_profit_and_no_uncovered_demand"
++R_BUDGET = "budget_exhausted"
++R_NOT_BETTER = "not_better_than_its_elite_and_not_complementary"
++
++
++@dataclass(frozen=True)
++class RouteOperatorConfig:
++    budget: int = 0                      # operator variants emitted per regional problem
++    elites: int = 20                     # elite rotations the operators start from
++    insert_neighbourhood: int = 8        # ports tried per insertion
++    complementarity_share: float = 0.34
++    near_duplicate_jaccard: float = 0.8
++    covered_weight: float = 0.25
++    sizing_buffer: float = 1.2
++    elitism: bool = False                # re-offer the previous iteration's operated rotations
++    min_ports: int = 2
++    max_ports: int = 6
++
++    @property
++    def enabled(self) -> bool:
++        return self.budget > 0 or self.elitism
++
++    def __post_init__(self):
++        if self.budget < 0 or self.elites < 0 or self.insert_neighbourhood < 1:
++            raise ValueError("budget/elites must be >= 0 and insert_neighbourhood >= 1")
++        if self.min_ports < 2 or self.max_ports < self.min_ports:
++            raise ValueError("need 2 <= min_ports <= max_ports")
++
++
++def config_from_environment(env: Optional[Dict[str, str]] = None) -> RouteOperatorConfig:
++    """``LINER_ROUTE_OPERATORS=<n>`` operator variants per regional problem (0 / unset = off);
++    ``LINER_ELITISM=1`` re-offers the previous iteration's operated rotations."""
++    e = os.environ if env is None else env
++    kw: Dict = {}
++    raw = (e.get(ENV_OPERATORS) or "").strip()
++    if raw:
++        try:
++            n = int(raw)
++        except ValueError:
++            raise ValueError(f"{ENV_OPERATORS} must be an integer, got {raw!r}") from None
++        if n < 0:
++            raise ValueError(f"{ENV_OPERATORS} must be >= 0, got {n}")
++        kw["budget"] = n
++    el = (e.get(ENV_ELITISM) or "").strip().lower()
++    if el in ("1", "true", "yes", "on"):
++        kw["elitism"] = True
++    elif el not in ("", "0", "false", "no", "off"):
++        raise ValueError(f"{ENV_ELITISM} must be 0 or 1, got {el!r}")
++    return RouteOperatorConfig(**kw)
++
++
++@dataclass
++class OperatorProposal:
++    ports: Tuple[str, ...]
++    vessel_class: str
++    operator: str                      # elite | insert | remove | swap | reclass
++    parent: Tuple[str, ...]
++    target_capacity_teu: float
++    score: float
++    standalone_profit_f1: float
++    uncovered_ods: int
++    n_ports: int
++    reason_kept: str = ""
++
++    def to_dict(self) -> Dict:
++        d = dict(self.__dict__)
++        d["ports"], d["parent"] = list(self.ports), list(self.parent)
++        return d
++
++
++@dataclass
++class OperatorReport:
++    elites_in: int = 0
++    elites_from_feedback: int = 0
++    variants_evaluated: int = 0
++    selected: int = 0
++    elites_reoffered: int = 0
++    selected_by_operator: Counter = field(default_factory=Counter)
++    rejected: Counter = field(default_factory=Counter)
++    config: Optional[RouteOperatorConfig] = None
++
++    def to_dict(self) -> Dict:
++        return {"elites_in": self.elites_in, "elites_from_feedback": self.elites_from_feedback,
++                "variants_evaluated": self.variants_evaluated, "selected": self.selected,
++                "elites_reoffered": self.elites_reoffered,
++                "selected_by_operator": dict(self.selected_by_operator),
++                "rejected_by_reason": dict(self.rejected),
++                "config": dict(self.config.__dict__) if self.config else None}
++
++
++def _dedupe_key(ports: Sequence[str], cls: str) -> Tuple[Tuple[str, ...], str]:
++    return (_canonical(ports), cls)
++
++
++def generate_operator_rotations(
++    problem,
++    fleet,
++    existing: Sequence[Tuple[Sequence[str], str]],
++    cfg: RouteOperatorConfig,
++    *,
++    assumptions=None,
++    feedback: Optional[Dict] = None,
++    elite_pool: Optional[Sequence[Tuple[Sequence[str], str]]] = None,
++) -> Tuple[List[OperatorProposal], OperatorReport]:
++    """Elites and operator variants to add to the pool (never invalid ones).
++
++    ``existing``    (ports, class) of every rotation already in the pool;
++    ``feedback``    ``problem.network_feedback`` of the previous iteration (operated rotations,
++                    unserved OD TEU) or None;
++    ``elite_pool``  without feedback: rotations of the pool ranked by the caller (best first)."""
++    report = OperatorReport(config=cfg)
++    if not cfg.enabled:
++        return [], report
++    if assumptions is None:
++        from src.network.economics import assumptions_for_problem
++        assumptions = assumptions_for_problem(problem)
++    catalog = getattr(problem, "port_catalog", None)
++    port_lookup = dict(catalog) if catalog else {p.id: p for p in problem.ports}
++    all_demands = getattr(problem, "global_demands", None) or problem.demands
++    D = _Demand(all_demands, port_lookup)
++    dc = DemandCoherentConfig(covered_weight=cfg.covered_weight, sizing_buffer=cfg.sizing_buffer)
++    covered = covered_directed_ods(existing, problem, fleet, assumptions, D)
++    ev = _Evaluator(problem, fleet, assumptions, D, covered, dc)
++    known = set(problem.distance_matrix)
++
++    unserved: Dict[Tuple[str, str], float] = {}
++    if feedback:
++        for key, teu in (feedback.get("unserved_od_teu") or {}).items():
++            o, _, t = str(key).partition("|")
++            unserved[(o, t)] = float(teu)
++
++    # ---- elites ----------------------------------------------------------------------------
++    elites: List[Tuple[Tuple[str, ...], str, str]] = []        # (ports, class, source)
++    seen_e = set()
++    if feedback and feedback.get("operated"):
++        for row in feedback["operated"]:
++            ports = tuple(rotation_ports(row.get("ports") or ()))
++            cname = row.get("vessel_class")
++            if len(ports) < 2 or not cname or fleet.get_class(cname) is None:
++                continue
++            if not all(p in known for p in ports):
++                continue
++            k = _dedupe_key(ports, cname)
++            if k in seen_e:
++                continue
++            seen_e.add(k)
++            elites.append((ports, cname, "feedback"))
++        report.elites_from_feedback = len(elites)
++    elif elite_pool:
++        for ports, cname in elite_pool:
++            ports = tuple(rotation_ports(ports))
++            if len(ports) < 2 or fleet.get_class(cname) is None:
++                continue
++            k = _dedupe_key(ports, cname)
++            if k in seen_e:
++                continue
++            seen_e.add(k)
++            elites.append((ports, cname, "pool"))
++            if len(elites) >= cfg.elites:
++                break
++    report.elites_in = len(elites)
++
++    pool_keys = {_dedupe_key(p, c) for p, c in existing}
++    out: List[OperatorProposal] = []
++    selected_sets: List[Tuple[frozenset, str]] = []
++
++    def accept_duplicate_check(ports, cname) -> Optional[str]:
++        if _dedupe_key(ports, cname) in pool_keys:
++            return R_DUPLICATE_OF_POOL
++        pset = frozenset(ports)
++        for s, c in selected_sets:
++            if c == cname and len(pset & s) / len(pset | s) >= cfg.near_duplicate_jaccard:
++                return R_NEAR_DUPLICATE
++        return None
++
++    # elitism: the previous network's rotations come back exactly as they were operated (they
++    # are exempt from the duplicate-of-pool test only in the sense that a pool copy already is
++    # one: a rotation the pool already holds is not offered twice)
++    if cfg.elitism and feedback:
++        for ports, cname, src in elites:
++            if src != "feedback":
++                continue
++            if _dedupe_key(ports, cname) in pool_keys:
++                report.rejected[R_DUPLICATE_OF_POOL] += 1
++                continue
++            m, why = ev.evaluate(ports, fleet.get_class(cname))
++            if m is None:
++                report.rejected[R_INFEASIBLE] += 1
++                continue
++            out.append(OperatorProposal(
++                ports=tuple(ports), vessel_class=cname, operator="elite", parent=tuple(ports),
++                target_capacity_teu=max(1.0, m["peak_leg_load"] * cfg.sizing_buffer),
++                score=m["score"], standalone_profit_f1=m["standalone"], uncovered_ods=m["uncovered"],
++                n_ports=len(ports), reason_kept="elite_of_previous_network"))
++            pool_keys.add(_dedupe_key(ports, cname))
++            selected_sets.append((frozenset(ports), cname))
++            report.elites_reoffered += 1
++            report.selected_by_operator["elite"] += 1
++
++    if cfg.budget <= 0:
++        report.selected = len(out)
++        return out, report
++
++    # ---- variants ----------------------------------------------------------------------------
++    def link_value(k) -> float:
++        base = D.opportunity(k)
++        return base if (not unserved or k in unserved) else base * cfg.covered_weight
++
++    variants: Dict[Tuple, Tuple[Dict, str, Tuple[str, ...], str, Tuple[str, ...]]] = {}
++
++    def consider(ports: Sequence[str], cname: str, op: str, parent: Tuple[str, ...]):
++        if len(ports) < cfg.min_ports or len(ports) > cfg.max_ports or len(set(ports)) != len(ports):
++            return
++        cls = fleet.get_class(cname)
++        if cls is None:
++            return
++        key = _dedupe_key(ports, cname)
++        if key in pool_keys or key in variants:
++            return
++        m, why = ev.evaluate(ports, cls)
++        report.variants_evaluated += 1
++        if m is None:
++            report.rejected[R_INFEASIBLE] += 1
++            return
++        variants[key] = (m, cname, tuple(ports), op, parent)
++
++    for ports, cname, _src in elites:
++        ports = list(ports)
++        # insert
++        link: Dict[str, float] = defaultdict(float)
++        for mem in ports:
++            for k in D.by_port.get(mem, ()):
++                other = k[1] if k[0] == mem else k[0]
++                if other not in ports and other in known:
++                    link[other] += link_value(k)
++        for P in sorted(link, key=lambda p: (-link[p], p))[:cfg.insert_neighbourhood]:
++            best = None
++            for pos in range(len(ports)):
++                new = ports[:pos + 1] + [P] + ports[pos + 1:]
++                m, _why = ev.evaluate(new, fleet.get_class(cname))
++                if m is not None and (best is None or m["score"] > best[0]):
++                    best = (m["score"], new)
++            if best is not None:
++                consider(best[1], cname, "insert", tuple(ports))
++        # remove
++        if len(ports) > cfg.min_ports:
++            for i in range(len(ports)):
++                consider(ports[:i] + ports[i + 1:], cname, "remove", tuple(ports))
++        # swap (different visiting order)
++        if len(ports) >= 4:
++            for i in range(len(ports)):
++                for j in range(i + 2, len(ports)):
++                    if i == 0 and j == len(ports) - 1:
++                        continue
++                    new = list(ports)
++                    new[i], new[j] = new[j], new[i]
++                    consider(new, cname, "swap", tuple(ports))
++        # reclass
++        for c in fleet.classes:
++            if c.vessel_class != cname:
++                consider(ports, c.vessel_class, "reclass", tuple(ports))
++
++    ranked = sorted(variants.items(), key=lambda kv: (-kv[1][0]["score"], kv[0]))
++    max_comp = int(math.floor(cfg.complementarity_share * cfg.budget + 1e-9))
++    n_comp = 0
++    n_variant = 0
++    for key, (m, cname, ports, op, parent) in ranked:
++        if n_variant >= cfg.budget:
++            report.rejected[R_BUDGET] += 1
++            continue
++        why = accept_duplicate_check(ports, cname)
++        if why is not None:
++            report.rejected[why] += 1
++            continue
++        standalone = m["standalone"] > 0.0
++        if standalone:
++            reason = "standalone_profitable"
++        else:
++            if m["uncovered"] <= 0:
++                report.rejected[R_NO_VALUE] += 1
++                continue
++            if n_comp >= max_comp:
++                report.rejected[R_BUDGET] += 1
++                continue
++            n_comp += 1
++            reason = "complementarity_not_standalone_profitable"
++        out.append(OperatorProposal(
++            ports=ports, vessel_class=cname, operator=op, parent=parent,
++            target_capacity_teu=max(1.0, m["peak_leg_load"] * cfg.sizing_buffer),
++            score=m["score"], standalone_profit_f1=m["standalone"], uncovered_ods=m["uncovered"],
++            n_ports=len(ports), reason_kept=reason))
++        pool_keys.add(key)
++        selected_sets.append((frozenset(ports), cname))
++        report.selected_by_operator[op] += 1
++        n_variant += 1
++    report.selected = len(out)
++    return out, report
+diff --git a/tests/test_multi_hop_paths.py b/tests/test_multi_hop_paths.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_multi_hop_paths.py
+@@ -0,0 +1,421 @@
++"""
++Tasks 19-21 network layer: bounded two-transfer journeys, cost-aware path selection, adaptive
++per-OD path budgets, the ledger's multi-transfer accounting and the strategy report.
++
++All fixtures are SYNTHETIC (clearly labelled) with hand-computed expected values:
++
++    vessel V : 1,000 TEU, design 12 kn, TC 8,000 USD/day, 10 vessels (288 nm/day)
++    ports    : A, B, C, D;  A-B 1,000 nm, B-C 600 nm, C-D 800 nm (both directions as listed)
++    dwell    : 48 h transshipment + 3.5 d wait = 5.5 d per transfer
++    A->B->C->D by three services : 1000/288 + 600/288 + 800/288 + 2 * 5.5 = 19.3333 d
++"""
++import sys
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.network.economics import DEFAULT_ASSUMPTIONS, build_service_model
++from src.network.ledger import LedgerFlow, LedgerService, compute_ledger
++from src.network.paths import (
++    HARD_MAX_TRANSFERS, BUDGET_ADAPTIVE, OdPath, PathConfig, PathSegment, _allocate_budget,
++    _select_cost_aware, build_paths, config_from_environment,
++)
++from src.network.plan import Candidate, NetworkPlanner
++from src.network.strategy_report import build_strategy_report, classify_flow
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++
++# ------------------------------------------------------------------------------- fixtures
++DM = {
++    "A": {"B": 1000.0, "C": 1600.0, "D": 2400.0},
++    "B": {"A": 1000.0, "C": 600.0, "D": 1400.0},
++    "C": {"A": 1600.0, "B": 600.0, "D": 800.0},
++    "D": {"A": 2400.0, "B": 1400.0, "C": 800.0},
++}
++DWELL = 2.0 + 3.5
++
++
++def vessel(name="V", qty=10, cap=1000.0, tc=8000.0, design=12.0, bunker=20.0):
++    return FleetClass(vessel_class=name, quantity=qty, capacity_teu=cap, tc_rate_daily=tc,
++                      min_speed=design - 2.0, design_speed=design, max_speed=design + 2.0,
++                      bunker_consumption_tons_per_day=bunker, idle_consumption_tons_per_day=2.0)
++
++
++def port_records(**over):
++    out = {}
++    for pid in "ABCD":
++        kw = dict(handling_cost=0.0, port_call_cost=1000.0, transshipment_cost=0.0,
++                  variable_port_call_cost=0.0)
++        kw.update(over.get(pid, {}))
++        out[pid] = Port(pid, pid, 0.0, 0.0, **kw)
++    return out
++
++
++def problem(demands, *, fleet=None, port_over=None):
++    pl = port_records(**(port_over or {}))
++    return Problem(ports=list(pl.values()), services=[], demands=demands, distance_matrix=DM,
++                   fleet=fleet or Fleet(classes=[vessel()]))
++
++
++def models_for(pr, routes, cls="V"):
++    pl = {p.id: p for p in pr.ports}
++    return [build_service_model(f"s{i}", r, pr.fleet.get_class(cls), DM, pl)
++            for i, r in enumerate(routes)], pl
++
++
++TWO = PathConfig(max_transfers=2)
++CHAIN = [["A", "B"], ["B", "C"], ["C", "D"]]            # A->D needs two transfers
++
++
++# ============================================================================== A. config
++class TestConfig:
++    def test_default_is_the_baseline(self):
++        c = config_from_environment({})
++        assert (c.selection, c.max_transfers, c.budget) == ("fastest", 1, "fixed")
++
++    def test_environment_values(self):
++        c = config_from_environment({"LINER_PATH_SELECTION": "cost_aware", "LINER_MAX_TRANSFERS": "2",
++                                     "LINER_PATH_BUDGET": "adaptive"})
++        assert (c.selection, c.max_transfers, c.budget) == ("cost_aware", 2, BUDGET_ADAPTIVE)
++
++    @pytest.mark.parametrize("env", [
++        {"LINER_MAX_TRANSFERS": "3"},            # unrestricted path length is not supported
++        {"LINER_MAX_TRANSFERS": "-1"},
++        {"LINER_MAX_TRANSFERS": "two"},
++        {"LINER_PATH_SELECTION": "random"},
++        {"LINER_PATH_BUDGET": "huge"},
++    ])
++    def test_malformed_values_are_errors_never_replaced(self, env):
++        with pytest.raises(ValueError):
++            config_from_environment(env)
++
++    def test_the_hard_bound_is_two_transfers(self):
++        assert HARD_MAX_TRANSFERS == 2
++        with pytest.raises(ValueError):
++            PathConfig(max_transfers=HARD_MAX_TRANSFERS + 1)
++
++
++# ====================================================================== B. two transfers
++class TestTwoTransfers:
++    def test_not_built_under_the_baseline_configuration(self):
++        d = [Demand("A", "D", 100.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, CHAIN)
++        paths, st = build_paths(d, models, pl, config=PathConfig())
++        assert paths == {} and st.od_without_path == 1 and st.od_without_path_no_connection == 1
++
++    def test_built_with_the_exact_transit_time_and_charges(self):
++        d = [Demand("A", "D", 100.0, 3000.0, max_transit_days=25.0)]
++        pr = problem(d, port_over={"A": dict(handling_cost=10, variable_port_call_cost=1),
++                                   "D": dict(handling_cost=20, variable_port_call_cost=2),
++                                   "B": dict(transshipment_cost=40, variable_port_call_cost=3),
++                                   "C": dict(transshipment_cost=50, variable_port_call_cost=4)})
++        models, pl = models_for(pr, CHAIN)
++        paths, st = build_paths(d, models, pl, config=TWO)
++        (p,) = paths[0]
++        assert p.kind == "transfer2" and p.hubs == ("B", "C") and p.n_transfers == 2
++        assert p.services == (0, 1, 2)
++        assert [(s.from_port, s.to_port) for s in p.segments] == [("A", "B"), ("B", "C"), ("C", "D")]
++        assert p.transit_days == pytest.approx((1000 + 600 + 800) / 288.0 + 2 * DWELL)
++        assert p.port_cost_per_teu == pytest.approx((10 + 1) + (20 + 2) + (40 + 2 * 3) + (50 + 2 * 4))
++        assert st.od_rescued_by_multi_hop == 1 and st.paths_multi_hop_kept == 1
++
++    def test_time_limit_is_enforced(self):
++        need = (1000 + 600 + 800) / 288.0 + 2 * DWELL
++        for limit, expect in ((need - 0.01, 0), (need + 0.01, 1)):
++            d = [Demand("A", "D", 100.0, 3000.0, max_transit_days=limit)]
++            pr = problem(d)
++            models, pl = models_for(pr, CHAIN)
++            paths, st = build_paths(d, models, pl, config=TWO)
++            assert len(paths.get(0, [])) == expect
++            if expect == 0:
++                assert st.od_without_path_time_limit == 1
++
++    def test_only_enumerated_where_the_shorter_journeys_are_too_few(self):
++        d = [Demand("A", "C", 100.0, 3000.0)]              # a one-transfer journey exists
++        pr = problem(d)
++        models, pl = models_for(pr, CHAIN)
++        paths, st = build_paths(d, models, pl, config=TWO)
++        assert st.od_multi_hop_enumerated == 0 and paths[0][0].kind == "transfer"
++        # "all ODs" policy enumerates it: a two-transfer journey A-B-?-C needs a third service
++        models, pl = models_for(pr, CHAIN + [["B", "C"]])
++        _, st = build_paths(d, models, pl, config=PathConfig(max_transfers=2,
++                                                             multi_hop_min_alternatives=100))
++        assert st.od_multi_hop_enumerated == 1
++
++    def test_never_more_than_two_transfers(self):
++        d = [Demand("A", "D", 100.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, [["A", "B"], ["B", "C"], ["C", "D"], ["B", "D"]])
++        paths, _ = build_paths(d, models, pl, config=PathConfig(max_transfers=2,
++                                                                multi_hop_min_alternatives=100))
++        assert max(p.n_transfers for p in paths[0]) <= 2
++
++    def test_a_journey_never_revisits_a_port_or_a_service(self):
++        d = [Demand("A", "D", 100.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, [["A", "B", "C"], ["B", "C"], ["C", "D"]])
++        paths, _ = build_paths(d, models, pl, config=PathConfig(max_transfers=2,
++                                                                multi_hop_min_alternatives=100))
++        for p in paths[0]:
++            stops = [p.segments[0].from_port] + [s.to_port for s in p.segments]
++            assert len(set(stops)) == len(stops)
++            assert len(set(p.services)) == len(p.services)
++
++
++# ================================================================================ C. ledger
++class TestLedger:
++    FLEET = Fleet(classes=[vessel()])
++
++    def _ledger(self, flows, *, max_transfers, port_over=None):
++        pl = port_records(**(port_over or {}))
++        svcs = [LedgerService(f"s{i}", tuple(r), "V", 1) for i, r in enumerate(CHAIN)]
++        d = [Demand("A", "D", 100.0, 3000.0, max_transit_days=25.0)]
++        return compute_ledger(
++            svcs, flows, d, self.FLEET, DM, pl, port_stay_hours=24.0, transshipment_min_hours=48.0,
++            transfer_wait_days=3.5, bunker_price_usd_per_t=600.0, max_transfers=max_transfers)
++
++    FLOW3 = LedgerFlow(0, (("s0", "A", "B"), ("s1", "B", "C"), ("s2", "C", "D")), 100.0)
++
++    def test_three_segments_are_rejected_under_the_one_transfer_rule(self):
++        led = self._ledger([self.FLOW3], max_transfers=1)
++        assert any(v["type"] == "invalid_path" for v in led.violations)
++
++    def test_two_transfer_accounting(self):
++        led = self._ledger([self.FLOW3], max_transfers=2, port_over={
++            "A": dict(handling_cost=10, variable_port_call_cost=1),
++            "D": dict(handling_cost=20, variable_port_call_cost=2),
++            "B": dict(transshipment_cost=40, variable_port_call_cost=3),
++            "C": dict(transshipment_cost=50, variable_port_call_cost=4)})
++        assert not [v for v in led.violations if v["type"] != "transit_time_exceeded"], led.violations
++        assert led.revenue == pytest.approx(100 * 3000.0)
++        assert led.handling_cost == pytest.approx(100 * (10 + 20))
++        assert led.transshipment_cost == pytest.approx(100 * (40 + 50))          # every hub
++        assert led.port_variable_cost == pytest.approx(100 * ((1 + 2) + 2 * 3 + 2 * 4))
++        assert led.served_teu == pytest.approx(100.0)
++
++    def test_every_transfer_adds_its_dwell_to_the_transit_time(self):
++        need = (1000 + 600 + 800) / 288.0 + 2 * DWELL
++        pl = port_records()
++        svcs = [LedgerService(f"s{i}", tuple(r), "V", 1) for i, r in enumerate(CHAIN)]
++        for limit, tight in ((need - 0.01, True), (need + 0.01, False)):
++            d = [Demand("A", "D", 100.0, 3000.0, max_transit_days=limit)]
++            led = compute_ledger(svcs, [self.FLOW3], d, self.FLEET, DM, pl, port_stay_hours=24.0,
++                                 transshipment_min_hours=48.0, transfer_wait_days=3.5,
++                                 bunker_price_usd_per_t=600.0, max_transfers=2)
++            assert any(v["type"] == "transit_time_exceeded" for v in led.violations) == tight
++
++    def test_broken_or_repeating_journeys_are_violations(self):
++        broken = LedgerFlow(0, (("s0", "A", "B"), ("s2", "C", "D")), 10.0)
++        assert any(v["type"] == "invalid_transfer"
++                   for v in self._ledger([broken], max_transfers=2).violations)
++        four = LedgerFlow(0, (("s0", "A", "B"), ("s1", "B", "C"), ("s2", "C", "D"), ("s0", "D", "A")), 10.0)
++        assert any(v["type"] == "invalid_path" for v in self._ledger([four], max_transfers=2).violations)
++
++
++# ======================================================================= D. planner / MILP
++class TestPlanner:
++    def _plan(self, config, port_over=None):
++        d = [Demand("A", "D", 500.0, 3000.0, max_transit_days=25.0)]
++        pr = problem(d, port_over=port_over)
++        pl = NetworkPlanner(pr, path_config=config)
++        cands = [Candidate(f"s{i}", tuple(r), "V") for i, r in enumerate(CHAIN)]
++        return pr, pl, pl.plan(cands, time_limit_sec=30, lp_guided=False)
++
++    def test_baseline_leaves_the_od_unserved(self):
++        _, _, res = self._plan(PathConfig())
++        assert res.ledger.served_teu == 0.0
++
++    def test_two_transfer_journey_is_planned_and_verified(self):
++        _, pl, res = self._plan(TWO, port_over={"B": dict(transshipment_cost=40),
++                                                "C": dict(transshipment_cost=50)})
++        assert res.ok and res.status == "optimal", res.message
++        assert res.ledger.served_teu == pytest.approx(500.0)
++        assert res.ledger.transshipment_cost == pytest.approx(500.0 * 90.0)
++        assert res.reconciliation["reconciled"], res.reconciliation
++        assert not res.ledger.violations
++        (di, k, teu), = res.solution.flows
++        assert res.paths[di][k].kind == "transfer2" and teu == pytest.approx(500.0)
++
++
++# ================================================================== E. selection / budgets
++class TestSelection:
++    def _two_direct(self):
++        fleet = Fleet(classes=[vessel("Big", cap=5000.0, tc=10000.0, design=12.0),
++                               vessel("Fast", cap=500.0, tc=20000.0, design=20.0)])
++        d = [Demand("A", "B", 300.0, 3000.0)]
++        pr = problem(d, fleet=fleet)
++        pl = {p.id: p for p in pr.ports}
++        models = [build_service_model("fast", ["A", "B"], fleet.get_class("Fast"), DM, pl),
++                  build_service_model("big", ["A", "B"], fleet.get_class("Big"), DM, pl)]
++        return d, models, pl
++
++    def test_cost_aware_prefers_the_cheaper_capacity_fastest_prefers_speed(self):
++        d, models, pl = self._two_direct()
++        fast, _ = build_paths(d, models, pl, max_paths_per_od=1, config=PathConfig())
++        cost, _ = build_paths(d, models, pl, max_paths_per_od=1, config=PathConfig(selection="cost_aware"))
++        assert fast[0][0].services == (0,)          # the 20-knot vessel is faster ...
++        assert cost[0][0].services == (1,)          # ... the 5,000 TEU vessel is cheaper per TEU
++        both, _ = build_paths(d, models, pl, max_paths_per_od=2, config=PathConfig(selection="cost_aware"))
++        by_service = {p.services: p.slot_cost_per_teu for p in both[0]}
++        assert by_service[(1,)] < by_service[(0,)]
++        assert fast[0][0].slot_cost_per_teu is None            # the baseline does not compute it
++
++    def test_baseline_selection_is_direct_first_then_fastest_transfers(self):
++        d = [Demand("A", "C", 100.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, [["A", "C"], ["A", "B"], ["B", "C"], ["A", "B", "C"]])
++        full, _ = build_paths(d, models, pl, max_paths_per_od=50, config=PathConfig())
++        cut, st = build_paths(d, models, pl, max_paths_per_od=2, config=PathConfig())
++        assert [p.services for p in cut[0]] == [p.services for p in full[0][:2]]
++        kinds = [p.kind for p in full[0]]
++        assert kinds == sorted(kinds, key=lambda k: k != "direct")        # directs first
++        assert st.paths_dropped_by_cap == len(full[0]) - 2
++
++    @staticmethod
++    def _path(services, cost):
++        segs = tuple(PathSegment(s, (0,), "A", "B", 1.0) for s in services)
++        return OdPath(od=0, kind="direct" if len(services) == 1 else "transfer", segments=segs,
++                      hub=None, transit_days=1.0, port_cost_per_teu=cost, hubs=(),
++                      slot_cost_per_teu=0.0)
++
++    def test_reuse_penalty_keeps_the_retained_set_from_near_duplicates(self):
++        cands = [self._path((0, 1), 10.0), self._path((0, 1), 10.5), self._path((2,), 12.0)]
++        no_pen = _select_cost_aware(list(cands), 2, 0.0)
++        pen = _select_cost_aware(list(cands), 2, 0.10)
++        assert [p.port_cost_per_teu for p in no_pen] == [10.0, 10.5]
++        assert [p.port_cost_per_teu for p in pen] == [10.0, 12.0]
++
++    def test_adaptive_budget_keeps_the_model_size_and_the_bounds(self):
++        cfg = PathConfig(selection="cost_aware", budget="adaptive",
++                         adaptive_min_paths=2, adaptive_max_paths=8)
++        rows = [(0, 40, 1_000_000.0), (1, 40, 10_000.0), (2, 40, 100.0), (3, 3, 5.0), (4, 1, 1e9)]
++        total = 10 + 10 + 10 + 3 + 1
++        k = _allocate_budget(rows, total, cfg)
++        assert sum(k.values()) <= total
++        assert k[0] >= k[1] >= k[2]
++        assert all(2 <= k[od] or n < 2 for od, n, _ in rows)
++        assert all(k[od] <= min(8, n) for od, n, _ in rows)
++        assert k[4] == 1 and k[3] == 3
++
++    def test_adaptive_and_cost_aware_keep_the_baseline_number_of_paths(self):
++        d = [Demand("A", "C", 100.0 * (i + 1), 3000.0) for i in range(3)] + [Demand("A", "B", 50.0, 3000.0)]
++        pr = problem(d)
++        models, pl = models_for(pr, [["A", "C"], ["A", "B"], ["B", "C"], ["A", "B", "C"], ["A", "C", "B"]])
++        base, _ = build_paths(d, models, pl, max_paths_per_od=2, config=PathConfig())
++        ada, st = build_paths(d, models, pl, max_paths_per_od=2,
++                              config=PathConfig(selection="cost_aware", budget="adaptive",
++                                                adaptive_min_paths=1, adaptive_max_paths=5))
++        assert sum(len(v) for v in ada.values()) <= sum(len(v) for v in base.values())
++        assert st.budget == "adaptive"
++
++
++# ================================================================== F. strategy report
++class TestStrategyReport:
++    def _result(self):
++        d = [Demand("A", "D", 400.0, 3000.0, max_transit_days=25.0),
++             Demand("A", "B", 300.0, 2000.0, max_transit_days=25.0),
++             Demand("B", "D", 200.0, 90.0, max_transit_days=3.0)]      # time limit unattainable
++        pr = problem(d, port_over={"B": dict(transshipment_cost=40), "C": dict(transshipment_cost=50)})
++        pl = NetworkPlanner(pr, path_config=TWO)
++        cands = [Candidate(f"s{i}", tuple(r), "V") for i, r in enumerate(CHAIN)]
++        res = pl.plan(cands, time_limit_sec=30, lp_guided=False)
++        return pr, res
++
++    def test_every_flow_is_counted_once_and_reconciles_with_the_ledger(self):
++        pr, res = self._result()
++        assert res.ok
++        rep = build_strategy_report(res, fleet=pr.fleet, distance_matrix=pr.distance_matrix)
++        assert rep["available"] and rep["reconciliation"]["all"], rep["reconciliation"]
++        assert rep["totals"]["served_teu"] == pytest.approx(res.ledger.served_teu)
++        assert sum(b["served_teu"] for b in rep["by_strategy"].values()) == pytest.approx(
++            res.ledger.served_teu)
++        assert rep["by_strategy"]["multi_hop"]["served_teu"] == pytest.approx(400.0)
++        assert rep["by_strategy"]["multi_hop"]["transfers_per_teu"] == pytest.approx(2.0)
++        assert rep["by_strategy"]["direct"]["served_teu"] == pytest.approx(300.0)
++        assert all(b["transit_violations"] == 0 for b in rep["by_strategy"].values())
++
++    def test_idle_capacity_closes_the_profit_identity(self):
++        pr, res = self._result()
++        rep = build_strategy_report(res, fleet=pr.fleet, distance_matrix=pr.distance_matrix)
++        parts = sum(b["profit_contribution"] for b in rep["by_strategy"].values())
++        assert parts - rep["totals"]["idle_capacity_cost"] == pytest.approx(res.ledger.operating_profit)
++        assert rep["totals"]["idle_capacity_cost"] >= 0.0
++
++    def test_unserved_demand_names_its_reason(self):
++        pr, res = self._result()
++        rep = build_strategy_report(res, fleet=pr.fleet, distance_matrix=pr.distance_matrix)
++        # B->D must be done in 3 days: 1400 nm at the fastest class speed (12 kn) needs 4.9 d
++        assert "limit_below_fastest_sailing_time" in rep["unserved_by_reason"]
++        assert rep["unserved_by_reason"]["limit_below_fastest_sailing_time"]["teu"] == pytest.approx(200.0)
++
++    def test_classification_is_structural(self):
++        pr, res = self._result()
++        models = res.models
++        kinds = {classify_flow(res.paths[di][k], models) for di, k, _ in res.solution.flows}
++        assert kinds == {"direct", "multi_hop"}
++
++
++# ============================================================ G. flow re-optimisation (Task 20)
++class TestFlowReoptimisation:
++    """SYNTHETIC.  s0 = A<->C on the small class (500 TEU, 2 vessels -> f = 1: 500 TEU per leg),
++    s1 = A<->B, s2 = B<->C on class V (1,000 TEU).  A->C demands 1,500 TEU; with ONE path per OD
++    the direct rotation is the only kept path, so 1,000 TEU stay unserved although s1 and s2,
++    operated for the A->B and B->C cargo, have free capacity.  Re-routing over all valid paths
++    carries them (one transfer at B)."""
++
++    def _plan(self, reopt):
++        d = [Demand("A", "C", 1500.0, 3000.0, max_transit_days=60.0),
++             Demand("A", "B", 300.0, 2000.0, max_transit_days=60.0),
++             Demand("B", "C", 300.0, 2000.0, max_transit_days=60.0)]
++        fleet = Fleet(classes=[vessel("S", qty=2, cap=500.0), vessel("V", qty=10, cap=1000.0)])
++        pr = problem(d, fleet=fleet, port_over={"B": dict(transshipment_cost=20)})
++        pl = NetworkPlanner(pr, max_paths_per_od=1, path_config=PathConfig(reoptimize_flows=reopt))
++        cands = [Candidate("s0", ("A", "C"), "S"), Candidate("s1", ("A", "B"), "V"),
++                 Candidate("s2", ("B", "C"), "V")]
++        return pl.plan(cands, time_limit_sec=30, lp_guided=False)
++
++    def test_off_keeps_the_capped_plan(self):
++        res = self._plan(False)
++        assert res.ok and res.flow_reopt["applied"] is False
++        assert res.ledger.served_teu == pytest.approx(500.0 + 300.0 + 300.0)
++
++    def test_on_serves_more_with_the_same_network_and_a_verified_ledger(self):
++        off, on = self._plan(False), self._plan(True)
++        assert on.ok and on.flow_reopt["applied"] is True, on.flow_reopt
++        # same services, frequencies and vessels: no fixed cost moved
++        assert on.frequencies == off.frequencies
++        assert on.ledger.vessel_cost == pytest.approx(off.ledger.vessel_cost)
++        assert on.ledger.fuel_cost == pytest.approx(off.ledger.fuel_cost)
++        assert on.ledger.port_call_fixed_cost == pytest.approx(off.ledger.port_call_fixed_cost)
++        # ... more cargo, higher verified profit
++        # the transfer is limited by the free capacity of s1 and s2 (1,000 - 300 = 700 TEU)
++        assert on.ledger.served_teu == pytest.approx(off.ledger.served_teu + 700.0)
++        assert on.ledger.operating_profit == pytest.approx(
++            off.ledger.operating_profit + 700.0 * (3000.0 - 20.0))
++        assert not on.ledger.violations
++        assert on.reconciliation["reconciled"], on.reconciliation
++        assert on.reconciliation["flow_reoptimisation"]["gain_usd"] == pytest.approx(
++            on.ledger.operating_profit - off.ledger.operating_profit, rel=1e-6)
++        # the transfer flow rides a path that the cap had removed
++        kinds = {on.paths[di][k].kind for di, k, _ in on.solution.flows}
++        assert "transfer" in kinds
++
++    def test_the_capacity_of_every_leg_still_binds(self):
++        on = self._plan(True)
++        load = {}
++        for di, k, teu in on.solution.flows:
++            for seg in on.paths[di][k].segments:
++                for leg in seg.legs:
++                    load[(seg.service, leg)] = load.get((seg.service, leg), 0.0) + teu
++        for (si, leg), v in load.items():
++            f = on.solution.frequencies[si]
++            assert v <= on.models[si].capacity_teu * f + 1e-6
++
++    def test_never_applied_to_a_fixed_frequency_solve(self):
++        d = [Demand("A", "C", 1500.0, 3000.0, max_transit_days=60.0)]
++        pr = problem(d, fleet=Fleet(classes=[vessel("S", qty=2, cap=500.0)]))
++        pl = NetworkPlanner(pr, max_paths_per_od=1, path_config=PathConfig(reoptimize_flows=True))
++        res = pl.plan([Candidate("s0", ("A", "C"), "S")], fixed_frequencies={"s0": 1}, time_limit_sec=30)
++        assert res.flow_reopt["applied"] is False
+diff --git a/tests/test_orchestrator.py b/tests/test_orchestrator.py
+--- a/tests/test_orchestrator.py
++++ b/tests/test_orchestrator.py
+@@ -2163,6 +2163,11 @@
+     fuel_pricing = assumptions.get("fuel_pricing") or {
+         "mode": "legacy_uniform", "uniform_price_usd_per_t": uniform_price}
+     speed_factor = float(assumptions.get("speed_factor", 1.0))
++    # number of transfers a journey may have (1 = the original rule; 2 is the model's hard
++    # bound).  Read from the stated assumptions and bounded here, not trusted blindly.
++    max_transfers = int(assumptions.get("max_transfers_per_od", 1))
++    if not 0 <= max_transfers <= 2:
++        raise ValueError(f"max_transfers_per_od={max_transfers} is outside the model's bound [0, 2]")
+ 
+     out: Dict[str, Any] = {"violations": [], "services": {}, "vessels_by_class": {}}
+     bad = out["violations"].append
+@@ -2236,10 +2241,16 @@
+         if e is None or e["teu"] <= 0:
+             bad({"type": "flow_without_demand", "od": list(od)})
+             continue
+-        if not segs or len(segs) > 2 or segs[0][1] != od[0] or segs[-1][2] != od[1] \
+-                or (len(segs) == 2 and segs[0][2] != segs[1][1]):
++        if not segs or len(segs) > max_transfers + 1 or segs[0][1] != od[0] or segs[-1][2] != od[1] \
++                or any(segs[k][2] != segs[k + 1][1] for k in range(len(segs) - 1)):
+             bad({"type": "invalid_path", "od": list(od)})
+             continue
++        if len(segs) > 2:
++            stops = [segs[0][1]] + [s_[2] for s_ in segs]
++            if len(set(stops)) != len(stops) or len({s_[0] for s_ in segs}) != len(segs):
++                bad({"type": "invalid_path", "od": list(od),
++                     "detail": "journey revisits a port or rides a service twice"})
++                continue
+         transit, ok_path = 0.0, True
+         for sid, a, b in segs:
+             sv = out["services"].get(sid)
+@@ -2262,8 +2273,7 @@
+                     transit += stay_days
+         if not ok_path:
+             continue
+-        if len(segs) == 2:
+-            transit += dwell_days
++        transit += dwell_days * (len(segs) - 1)
+         if e["limit"] is not None and transit > e["limit"] + 1e-9:
+             bad({"type": "transit_time_exceeded", "od": list(od), "transit_days": transit,
+                  "limit_days": e["limit"]})
+@@ -2275,8 +2285,8 @@
+         revenue += teu * rate
+         handling += teu * (_num0(o.handling_cost) + _num0(t.handling_cost))
+         port_var += teu * (_num0(o.variable_port_call_cost) + _num0(t.variable_port_call_cost))
+-        if len(segs) == 2:
+-            h = ports.get(segs[0][2])
++        for k_ in range(len(segs) - 1):
++            h = ports.get(segs[k_][2])
+             transship += teu * _num0(getattr(h, "transshipment_cost", 0.0))
+             port_var += teu * 2.0 * _num0(getattr(h, "variable_port_call_cost", 0.0))
+         served[od] = served.get(od, 0.0) + teu
+@@ -2300,6 +2310,7 @@
+         "total_operating_cost": cost, "operating_profit": revenue - cost,
+         "total_demand": total_demand, "served": served_teu,
+         "coverage_pct": served_teu / total_demand * 100.0 if total_demand else 0.0,
++        "leg_load": leg_load, "max_transfers": max_transfers,
+     })
+     return out
+ 
+@@ -2508,6 +2519,103 @@
+     print_kv("Bunker price (uniform / reference)", f"${assumptions['bunker_price_usd_per_t']:g}/t")
+     print_kv("Transfer dwell assumed",
+              f"{assumptions['transshipment_min_hours']:g} h min + {assumptions['transfer_wait_days']:g} d wait")
++
++    # -- N.9 transfers bound, strategy / utilisation / unserved report ------------
++    print(f"\n  {C.BOLD}N.9 Journey bound, strategy and utilisation report{C.RESET}")
++    mt = int(assumptions.get("max_transfers_per_od", 1))
++    assert_true(0 <= mt <= 2, "journeys have at most two transfers (hard bound of the model)",
++                f"max_transfers_per_od={mt}")
++    n_seg = [len(f_["segments"]) for f_ in plan["flows"]]
++    assert_true(all(1 <= n <= mt + 1 for n in n_seg),
++                "every routed flow has at most max_transfers + 1 segments",
++                f"segments={sorted(set(n_seg))}, max_transfers={mt}")
++    sr = led.get("strategy_report") or {}
++    assert_true(sr.get("available") is True, "network_ledger carries the strategy report",
++                f"{ {k: sr.get(k) for k in ('available', 'error', 'reason')} }")
++    if sr.get("available") is True:
++        bs = sr["by_strategy"]
++        assert_true(bool(sr["reconciliation"].get("all")),
++                    "strategy report reconciles with the pipeline ledger (revenue, charges, service "
++                    "cost, profit, served TEU)", f"{sr['reconciliation']}")
++        # ... and with the independent recomputation (no shared code)
++        assert_true(_close(sum(b["served_teu"] for b in bs.values()), rc["served"], abs_tol=0.5),
++                    "strategies add up to the recomputed served TEU (each flow counted once)",
++                    f"{sum(b['served_teu'] for b in bs.values()):,.1f} vs {rc['served']:,.1f}")
++        assert_true(_close(sum(b["revenue"] for b in bs.values()), rc["revenue"], abs_tol=5.0),
++                    "strategy revenue == recomputed revenue")
++        assert_true(_close(sum(b["port_charges"] for b in bs.values()),
++                           rc["handling_cost"] + rc["transshipment_cost"] + rc["port_variable_cost"],
++                           abs_tol=5.0),
++                    "strategy port charges == recomputed handling + transshipment + port variable")
++        svc_cost = rc["vessel_cost"] + rc["fuel_cost"] + rc["port_call_fixed_cost"]
++        alloc = sum(b["allocated_service_cost"] for b in bs.values()) + sr["totals"]["idle_capacity_cost"]
++        assert_true(_close(alloc, svc_cost, abs_tol=5.0),
++                    "allocated service cost + idle capacity cost == recomputed vessel + fuel + port calls",
++                    f"{alloc:,.0f} vs {svc_cost:,.0f}")
++        assert_true(sr["totals"]["idle_capacity_cost"] >= -1e-6,
++                    "idle capacity cost is not negative")
++        n1 = sum(1 for n in n_seg if n == 1)
++        n2 = sum(1 for n in n_seg if n == 2)
++        n3 = sum(1 for n in n_seg if n == 3)
++        assert_true(bs["direct"]["flows"] == n1
++                    and bs["feeder"]["flows"] + bs["hub_and_spoke"]["flows"] == n2
++                    and bs["multi_hop"]["flows"] == n3,
++                    "strategy flow counts == direct / one-transfer / two-transfer flows of the plan",
++                    f"{[b['flows'] for b in bs.values()]} vs {(n1, n2, n3)}")
++        assert_true(mt >= 2 or bs["multi_hop"]["flows"] == 0,
++                    "no multi-hop cargo unless two transfers are enabled")
++        assert_true(all(b["transit_violations"] == 0 for b in bs.values()),
++                    "no routed flow exceeds its transit limit (by strategy)")
++        # utilisation: per-service carried TEU-legs == recomputed leg loads; load factors <= 1
++        carried = {}
++        for (sid_, _leg), load_ in rc["leg_load"].items():
++            carried[sid_] = carried.get(sid_, 0.0) + load_
++        bad_car = [r_["service"] for r_ in sr["services"]
++                   if not _close(r_["carried_teu_legs"], carried.get(r_["service"], 0.0), abs_tol=0.5)]
++        assert_true(not bad_car, "per-service carried TEU-legs == recomputed leg loads",
++                    f"{bad_car[:3]}")
++        ut = sr["utilisation"]
++        assert_true(all(r_["max_leg_load_factor"] is None or r_["max_leg_load_factor"] <= 1.0 + 1e-6
++                        for r_ in sr["services"]),
++                    "no leg is loaded beyond its capacity (utilisation report)")
++        nlf = ut["network"]["load_factor"]
++        assert_true(nlf is None or 0.0 <= nlf <= 1.0 + 1e-9, "network load factor in [0, 1]", f"{nlf}")
++        # unserved demand is conserved and every remainder has a named reason
++        un = sr["unserved_by_reason"]
++        allowed = {"limit_below_fastest_sailing_time", "no_time_feasible_service_in_pool",
++                   "capacity_exhausted", "not_profitable_to_carry", "fleet_inventory_exhausted",
++                   "not_economic_to_open_service", "unclassified_residual"}
++        assert_true(set(un) <= allowed, "every unserved remainder has a defined reason",
++                    f"{sorted(set(un) - allowed)}")
++        tot_un = sum(v["teu"] for v in un.values())
++        assert_true(_close(tot_un, led["demand_teu_per_week"]["unserved"], abs_tol=1.0),
++                    "unserved TEU by reason adds up to the unserved demand",
++                    f"{tot_un:,.1f} vs {led['demand_teu_per_week']['unserved']:,.1f}")
++        print_kv("Served TEU by strategy",
++                 ", ".join(f"{k}={v['served_teu']:,.0f}" for k, v in bs.items()))
++        print_kv("Unserved by reason (TEU)",
++                 ", ".join(f"{k}={v['teu']:,.0f}" for k, v in sorted(un.items())))
++        print_kv("Network load factor", f"{nlf:.3f}" if nlf is not None else "n/a")
++
++    # -- N.10 flow re-optimisation (Task 20): same network, flows re-routed over all paths ----
++    print(f"\n  {C.BOLD}N.10 Flow re-optimisation over the full valid path set{C.RESET}")
++    opt = led.get("optimality") or {}
++    fr = opt.get("flow_reoptimisation")
++    assert_true(isinstance(fr, dict) and "applied" in fr,
++                "network_ledger.optimality states whether the flows were re-optimised", f"{fr!r}")
++    if isinstance(fr, dict) and fr.get("applied"):
++        assert_true(float(fr.get("gain_usd", -1.0)) >= 0.0,
++                    "flow re-optimisation never lowers the plan's profit", f"gain={fr.get('gain_usd')}")
++        assert_true(opt.get("milp_status") != "optimal",
++                    "a plan improved with paths outside the solved model is not reported 'optimal'",
++                    f"milp_status={opt.get('milp_status')!r}")
++        # the independent recomputation above already verified the re-routed flows (capacity of
++        # every leg, transit limits, demand once); the network itself is unchanged
++        print_kv("Flow re-optimisation gain",
++                 f"{fr['gain_usd']:,.0f} USD/week, {fr['paths_added']} path(s) added, "
++                 f"served TEU {fr['served_teu_before']:,.0f} -> {fr['served_teu_after']:,.0f}")
++    elif isinstance(fr, dict):
++        print_kv("Flow re-optimisation", f"not applied ({fr.get('reason')})")
+     return {"verified": True, "recomputed": rc}
+ 
+ 
+diff --git a/tests/test_route_operators.py b/tests/test_route_operators.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_route_operators.py
+@@ -0,0 +1,182 @@
++"""
++Task 21: time-feasible class correction in the class screening, route-level operators and
++elitism.  All fixtures are SYNTHETIC with hand-computed values (see test_multi_hop_paths.py for
++the network: A-B 1,000 nm, B-C 600 nm, C-D 800 nm, 288 nm/day at 12 kn).
++"""
++import sys
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).parent.parent))
++
++from src.network.economics import DEFAULT_ASSUMPTIONS
++from src.optimization.data import Demand, Fleet, FleetClass, Port, Problem
++from src.services.class_screening import (
++    ClassScreener, ClassScreeningConfig, WHY_TIME_FEASIBLE, config_from_environment as screen_cfg,
++)
++from src.services.route_operators import (
++    RouteOperatorConfig, config_from_environment as ro_cfg, generate_operator_rotations,
++)
++
++DM = {
++    "A": {"B": 1000.0, "C": 1600.0, "D": 2400.0},
++    "B": {"A": 1000.0, "C": 600.0, "D": 1400.0},
++    "C": {"A": 1600.0, "B": 600.0, "D": 800.0},
++    "D": {"A": 2400.0, "B": 1400.0, "C": 800.0},
++}
++
++
++def cls(name, cap, design, tc=8000.0, qty=10):
++    return FleetClass(vessel_class=name, quantity=qty, capacity_teu=cap, tc_rate_daily=tc,
++                      min_speed=design - 2.0, design_speed=design, max_speed=design + 2.0,
++                      bunker_consumption_tons_per_day=20.0, idle_consumption_tons_per_day=2.0)
++
++
++def problem(demands, classes):
++    ports = [Port(p, p, 0.0, 0.0, handling_cost=0.0, port_call_cost=1000.0,
++                  transshipment_cost=0.0, variable_port_call_cost=0.0) for p in "ABCD"]
++    return Problem(ports=ports, services=[], demands=demands, distance_matrix=DM,
++                   fleet=Fleet(classes=classes))
++
++
++# ===================================================================== A. configuration
++class TestConfig:
++    def test_defaults_are_off(self):
++        assert not ro_cfg({}).enabled
++        assert not screen_cfg({}).time_feasible
++
++    def test_values(self):
++        c = ro_cfg({"LINER_ROUTE_OPERATORS": "30", "LINER_ELITISM": "1"})
++        assert c.budget == 30 and c.elitism and c.enabled
++        assert screen_cfg({"LINER_CLASS_TIME_FEASIBLE": "1"}).time_feasible
++        # the Task 10 switch keeps its meaning
++        assert screen_cfg({"LINER_CLASS_SCREEN": "0", "LINER_CLASS_TIME_FEASIBLE": "1"}).k == 0
++
++    @pytest.mark.parametrize("env", [{"LINER_ROUTE_OPERATORS": "-1"}, {"LINER_ROUTE_OPERATORS": "x"},
++                                     {"LINER_ELITISM": "maybe"}])
++    def test_malformed_route_operator_values_raise(self, env):
++        with pytest.raises(ValueError):
++            ro_cfg(env)
++
++    def test_malformed_time_feasible_value_raises(self):
++        with pytest.raises(ValueError):
++            screen_cfg({"LINER_CLASS_TIME_FEASIBLE": "2"})
++
++
++# ============================================================ B. time-feasible class screening
++class TestTimeFeasibleClass:
++    """A->B must arrive in 4 days: 1,000 nm needs 3.47 d at 12 kn but 6.5 d at 8 kn.  Revenue is
++    too low for any class to be profitable stand-alone, so the legacy (nearest-capacity) class
++    is kept - and that class cannot meet the limit."""
++
++    def _screener(self, time_feasible):
++        d = [Demand("A", "B", 100.0, 30.0, max_transit_days=4.0)]
++        pr = problem(d, [cls("Slow", 500.0, 8.0), cls("Fast", 2000.0, 12.0)])
++        return ClassScreener(pr, pr.fleet, DEFAULT_ASSUMPTIONS,
++                             ClassScreeningConfig(k=1, time_feasible=time_feasible))
++
++    def test_task10_behaviour_keeps_the_class_that_cannot_carry_anything(self):
++        sel = self._screener(False).screen(["A", "B"], 500.0).selected
++        assert [e.vessel_class for e in sel] == ["Slow"]
++        assert sel[0].direct_ride_feasible_ods == 0
++
++    def test_time_feasible_correction_offers_the_class_that_can(self):
++        sel = self._screener(True).screen(["A", "B"], 500.0).selected
++        assert [e.vessel_class for e in sel] == ["Fast"]
++        assert sel[0].selected_because == WHY_TIME_FEASIBLE
++        assert sel[0].direct_ride_feasible_teu == pytest.approx(100.0)
++
++    def test_a_profitable_rotation_is_not_touched(self):
++        d = [Demand("A", "B", 1500.0, 3000.0, max_transit_days=20.0)]
++        pr = problem(d, [cls("Slow", 500.0, 8.0), cls("Fast", 2000.0, 12.0)])
++        for tf in (False, True):
++            scr = ClassScreener(pr, pr.fleet, DEFAULT_ASSUMPTIONS, ClassScreeningConfig(k=1, time_feasible=tf))
++            assert [e.vessel_class for e in scr.screen(["A", "B"], 500.0).selected] == \
++                   [e.vessel_class for e in
++                    ClassScreener(pr, pr.fleet, DEFAULT_ASSUMPTIONS, ClassScreeningConfig(k=1))
++                    .screen(["A", "B"], 500.0).selected]
++
++    def test_the_legacy_class_is_kept_when_it_can_carry_cargo(self):
++        d = [Demand("A", "B", 100.0, 30.0, max_transit_days=40.0)]       # both classes meet 40 d
++        pr = problem(d, [cls("Slow", 500.0, 8.0), cls("Fast", 2000.0, 12.0)])
++        scr = ClassScreener(pr, pr.fleet, DEFAULT_ASSUMPTIONS, ClassScreeningConfig(k=1, time_feasible=True))
++        assert [e.vessel_class for e in scr.screen(["A", "B"], 500.0).selected] == ["Slow"]
++
++
++# ============================================================================ C. operators
++class TestOperators:
++    CLASSES = [cls("M", 1000.0, 12.0), cls("L", 3000.0, 14.0)]
++
++    def _setup(self):
++        d = [Demand("A", "B", 800.0, 3000.0, max_transit_days=30.0),
++             Demand("B", "C", 700.0, 3000.0, max_transit_days=30.0),
++             Demand("C", "D", 600.0, 3000.0, max_transit_days=30.0),
++             Demand("A", "D", 500.0, 3000.0, max_transit_days=30.0),
++             Demand("B", "D", 400.0, 3000.0, max_transit_days=30.0)]
++        return problem(d, self.CLASSES)
++
++    def test_disabled_configuration_produces_nothing(self):
++        pr = self._setup()
++        out, rep = generate_operator_rotations(pr, pr.fleet, [], RouteOperatorConfig())
++        assert out == [] and not rep.elites_in
++
++    def test_variants_are_new_feasible_and_bounded(self):
++        pr = self._setup()
++        existing = [(["A", "B"], "M")]
++        cfg = RouteOperatorConfig(budget=6)
++        out, rep = generate_operator_rotations(pr, pr.fleet, existing, cfg,
++                                               elite_pool=[(["A", "B"], "M")])
++        assert 0 < len(out) <= 6
++        keys = {(tuple(p.ports), p.vessel_class) for p in out}
++        assert len(keys) == len(out)                                   # no duplicates
++        assert (("A", "B"), "M") not in keys                           # not an existing rotation
++        assert {p.operator for p in out} <= {"insert", "remove", "swap", "reclass"}
++        assert all(len(set(p.ports)) == len(p.ports) >= 2 for p in out)
++        assert rep.variants_evaluated >= len(out)
++        # reclass of the elite onto the other class and insertion of a port are both offered
++        ops = {p.operator for p in out}
++        assert "reclass" in ops and "insert" in ops
++
++    def test_deterministic(self):
++        pr = self._setup()
++        cfg = RouteOperatorConfig(budget=8)
++        a, _ = generate_operator_rotations(pr, pr.fleet, [(["A", "B"], "M")], cfg,
++                                           elite_pool=[(["A", "B"], "M"), (["B", "C"], "M")])
++        b, _ = generate_operator_rotations(pr, pr.fleet, [(["A", "B"], "M")], cfg,
++                                           elite_pool=[(["A", "B"], "M"), (["B", "C"], "M")])
++        assert [(p.ports, p.vessel_class, p.operator) for p in a] == \
++               [(p.ports, p.vessel_class, p.operator) for p in b]
++
++    def test_infeasible_variants_are_dropped_not_repaired(self):
++        pr = self._setup()
++        pr.fleet = Fleet(classes=[cls("M", 1000.0, 12.0, qty=1)])      # one vessel: long loops infeasible
++        out, rep = generate_operator_rotations(pr, pr.fleet, [(["A", "B"], "M")],
++                                               RouteOperatorConfig(budget=20),
++                                               elite_pool=[(["A", "B"], "M")])
++        from src.network.economics import build_service_model
++        pl = {p.id: p for p in pr.ports}
++        for p in out:
++            m = build_service_model("t", list(p.ports), pr.fleet.get_class(p.vessel_class), DM, pl)
++            assert m.max_departures() >= 1
++
++    def test_elitism_reoffers_the_previous_networks_rotations_once(self):
++        pr = self._setup()
++        feedback = {"iteration": 0, "profit": 1.0,
++                    "operated": [{"ports": ["A", "B", "C"], "vessel_class": "M", "frequency": 1},
++                                 {"ports": ["A", "B"], "vessel_class": "M", "frequency": 1}],
++                    "unserved_od_teu": {"A|D": 500.0}}
++        existing = [(["A", "B"], "M")]                                  # the second elite is in the pool
++        cfg = RouteOperatorConfig(elitism=True)
++        out, rep = generate_operator_rotations(pr, pr.fleet, existing, cfg, feedback=feedback)
++        assert [(p.ports, p.vessel_class, p.operator) for p in out] == [(("A", "B", "C"), "M", "elite")]
++        assert rep.elites_from_feedback == 2 and rep.elites_reoffered == 1
++
++    def test_unserved_demand_steers_the_insertion(self):
++        pr = self._setup()
++        fb = {"operated": [{"ports": ["A", "B"], "vessel_class": "M", "frequency": 1}],
++              "unserved_od_teu": {"B|D": 400.0}}
++        out, _ = generate_operator_rotations(pr, pr.fleet, [(["A", "B"], "M")],
++                                             RouteOperatorConfig(budget=3), feedback=fb)
++        inserted = [p for p in out if p.operator == "insert"]
++        assert inserted and "D" in inserted[0].ports

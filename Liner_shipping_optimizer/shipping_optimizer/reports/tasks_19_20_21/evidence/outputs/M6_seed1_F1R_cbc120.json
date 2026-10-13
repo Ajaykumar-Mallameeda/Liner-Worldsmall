@@ -1,0 +1,1277 @@
+{
+ "seed": 1,
+ "time_limit_sec": 120.0,
+ "strategies": [
+  "prod"
+ ],
+ "tree": "D:\\liner_scratch\\snap_T19_ctl5",
+ "python": "3.11.9",
+ "solver": {
+  "pulp": "2.7.0",
+  "cbc_path": "C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\venv\\Lib\\site-packages\\pulp\\solverdir\\cbc\\win\\64\\cbc.exe",
+  "cbc_banner": [
+   "Welcome to the CBC MILP Solver ",
+   "Version: 2.10.3 ",
+   "Build Date: Dec 15 2019 "
+  ],
+  "scipy": "1.12.0"
+ },
+ "env": {
+  "LINER_FLOW_REOPT": "1",
+  "LINER_MAX_TRANSFERS": "2",
+  "LINER_PROFIT_FLOOR_REPAIR": "1",
+  "PYTHONHASHSEED": "0"
+ },
+ "cbc_threads": null,
+ "runs": [
+  {
+   "strategy": "prod",
+   "ok": true,
+   "status": "feasible",
+   "message": "",
+   "wall_sec_total": 123.1,
+   "solver": {
+    "solution_status": "feasible",
+    "solver_status": "Optimal",
+    "objective_usd_per_week": 13441048.442424245,
+    "relaxation_bound": 41628242.21841913,
+    "gap_to_bound_usd": 28187193.775994882,
+    "gap_to_bound_pct": 67.71170790277323,
+    "runtime_sec": 119.3,
+    "services_considered": 1157,
+    "services_in_integer_problem": 297,
+    "variables": 7367,
+    "constraints": 2950,
+    "paths": 12396,
+    "message": ""
+   },
+   "diag": {},
+   "modelled": 1166,
+   "path_model": {
+    "od_total": 1764,
+    "od_with_direct": 1607,
+    "od_transfer_only": 66,
+    "od_without_path": 91,
+    "od_without_path_time_limit": 91,
+    "od_without_path_no_connection": 0,
+    "od_skipped_missing_port_record": 0,
+    "paths_built": 12396,
+    "paths_dropped_by_cap": 40927,
+    "paths_dropped_by_time_limit": 896473,
+    "max_paths_per_od": 10,
+    "selection": "fastest",
+    "max_transfers": 2,
+    "budget": "fixed",
+    "paths_valid": 53323,
+    "od_at_cap": 1003,
+    "od_multi_hop_enumerated": 91,
+    "od_rescued_by_multi_hop": 0,
+    "paths_multi_hop_valid": 0,
+    "paths_multi_hop_kept": 0,
+    "multi_hop_build_sec": 0.5652177000883967,
+    "path_build_sec": 3.177819599979557,
+    "signals": {
+     "demand_teu": 276446.80000000005,
+     "od_by_valid_paths": {
+      "0": 91,
+      "1": 232,
+      "2-4": 233,
+      "5-9": 178,
+      "10+": 1030
+     },
+     "demand_share_by_valid_paths": {
+      "0": 0.0782996945524419,
+      "1": 0.1168543097623123,
+      "2-4": 0.18161577562120448,
+      "5-9": 0.10607465884936991,
+      "10+": 0.5171555612146712
+     },
+     "demand_share_with_direct_path": 0.9204921163855033,
+     "demand_share_without_any_path": 0.0782996945524419,
+     "demand_share_with_a_single_path": 0.1168543097623123,
+     "demand_concentration": {
+      "top10_od_share": 0.09242393111441331,
+      "top100_od_share": 0.3843354309038845,
+      "od_count": 1764,
+      "herfindahl": 0.0025604313829936795
+     },
+     "port_connectivity": {
+      "ports": 47,
+      "services_per_port_min": 24,
+      "services_per_port_median": 54,
+      "services_per_port_max": 126,
+      "ports_with_at_most_one_service": 0
+     },
+     "transfer_concentration": {
+      "kept_paths_with_transfer": 9472,
+      "top3_transfer_port_share": 0.24852195945945946,
+      "distinct_transfer_ports": 44
+     },
+     "path_budget": {
+      "baseline_per_od": 10,
+      "allocated_min": 10,
+      "allocated_max": 10,
+      "allocated_median": 10
+     }
+    }
+   },
+   "path_pool_sha256": "d9be4dfc14ed29b105471f4d876058118371cb2e9616897c94537487e9e1cd2c",
+   "paths_total": 12452,
+   "rejected_candidates": 0,
+   "flow_teu_by_n_transfers": {
+    "0": 49902.0,
+    "2": 924.0,
+    "1": 10926.0
+   },
+   "strategy_report": {
+    "available": true,
+    "definition": "strategies are the realised structure of the routed cargo, not quotas; see src/network/strategy_report.py",
+    "totals": {
+     "flows": 174,
+     "served_teu": 61752.0,
+     "total_demand_teu": 276446.80000000005,
+     "coverage_pct": 22.33775178443013,
+     "transfers_per_teu": 0.20685969685192382,
+     "service_cost": 46539274.75757576,
+     "idle_capacity_cost": 15756991.93700465,
+     "operating_profit": 13441048.442424245
+    },
+    "by_strategy": {
+     "direct": {
+      "flows": 83,
+      "served_teu": 49902.0,
+      "share_of_served_teu": 0.8081033812670035,
+      "coverage_contribution_pct": 18.05121274690103,
+      "revenue": 59021042.0,
+      "port_charges": 10051170.600000001,
+      "allocated_service_cost": 24428298.56354269,
+      "profit_contribution": 24541572.83645731,
+      "transfers_per_teu": 0.0,
+      "transit_days_mean": 21.297049362660193,
+      "transit_days_p50": 24.6489898989899,
+      "transit_days_p90": 28.825757575757578,
+      "transit_days_max": 34.5479797979798,
+      "min_slack_to_limit_days": 0.262626262626263,
+      "transit_violations": 0,
+      "teu_by_vessel_class": {
+       "Panamax_1200": 13326.0,
+       "Feeder_800": 2910.0,
+       "Super_panamax": 6853.2,
+       "Panamax_2400": 4490.8,
+       "Post_panamax": 22322.0
+      }
+     },
+     "feeder": {
+      "flows": 61,
+      "served_teu": 8550.0,
+      "share_of_served_teu": 0.13845705402254177,
+      "coverage_contribution_pct": 3.0928193055589714,
+      "revenue": 10275448.0,
+      "port_charges": 2075991.2000000002,
+      "allocated_service_cost": 4671570.239882643,
+      "profit_contribution": 3527886.5601173565,
+      "transfers_per_teu": 1.0,
+      "transit_days_mean": 29.642812316418976,
+      "transit_days_p50": 31.166847041847042,
+      "transit_days_p90": 34.340005446623096,
+      "transit_days_max": 44.03935185185185,
+      "min_slack_to_limit_days": 0.027777777777778567,
+      "transit_violations": 0,
+      "teu_by_vessel_class": {
+       "Feeder_800": 3764.0,
+       "Panamax_1200": 4172.0,
+       "Super_panamax": 2308.8,
+       "Post_panamax": 5536.0,
+       "Panamax_2400": 1319.2
+      }
+     },
+     "hub_and_spoke": {
+      "flows": 14,
+      "served_teu": 2376.0,
+      "share_of_served_teu": 0.0384764865915274,
+      "coverage_contribution_pct": 0.8594782070184931,
+      "revenue": 2978470.0,
+      "port_charges": 738306.0,
+      "allocated_service_cost": 1033496.8947385079,
+      "profit_contribution": 1206667.105261492,
+      "transfers_per_teu": 1.0,
+      "transit_days_mean": 26.048151620016096,
+      "transit_days_p50": 31.583333333333332,
+      "transit_days_p90": 33.708333333333336,
+      "transit_days_max": 55.25462962962963,
+      "min_slack_to_limit_days": 0.8240740740740762,
+      "transit_violations": 0,
+      "teu_by_vessel_class": {
+       "Panamax_1200": 1256.0,
+       "Feeder_800": 60.0,
+       "Super_panamax": 1988.0,
+       "Post_panamax": 1448.0
+      }
+     },
+     "multi_hop": {
+      "flows": 16,
+      "served_teu": 924.0,
+      "share_of_served_teu": 0.014963078118927322,
+      "coverage_contribution_pct": 0.3342415249516362,
+      "revenue": 892430.0,
+      "port_charges": 321599.0,
+      "allocated_service_cost": 648917.1224072626,
+      "profit_contribution": -78086.12240726256,
+      "transfers_per_teu": 2.0,
+      "transit_days_mean": 37.392837639915165,
+      "transit_days_p50": 38.55275974025974,
+      "transit_days_p90": 40.80150462962963,
+      "transit_days_max": 49.2270463741052,
+      "min_slack_to_limit_days": 0.42938311688311614,
+      "transit_violations": 0,
+      "teu_by_vessel_class": {
+       "Feeder_800": 730.0,
+       "Super_panamax": 308.0,
+       "Panamax_1200": 744.0,
+       "Post_panamax": 968.0,
+       "Panamax_2400": 22.0
+      }
+     }
+    },
+    "reconciliation": {
+     "revenue_matches_ledger": true,
+     "port_charges_match_ledger": true,
+     "service_cost_matches_ledger": true,
+     "profit_matches_ledger": true,
+     "served_teu_matches_ledger": true,
+     "revenue": 73167390.0,
+     "ledger_revenue": 73167390.0,
+     "port_charges": 13187066.8,
+     "ledger_port_charges": 13187066.799999999,
+     "service_cost": 46539274.75757576,
+     "ledger_service_cost": 46539274.75757576,
+     "profit": 13441048.442424247,
+     "ledger_profit": 13441048.442424245,
+     "each_flow_counted_once": true,
+     "all": true
+    },
+    "utilisation": {
+     "capacity_unit": "TEU (fleet file 'Capacity FFE' read as TEU; provisional)",
+     "leg": {
+      "legs": 68,
+      "load_factor_mean": 0.6910754201680672,
+      "p10": 0.16142857142857142,
+      "p50": 0.77,
+      "p90": 1.0,
+      "legs_at_or_above_95pct": 27,
+      "legs_below_30pct": 12,
+      "legs_empty": 0
+     },
+     "service": {
+      "services": 21,
+      "load_factor_mean": 0.6729252078609222,
+      "load_factor_min": 0.18293333333333334,
+      "load_factor_max": 1.0
+     },
+     "fleet": {
+      "by_class": {
+       "Feeder_450": {
+        "vessels_used": 0,
+        "inventory": 24,
+        "inventory_utilisation": 0.0,
+        "services_operated": 0
+       },
+       "Feeder_800": {
+        "vessels_used": 10,
+        "inventory": 29,
+        "inventory_utilisation": 0.3448275862068966,
+        "services_operated": 7
+       },
+       "Panamax_1200": {
+        "vessels_used": 48,
+        "inventory": 68,
+        "inventory_utilisation": 0.7058823529411765,
+        "services_operated": 6
+       },
+       "Panamax_2400": {
+        "vessels_used": 15,
+        "inventory": 74,
+        "inventory_utilisation": 0.20270270270270271,
+        "services_operated": 2
+       },
+       "Post_panamax": {
+        "vessels_used": 34,
+        "inventory": 58,
+        "inventory_utilisation": 0.5862068965517241,
+        "services_operated": 4
+       },
+       "Super_panamax": {
+        "vessels_used": 9,
+        "inventory": 10,
+        "inventory_utilisation": 0.9,
+        "services_operated": 2
+       }
+      },
+      "vessels_used": 116,
+      "inventory": 263,
+      "inventory_utilisation": 0.44106463878326996
+     },
+     "network": {
+      "offered_teu_legs": 161500.0,
+      "carried_teu_legs": 103341.2,
+      "idle_capacity_teu_legs": 58158.8,
+      "load_factor": 0.6398835913312694,
+      "load_factor_nm_weighted": 0.6933032448048375,
+      "served_teu_per_vessel": 532.3448275862069,
+      "profit_per_vessel": 115871.10726227798
+     }
+    },
+    "coverage_by_od": {
+     "fully_served": 149,
+     "partially_served": 18,
+     "unserved": 1597,
+     "total": 1764
+    },
+    "unserved_by_reason": {
+     "capacity_exhausted": {
+      "ods": 29,
+      "teu": 9049.2,
+      "share_of_total_demand_pct": 3.2733965450133624
+     },
+     "fleet_inventory_exhausted": {
+      "ods": 1,
+      "teu": 182.0,
+      "share_of_total_demand_pct": 0.0658354518844132
+     },
+     "limit_below_fastest_sailing_time": {
+      "ods": 41,
+      "teu": 9311.7,
+      "share_of_total_demand_pct": 3.3683515236928043
+     },
+     "no_time_feasible_service_in_pool": {
+      "ods": 50,
+      "teu": 12334.0,
+      "share_of_total_demand_pct": 4.461617931551387
+     },
+     "not_economic_to_open_service": {
+      "ods": 1490,
+      "teu": 182649.9,
+      "share_of_total_demand_pct": 66.07054232496088
+     },
+     "not_profitable_to_carry": {
+      "ods": 4,
+      "teu": 1168.0,
+      "share_of_total_demand_pct": 0.42250443846700336
+     }
+    },
+    "services": [
+     {
+      "service": "americas_svc_278",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 1,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 630.0,
+      "load_factor": 0.39375,
+      "min_leg_load_factor": 0.1825,
+      "max_leg_load_factor": 0.605,
+      "idle_capacity_teu_legs": 970.0,
+      "slot_time_utilisation": 0.19599215246636775,
+      "weekly_cost": 112068.07142857142,
+      "n_ports": 2,
+      "ports": [
+       "BEANR",
+       "DEBRV"
+      ]
+     },
+     {
+      "service": "americas_svc_482",
+      "class": "Super_panamax",
+      "frequency": 1,
+      "vessels": 1,
+      "legs": 2,
+      "capacity_per_leg": 7500.0,
+      "offered_teu_legs": 15000.0,
+      "carried_teu_legs": 2744.0,
+      "load_factor": 0.18293333333333334,
+      "min_leg_load_factor": 0.092,
+      "max_leg_load_factor": 0.27386666666666665,
+      "idle_capacity_teu_legs": 12256.0,
+      "slot_time_utilisation": 0.04184297416509136,
+      "weekly_cost": 474284.4705882353,
+      "n_ports": 2,
+      "ports": [
+       "GBFXT",
+       "NLRTM"
+      ]
+     },
+     {
+      "service": "americas_svc_483",
+      "class": "Post_panamax",
+      "frequency": 1,
+      "vessels": 8,
+      "legs": 3,
+      "capacity_per_leg": 4200.0,
+      "offered_teu_legs": 12600.0,
+      "carried_teu_legs": 11246.0,
+      "load_factor": 0.8925396825396825,
+      "min_leg_load_factor": 0.6776190476190476,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 1354.0,
+      "slot_time_utilisation": 0.8103559337665813,
+      "weekly_cost": 4499653.727272727,
+      "n_ports": 3,
+      "ports": [
+       "DEBRV",
+       "HKHKG",
+       "NLRTM"
+      ]
+     },
+     {
+      "service": "americas_svc_489",
+      "class": "Post_panamax",
+      "frequency": 1,
+      "vessels": 7,
+      "legs": 3,
+      "capacity_per_leg": 4200.0,
+      "offered_teu_legs": 12600.0,
+      "carried_teu_legs": 8190.0,
+      "load_factor": 0.65,
+      "min_leg_load_factor": 0.16142857142857142,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 4410.0,
+      "slot_time_utilisation": 0.5554224798049433,
+      "weekly_cost": 3897373.090909091,
+      "n_ports": 3,
+      "ports": [
+       "DEBRV",
+       "MYTPP",
+       "NLRTM"
+      ]
+     },
+     {
+      "service": "americas_svc_516",
+      "class": "Panamax_1200",
+      "frequency": 1,
+      "vessels": 10,
+      "legs": 5,
+      "capacity_per_leg": 1200.0,
+      "offered_teu_legs": 6000.0,
+      "carried_teu_legs": 4938.0,
+      "load_factor": 0.823,
+      "min_leg_load_factor": 0.12166666666666667,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 1062.0,
+      "slot_time_utilisation": 0.752854748603352,
+      "weekly_cost": 2747673.333333333,
+      "n_ports": 5,
+      "ports": [
+       "AEJEA",
+       "CNTAO",
+       "CNSHA",
+       "BRSSZ",
+       "ZADUR"
+      ]
+     },
+     {
+      "service": "americas_svc_548",
+      "class": "Panamax_1200",
+      "frequency": 1,
+      "vessels": 6,
+      "legs": 3,
+      "capacity_per_leg": 1200.0,
+      "offered_teu_legs": 3600.0,
+      "carried_teu_legs": 3444.0,
+      "load_factor": 0.9566666666666667,
+      "min_leg_load_factor": 0.87,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 156.0,
+      "slot_time_utilisation": 0.9391278809934241,
+      "weekly_cost": 1557594.75,
+      "n_ports": 3,
+      "ports": [
+       "DEBRV",
+       "ZADUR",
+       "NLRTM"
+      ]
+     },
+     {
+      "service": "americas_svc_552",
+      "class": "Panamax_1200",
+      "frequency": 1,
+      "vessels": 11,
+      "legs": 5,
+      "capacity_per_leg": 1200.0,
+      "offered_teu_legs": 6000.0,
+      "carried_teu_legs": 5358.0,
+      "load_factor": 0.893,
+      "min_leg_load_factor": 0.6816666666666666,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 642.0,
+      "slot_time_utilisation": 0.9038654270237865,
+      "weekly_cost": 3029452.166666667,
+      "n_ports": 5,
+      "ports": [
+       "AUBNE",
+       "JPYOK",
+       "NLRTM",
+       "USMIA",
+       "USCHS"
+      ]
+     },
+     {
+      "service": "americas_svc_554",
+      "class": "Panamax_1200",
+      "frequency": 1,
+      "vessels": 5,
+      "legs": 4,
+      "capacity_per_leg": 1200.0,
+      "offered_teu_legs": 4800.0,
+      "carried_teu_legs": 2786.0,
+      "load_factor": 0.5804166666666667,
+      "min_leg_load_factor": 0.22166666666666668,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 2014.0,
+      "slot_time_utilisation": 0.6334421164772728,
+      "weekly_cost": 1326341.6666666667,
+      "n_ports": 4,
+      "ports": [
+       "DEBRV",
+       "USCHS",
+       "USMIA",
+       "ECGYE"
+      ]
+     },
+     {
+      "service": "asia_svc_015",
+      "class": "Panamax_2400",
+      "frequency": 1,
+      "vessels": 8,
+      "legs": 2,
+      "capacity_per_leg": 2400.0,
+      "offered_teu_legs": 4800.0,
+      "carried_teu_legs": 2620.0,
+      "load_factor": 0.5458333333333333,
+      "min_leg_load_factor": 0.09166666666666666,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 2180.0,
+      "slot_time_utilisation": 0.5260932692911409,
+      "weekly_cost": 3059568.75,
+      "n_ports": 2,
+      "ports": [
+       "CNSHA",
+       "NGAPP"
+      ]
+     },
+     {
+      "service": "asia_svc_145",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 1,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 1600.0,
+      "load_factor": 1.0,
+      "min_leg_load_factor": 1.0,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 0.0,
+      "slot_time_utilisation": 0.014662756598240468,
+      "weekly_cost": 73452.21428571429,
+      "n_ports": 2,
+      "ports": [
+       "CNYTN",
+       "HKHKG"
+      ]
+     },
+     {
+      "service": "asia_svc_156",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 1,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 926.0,
+      "load_factor": 0.57875,
+      "min_leg_load_factor": 0.42,
+      "max_leg_load_factor": 0.7375,
+      "idle_capacity_teu_legs": 674.0,
+      "slot_time_utilisation": 0.24803571428571428,
+      "weekly_cost": 84871.0,
+      "n_ports": 2,
+      "ports": [
+       "MYPKG",
+       "MYTPP"
+      ]
+     },
+     {
+      "service": "asia_svc_192",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 1,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 754.0,
+      "load_factor": 0.47125,
+      "min_leg_load_factor": 0.41,
+      "max_leg_load_factor": 0.5325,
+      "idle_capacity_teu_legs": 846.0,
+      "slot_time_utilisation": 0.23941983894582725,
+      "weekly_cost": 97822.07142857143,
+      "n_ports": 2,
+      "ports": [
+       "CNYTN",
+       "TWKHH"
+      ]
+     },
+     {
+      "service": "asia_svc_354",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 1,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 1474.0,
+      "load_factor": 0.92125,
+      "min_leg_load_factor": 0.8425,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 126.0,
+      "slot_time_utilisation": 0.46470132743362824,
+      "weekly_cost": 96987.85714285714,
+      "n_ports": 2,
+      "ports": [
+       "HKHKG",
+       "TWKHH"
+      ]
+     },
+     {
+      "service": "asia_svc_524",
+      "class": "Panamax_1200",
+      "frequency": 1,
+      "vessels": 6,
+      "legs": 6,
+      "capacity_per_leg": 1200.0,
+      "offered_teu_legs": 7200.0,
+      "carried_teu_legs": 4344.0,
+      "load_factor": 0.6033333333333334,
+      "min_leg_load_factor": 0.105,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 2856.0,
+      "slot_time_utilisation": 0.623379661668589,
+      "weekly_cost": 1590996.0,
+      "n_ports": 6,
+      "ports": [
+       "AUBNE",
+       "NZAKL",
+       "MYTPP",
+       "HKHKG",
+       "JPYOK",
+       "CNSHA"
+      ]
+     },
+     {
+      "service": "asia_svc_588",
+      "class": "Panamax_1200",
+      "frequency": 1,
+      "vessels": 10,
+      "legs": 5,
+      "capacity_per_leg": 1200.0,
+      "offered_teu_legs": 6000.0,
+      "carried_teu_legs": 4494.0,
+      "load_factor": 0.749,
+      "min_leg_load_factor": 0.405,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 1506.0,
+      "slot_time_utilisation": 0.6545241796200346,
+      "weekly_cost": 2788100.5,
+      "n_ports": 5,
+      "ports": [
+       "AEJEA",
+       "NGAPP",
+       "GHTKD",
+       "CNYTN",
+       "EGPSD"
+      ]
+     },
+     {
+      "service": "asia_svc_619",
+      "class": "Panamax_2400",
+      "frequency": 1,
+      "vessels": 7,
+      "legs": 3,
+      "capacity_per_leg": 2400.0,
+      "offered_teu_legs": 7200.0,
+      "carried_teu_legs": 4965.2,
+      "load_factor": 0.6896111111111111,
+      "min_leg_load_factor": 0.075,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 2234.8,
+      "slot_time_utilisation": 0.5190699105783867,
+      "weekly_cost": 2524276.0,
+      "n_ports": 3,
+      "ports": [
+       "CNSHA",
+       "MYTPP",
+       "ITGIT"
+      ]
+     },
+     {
+      "service": "asia_svc_626",
+      "class": "Post_panamax",
+      "frequency": 1,
+      "vessels": 9,
+      "legs": 5,
+      "capacity_per_leg": 4200.0,
+      "offered_teu_legs": 21000.0,
+      "carried_teu_legs": 13874.0,
+      "load_factor": 0.6606666666666666,
+      "min_leg_load_factor": 0.3466666666666667,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 7126.0,
+      "slot_time_utilisation": 0.7158772557758253,
+      "weekly_cost": 5114709.818181818,
+      "n_ports": 5,
+      "ports": [
+       "CNYTN",
+       "NLRTM",
+       "MYTPP",
+       "HKHKG",
+       "JPYOK"
+      ]
+     },
+     {
+      "service": "asia_svc_633",
+      "class": "Super_panamax",
+      "frequency": 1,
+      "vessels": 8,
+      "legs": 3,
+      "capacity_per_leg": 7500.0,
+      "offered_teu_legs": 22500.0,
+      "carried_teu_legs": 12690.0,
+      "load_factor": 0.564,
+      "min_leg_load_factor": 0.1352,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 9810.0,
+      "slot_time_utilisation": 0.5502871023102309,
+      "weekly_cost": 7147945.029411765,
+      "n_ports": 3,
+      "ports": [
+       "CNSHA",
+       "DEBRV",
+       "NLRTM"
+      ]
+     },
+     {
+      "service": "europe_svc_014",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 2,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 1158.0,
+      "load_factor": 0.72375,
+      "min_leg_load_factor": 0.6075,
+      "max_leg_load_factor": 0.84,
+      "idle_capacity_teu_legs": 442.0,
+      "slot_time_utilisation": 0.5549921929215822,
+      "weekly_cost": 223271.35714285716,
+      "n_ports": 2,
+      "ports": [
+       "PAMIT",
+       "USCHS"
+      ]
+     },
+     {
+      "service": "europe_svc_028",
+      "class": "Feeder_800",
+      "frequency": 1,
+      "vessels": 3,
+      "legs": 2,
+      "capacity_per_leg": 800.0,
+      "offered_teu_legs": 1600.0,
+      "carried_teu_legs": 922.0,
+      "load_factor": 0.57625,
+      "min_leg_load_factor": 0.3825,
+      "max_leg_load_factor": 0.77,
+      "idle_capacity_teu_legs": 678.0,
+      "slot_time_utilisation": 0.5206440264215969,
+      "weekly_cost": 464686.4285714286,
+      "n_ports": 2,
+      "ports": [
+       "CAMTR",
+       "DEBRV"
+      ]
+     },
+     {
+      "service": "europe_svc_464",
+      "class": "Post_panamax",
+      "frequency": 1,
+      "vessels": 10,
+      "legs": 5,
+      "capacity_per_leg": 4200.0,
+      "offered_teu_legs": 21000.0,
+      "carried_teu_legs": 14184.0,
+      "load_factor": 0.6754285714285714,
+      "min_leg_load_factor": 0.21619047619047618,
+      "max_leg_load_factor": 1.0,
+      "idle_capacity_teu_legs": 6816.0,
+      "slot_time_utilisation": 0.7163535001740501,
+      "weekly_cost": 5628146.454545455,
+      "n_ports": 5,
+      "ports": [
+       "DEBRV",
+       "USCHS",
+       "JPYOK",
+       "KRPUS",
+       "EGPSD"
+      ]
+     }
+    ]
+   },
+   "ledger": {
+    "valid": true,
+    "violations": [],
+    "revenue": 73167390.0,
+    "vessel_cost": 18256000.0,
+    "fuel_cost": 27625255.757575758,
+    "port_call_fixed_cost": 658019.0,
+    "handling_cost": 11897611.999999998,
+    "transshipment_cost": 653323.0,
+    "port_variable_cost": 636131.8,
+    "total_cost": 59726341.557575755,
+    "profit": 13441048.442424245,
+    "margin_pct": 18.370271841628142,
+    "coverage_pct": 22.33775178443013,
+    "served_teu": 61752.0,
+    "unserved_teu": 214694.80000000005,
+    "total_demand_teu": 276446.80000000005,
+    "services": 21,
+    "vessels": 116,
+    "vessels_by_class": {
+     "Panamax_2400": 15,
+     "Feeder_800": 10,
+     "Panamax_1200": 48,
+     "Post_panamax": 34,
+     "Super_panamax": 9
+    },
+    "services_by_class": {
+     "Panamax_2400": 2,
+     "Feeder_800": 7,
+     "Panamax_1200": 6,
+     "Post_panamax": 4,
+     "Super_panamax": 2
+    },
+    "services_by_n_ports": {
+     "2": 9,
+     "6": 1,
+     "5": 5,
+     "3": 5,
+     "4": 1
+    },
+    "flow_teu_by_path_kind": {
+     "direct": 49902.0,
+     "transfer2": 924.0,
+     "transfer": 10926.0
+    },
+    "reconciliation": {
+     "milp_profit_before_penalty": 13441048.442424245,
+     "ledger_operating_profit": 13441048.442424245,
+     "difference": 0.0,
+     "relative_difference": 0.0,
+     "reconciled": true,
+     "relaxation_upper_bound": 41628242.21841913,
+     "services_in_relaxation": 1157,
+     "services_in_integer_problem": 297,
+     "unserved_penalty_per_teu": 0.0,
+     "vessel_slack_removed": 0,
+     "vessel_slack_cost_usd": 0.0,
+     "flow_reoptimisation": {
+      "applied": true,
+      "reason": "flows re-optimised over the full valid path set",
+      "gain_usd": 2963077.3999999985,
+      "paths_considered": 343,
+      "paths_added": 56,
+      "served_teu_before": 57389.2,
+      "served_teu_after": 61752.0,
+      "lp_sec": 0.3,
+      "repair": {
+       "applied": false,
+       "reason": "profit floor met",
+       "dropped": [],
+       "profit_before": 13441048.442424238,
+       "profit_after": null,
+       "trials": 0,
+       "rounds": 0,
+       "served_teu_before": 61752.0,
+       "served_teu_after": null
+      }
+     },
+     "runtime_sec": 122.894
+    }
+   },
+   "selected": [
+    {
+     "id": "asia_svc_015",
+     "ports": [
+      "CNSHA",
+      "NGAPP"
+     ],
+     "class": "Panamax_2400",
+     "f": 1,
+     "vessels": 8,
+     "load": 2620.0,
+     "revenue": 4490036.045773344,
+     "cost": 3558802.048806337
+    },
+    {
+     "id": "asia_svc_145",
+     "ports": [
+      "CNYTN",
+      "HKHKG"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 1,
+     "load": 1600.0,
+     "revenue": 101496.02495739431,
+     "cost": 133515.480233863
+    },
+    {
+     "id": "asia_svc_156",
+     "ports": [
+      "MYPKG",
+      "MYTPP"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 1,
+     "load": 926.0,
+     "revenue": 79209.92550168873,
+     "cost": 114375.9380621505
+    },
+    {
+     "id": "asia_svc_192",
+     "ports": [
+      "CNYTN",
+      "TWKHH"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 1,
+     "load": 754.0,
+     "revenue": 128866.90939298642,
+     "cost": 136772.44298018192
+    },
+    {
+     "id": "asia_svc_354",
+     "ports": [
+      "HKHKG",
+      "TWKHH"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 1,
+     "load": 1474.0,
+     "revenue": 71617.76353807443,
+     "cost": 121451.36876031542
+    },
+    {
+     "id": "asia_svc_524",
+     "ports": [
+      "AUBNE",
+      "NZAKL",
+      "MYTPP",
+      "HKHKG",
+      "JPYOK",
+      "CNSHA"
+     ],
+     "class": "Panamax_1200",
+     "f": 1,
+     "vessels": 6,
+     "load": 3306.0,
+     "revenue": 2175825.57561867,
+     "cost": 2097617.422985036
+    },
+    {
+     "id": "asia_svc_588",
+     "ports": [
+      "AEJEA",
+      "NGAPP",
+      "GHTKD",
+      "CNYTN",
+      "EGPSD"
+     ],
+     "class": "Panamax_1200",
+     "f": 1,
+     "vessels": 10,
+     "load": 3910.0,
+     "revenue": 3526496.6521318625,
+     "cost": 3303635.385489233
+    },
+    {
+     "id": "asia_svc_619",
+     "ports": [
+      "CNSHA",
+      "MYTPP",
+      "ITGIT"
+     ],
+     "class": "Panamax_2400",
+     "f": 1,
+     "vessels": 7,
+     "load": 3212.0,
+     "revenue": 3629857.988887303,
+     "cost": 3059132.133806986
+    },
+    {
+     "id": "asia_svc_626",
+     "ports": [
+      "CNYTN",
+      "NLRTM",
+      "MYTPP",
+      "HKHKG",
+      "JPYOK"
+     ],
+     "class": "Post_panamax",
+     "f": 1,
+     "vessels": 9,
+     "load": 8884.0,
+     "revenue": 8699093.88103017,
+     "cost": 6631175.487751502
+    },
+    {
+     "id": "asia_svc_633",
+     "ports": [
+      "CNSHA",
+      "DEBRV",
+      "NLRTM"
+     ],
+     "class": "Super_panamax",
+     "f": 1,
+     "vessels": 8,
+     "load": 8714.0,
+     "revenue": 11620380.48316038,
+     "cost": 8882427.225611713
+    },
+    {
+     "id": "europe_svc_014",
+     "ports": [
+      "PAMIT",
+      "USCHS"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 2,
+     "load": 1158.0,
+     "revenue": 731352.0801226237,
+     "cost": 577492.966774301
+    },
+    {
+     "id": "europe_svc_028",
+     "ports": [
+      "CAMTR",
+      "DEBRV"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 3,
+     "load": 922.0,
+     "revenue": 783475.0487211519,
+     "cost": 778930.9285663313
+    },
+    {
+     "id": "europe_svc_464",
+     "ports": [
+      "DEBRV",
+      "USCHS",
+      "JPYOK",
+      "KRPUS",
+      "EGPSD"
+     ],
+     "class": "Post_panamax",
+     "f": 1,
+     "vessels": 10,
+     "load": 8780.0,
+     "revenue": 10185867.698473578,
+     "cost": 7175531.151798907
+    },
+    {
+     "id": "americas_svc_278",
+     "ports": [
+      "BEANR",
+      "DEBRV"
+     ],
+     "class": "Feeder_800",
+     "f": 1,
+     "vessels": 1,
+     "load": 630.0,
+     "revenue": 46453.05023654336,
+     "cost": 135713.8193885828
+    },
+    {
+     "id": "americas_svc_482",
+     "ports": [
+      "GBFXT",
+      "NLRTM"
+     ],
+     "class": "Super_panamax",
+     "f": 1,
+     "vessels": 1,
+     "load": 2744.0,
+     "revenue": 46264.80318388465,
+     "cost": 487559.6269990682
+    },
+    {
+     "id": "americas_svc_483",
+     "ports": [
+      "DEBRV",
+      "HKHKG",
+      "NLRTM"
+     ],
+     "class": "Post_panamax",
+     "f": 1,
+     "vessels": 8,
+     "load": 7156.0,
+     "revenue": 6950095.366349226,
+     "cost": 6140649.328475004
+    },
+    {
+     "id": "americas_svc_489",
+     "ports": [
+      "DEBRV",
+      "MYTPP",
+      "NLRTM"
+     ],
+     "class": "Post_panamax",
+     "f": 1,
+     "vessels": 7,
+     "load": 5454.0,
+     "revenue": 5841793.966421816,
+     "cost": 4713441.336836422
+    },
+    {
+     "id": "americas_svc_516",
+     "ports": [
+      "AEJEA",
+      "CNTAO",
+      "CNSHA",
+      "BRSSZ",
+      "ZADUR"
+     ],
+     "class": "Panamax_1200",
+     "f": 1,
+     "vessels": 10,
+     "load": 3922.0,
+     "revenue": 4025105.708829036,
+     "cost": 3511428.6638787957
+    },
+    {
+     "id": "americas_svc_548",
+     "ports": [
+      "DEBRV",
+      "ZADUR",
+      "NLRTM"
+     ],
+     "class": "Panamax_1200",
+     "f": 1,
+     "vessels": 6,
+     "load": 2400.0,
+     "revenue": 2691517.2815787774,
+     "cost": 2219258.968935105
+    },
+    {
+     "id": "americas_svc_552",
+     "ports": [
+      "AUBNE",
+      "JPYOK",
+      "NLRTM",
+      "USMIA",
+      "USCHS"
+     ],
+     "class": "Panamax_1200",
+     "f": 1,
+     "vessels": 11,
+     "load": 3946.0,
+     "revenue": 5058512.143217307,
+     "cost": 4136905.1283897464
+    },
+    {
+     "id": "americas_svc_554",
+     "ports": [
+      "DEBRV",
+      "USCHS",
+      "USMIA",
+      "ECGYE"
+     ],
+     "class": "Panamax_1200",
+     "f": 1,
+     "vessels": 5,
+     "load": 2014.0,
+     "revenue": 2284071.602874178,
+     "cost": 1810524.7030461773
+    }
+   ],
+   "regional_reconciliation": {
+    "accounting_status": "verified",
+    "accounting_verified": true,
+    "issues": [],
+    "sum_regional_profit": 13441048.442424249,
+    "sum_regional_cost": 59726341.557575755,
+    "ledger_profit": 13441048.442424245,
+    "ledger_cost": 59726341.557575755
+   }
+  }
+ ],
+ "pool_generation_sec": 8.4,
+ "pool": {
+  "regional_pool_sha256": "8b6daec548da3edbe99ab6cf2d9403b2ef73f1cc0212b9359c9153b4e6341ca7",
+  "unique_candidates": 1166,
+  "unique_order_sha256": "83aa487692673dbad8b443e891e3d0bc0e2cf075e14586a07d77270c51147b9b",
+  "regional_sizes": {
+   "Asia": 563,
+   "Europe": 440,
+   "Americas": 548
+  },
+  "generator": {
+   "Asia": {
+    "generated": 634,
+    "after_filter": 563,
+    "filter_max_services": 508,
+    "by_class_after_filter": {
+     "Post_panamax": 20,
+     "Panamax_2400": 27,
+     "Panamax_1200": 7,
+     "Feeder_800": 498,
+     "Super_panamax": 5,
+     "Feeder_450": 6
+    }
+   },
+   "Europe": {
+    "generated": 499,
+    "after_filter": 440,
+    "filter_max_services": 405,
+    "by_class_after_filter": {
+     "Panamax_2400": 12,
+     "Panamax_1200": 4,
+     "Feeder_800": 373,
+     "Post_panamax": 43,
+     "Super_panamax": 3,
+     "Feeder_450": 5
+    }
+   },
+   "Americas": {
+    "generated": 565,
+    "after_filter": 548,
+    "filter_max_services": 499,
+    "by_class_after_filter": {
+     "Panamax_2400": 10,
+     "Panamax_1200": 14,
+     "Feeder_800": 448,
+     "Post_panamax": 54,
+     "Super_panamax": 8,
+     "Feeder_450": 14
+    }
+   }
+  }
+ }
+}
