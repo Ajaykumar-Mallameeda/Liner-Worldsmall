@@ -56,6 +56,7 @@ class Ledger:
     fuel_cost: float = 0.0
     port_call_fixed_cost: float = 0.0       # includes the canal fees (memo item ``canal_fee_cost``)
     canal_fee_cost: float = 0.0
+    port_capacity_charge_cost: float = 0.0   # callCostPerFFE x capacity per call; memo item of port_call_fixed_cost
     handling_cost: float = 0.0
     transshipment_cost: float = 0.0
     port_variable_cost: float = 0.0
@@ -174,6 +175,9 @@ def compute_ledger(
         # physical rules (recomputed here from the raw records, not from the service model):
         # draft feasibility and canal traversals of the closed rotation
         canal_fee = 0.0
+        # LINERLIB port-call cost: callCostFixed + callCostPerFFE x capacity per call, once per rotation
+        cap_charge = float(cls.capacity_teu) * sum(
+            _num(getattr(port_lookup.get(p), "variable_port_call_cost", 0.0)) for p in ports)
         vd = _num(getattr(cls, "draft", 0.0))
         flags = getattr(distance_matrix, "canal_flags", None) or {}
         edraft = getattr(distance_matrix, "edge_draft", None) or {}
@@ -233,8 +237,8 @@ def compute_ledger(
             "fuel": f * fuel_t * price,
             "fuel_tonnes": f * fuel_t, "fuel_price": price,
             "port_fixed": f * (sum(_num(getattr(port_lookup.get(p), "port_call_cost", 0.0)) for p in ports)
-                               + canal_fee),
-            "canal_fee": f * canal_fee,
+                               + cap_charge + canal_fee),
+            "canal_fee": f * canal_fee, "cap_charge": f * cap_charge,
             "revenue": 0.0, "load": 0.0, "var_cost": 0.0,
         }
         L.cycle_time_days[s.service_id] = cycle
@@ -244,6 +248,7 @@ def compute_ledger(
         L.fuel_cost += svc[s.service_id]["fuel"]
         L.port_call_fixed_cost += svc[s.service_id]["port_fixed"]
         L.canal_fee_cost += svc[s.service_id]["canal_fee"]
+        L.port_capacity_charge_cost += svc[s.service_id]["cap_charge"]
 
     # fleet inventory per class
     for cname, used in L.vessels_by_class.items():
@@ -330,17 +335,12 @@ def compute_ledger(
             continue
         L.revenue += fl.teu * d.revenue_per_teu
         L.handling_cost += fl.teu * (_num(getattr(o, "handling_cost", 0.0)) + _num(getattr(t, "handling_cost", 0.0)))
-        L.port_variable_cost += fl.teu * (_num(getattr(o, "variable_port_call_cost", 0.0))
-                                          + _num(getattr(t, "variable_port_call_cost", 0.0)))
-        path_var = (_num(getattr(o, "handling_cost", 0.0)) + _num(getattr(t, "handling_cost", 0.0))
-                    + _num(getattr(o, "variable_port_call_cost", 0.0))
-                    + _num(getattr(t, "variable_port_call_cost", 0.0)))
+        # the per-FFE port-call charge is a per-call capacity charge (service level), not a cargo charge
+        path_var = _num(getattr(o, "handling_cost", 0.0)) + _num(getattr(t, "handling_cost", 0.0))
         for k in range(len(segs) - 1):
             h = port_lookup.get(segs[k][2])
             L.transshipment_cost += fl.teu * _num(getattr(h, "transshipment_cost", 0.0))
-            L.port_variable_cost += fl.teu * 2.0 * _num(getattr(h, "variable_port_call_cost", 0.0))
-            path_var += (_num(getattr(h, "transshipment_cost", 0.0))
-                         + 2.0 * _num(getattr(h, "variable_port_call_cost", 0.0)))
+            path_var += _num(getattr(h, "transshipment_cost", 0.0))
         served[fl.od] += fl.teu
         # attribution only (totals above are what count): split by ride days
         tot = sum(ride_days) or 1.0

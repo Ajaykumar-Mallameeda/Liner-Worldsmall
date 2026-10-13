@@ -2260,6 +2260,9 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
                 else:
                     canal_fee += cls.suez_fee
         port_fixed += f * canal_fee
+        # LINERLIB port-call cost: callCostPerFFE x vessel capacity per call (capacity in TEU: rate per TEU x TEU)
+        port_fixed += f * float(cls.capacity_teu) * sum(
+            _num0(getattr(ports.get(p), "variable_port_call_cost", 0.0)) for p in rot)
 
     for cname, used in out["vessels_by_class"].items():
         if used > fleet[cname].quantity:
@@ -2328,11 +2331,11 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
         rate = e["rev"] / e["teu"]
         revenue += teu * rate
         handling += teu * (_num0(o.handling_cost) + _num0(t.handling_cost))
-        port_var += teu * (_num0(o.variable_port_call_cost) + _num0(t.variable_port_call_cost))
+        # (no per-cargo port charge: callCostPerFFE x capacity is a per-call charge counted in port_fixed)
         for k_ in range(len(segs) - 1):
             h = ports.get(segs[k_][2])
             transship += teu * _num0(getattr(h, "transshipment_cost", 0.0))
-            port_var += teu * 2.0 * _num0(getattr(h, "variable_port_call_cost", 0.0))
+            pass
         served[od] = served.get(od, 0.0) + teu
 
     for (sid, leg), load in leg_load.items():

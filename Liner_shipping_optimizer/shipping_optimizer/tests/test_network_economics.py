@@ -169,7 +169,7 @@ class TestPaths:
                                    "B": dict(transshipment_cost=40, variable_port_call_cost=3)})
         models, pl = self._models(pr, [["A", "B"], ["B", "C"]])
         p = build_paths(d, models, pl)[0][0][0]
-        assert p.port_cost_per_teu == pytest.approx((10 + 1) + (20 + 2) + (40 + 2 * 3))
+        assert p.port_cost_per_teu == pytest.approx(10 + 20 + 40)      # per-FFE call charge is per rotation
 
 
 # ================================================================ C. MILP + ledger

@@ -139,6 +139,7 @@ class ServiceModel:
     fuel_tonnes_per_rotation: float
     port_fixed_per_rotation: float              # sum of fixed port-call costs + canal fees of the rotation
     canal_fee_per_rotation: float = 0.0         # memo: the canal-fee part of ``port_fixed_per_rotation``
+    port_capacity_charge_per_rotation: float = 0.0   # memo: sum(callCostPerFFE x capacity) part of it
     canal_traversals: Tuple[int, int] = (0, 0)  # (Panama, Suez) traversals of the closed rotation
     capacity_unit_status: str = "provisional"
     # applicable bunker price and where it came from (fuel cost = tonnes x this price)
@@ -268,8 +269,14 @@ def build_service_model(
     port_days = len(feas.ports) * assumptions.port_stay_days
     fuel_t = sea_days * vessel.bunker_consumption_tons_per_day \
         + port_days * vessel.idle_consumption_tons_per_day
+    # LINERLIB port-call cost (reference code ``bm_reader.cpp`` and the authors' solution log, 34/34 services):
+    # per call  callCostFixed + callCostPerFFE x vessel capacity, once per weekly rotation, independent of the
+    # cargo carried.  ``variable_port_call_cost`` is USD per TEU (= per FFE / 2), so per call it is
+    # variable_port_call_cost x capacity_teu.
+    port_cap_charge = sum(_port_attr(port_lookup.get(p), "variable_port_call_cost") for p in feas.ports) \
+        * float(vessel.capacity_teu)
     port_fixed = sum(_port_attr(port_lookup.get(p), "port_call_cost") for p in feas.ports) \
-        + rules.canal_fee_per_rotation
+        + port_cap_charge + rules.canal_fee_per_rotation
 
     m = ServiceModel(
         service_id=str(service_id),
@@ -289,6 +296,7 @@ def build_service_model(
         fuel_tonnes_per_rotation=fuel_t,
         port_fixed_per_rotation=port_fixed,
         canal_fee_per_rotation=rules.canal_fee_per_rotation,
+        port_capacity_charge_per_rotation=port_cap_charge,
         canal_traversals=(rules.panama_traversals, rules.suez_traversals),
         capacity_unit_status=capacity_unit_status,
         fuel_price_usd_per_t=price.price_usd_per_t,

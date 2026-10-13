@@ -17,10 +17,12 @@ and a path whose transit time exceeds the OD's ``max_transit_days`` is NEVER bui
 source is unconstrained - a limit is not invented.
 
 Per-TEU port charges of a path (all USD/TEU, from the Port records):
-    origin load        handling_cost + variable_port_call_cost
-    destination unload handling_cost + variable_port_call_cost
-    transfer at a hub  transshipment_cost + 2 * variable_port_call_cost
+    origin load        handling_cost
+    destination unload handling_cost
+    transfer at a hub  transshipment_cost
                        (transshipment_cost replaces the discharge+reload lifts)
+The per-FFE port-call charge (callCostPerFFE) is NOT a cargo charge: the LINERLIB cost is
+callCostFixed + callCostPerFFE x vessel capacity per call, paid per rotation (service model).
 
 Which of the valid paths of an OD enter the optimisation model is a *selection*, because
 the model's size grows with the number of paths (``PathConfig``):
@@ -426,7 +428,7 @@ def build_paths(
 
     def hub_cost(h: str) -> float:
         p = port_lookup.get(h)
-        return _port_cost(p, "transshipment_cost") + 2.0 * _port_cost(p, "variable_port_call_cost")
+        return _port_cost(p, "transshipment_cost")
 
     # per-OD valid paths, in discovery order (pass 1)
     per_od: Dict[int, Tuple[List[OdPath], List[OdPath], List[OdPath]]] = {}
@@ -443,8 +445,7 @@ def build_paths(
             stats.od_skipped_missing_port_record += 1
             stats.od_without_path += 1
             continue
-        base_cost = (_port_cost(po, "handling_cost") + _port_cost(po, "variable_port_call_cost")
-                     + _port_cost(pt, "handling_cost") + _port_cost(pt, "variable_port_call_cost"))
+        base_cost = _port_cost(po, "handling_cost") + _port_cost(pt, "handling_cost")
 
         direct: List[OdPath] = []
         transfer: List[OdPath] = []

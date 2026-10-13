@@ -128,7 +128,9 @@ class TestTwoTransfers:
         assert p.services == (0, 1, 2)
         assert [(s.from_port, s.to_port) for s in p.segments] == [("A", "B"), ("B", "C"), ("C", "D")]
         assert p.transit_days == pytest.approx((1000 + 600 + 800) / 288.0 + 2 * DWELL)
-        assert p.port_cost_per_teu == pytest.approx((10 + 1) + (20 + 2) + (40 + 2 * 3) + (50 + 2 * 4))
+        # per-TEU charges: handling at origin and destination + transshipment at each hub (the per-FFE port-call
+        # charge is a per-rotation capacity charge in the service model, not a cargo charge)
+        assert p.port_cost_per_teu == pytest.approx(10 + 20 + 40 + 50)
         assert st.od_rescued_by_multi_hop == 1 and st.paths_multi_hop_kept == 1
 
     def test_time_limit_is_enforced(self):
@@ -202,7 +204,12 @@ class TestLedger:
         assert led.revenue == pytest.approx(100 * 3000.0)
         assert led.handling_cost == pytest.approx(100 * (10 + 20))
         assert led.transshipment_cost == pytest.approx(100 * (40 + 50))          # every hub
-        assert led.port_variable_cost == pytest.approx(100 * ((1 + 2) + 2 * 3 + 2 * 4))
+        # decision phase: callCostPerFFE is a per-call CAPACITY charge (LINERLIB reference), not a cargo charge
+        assert led.port_variable_cost == 0.0
+        cap = self.FLEET.classes[0].capacity_teu
+        pv = {"A": 1, "D": 2, "B": 3, "C": 4}
+        assert led.port_capacity_charge_cost == pytest.approx(
+            sum(cap * sum(pv[p] for p in rot) for rot in CHAIN))
         assert led.served_teu == pytest.approx(100.0)
 
     def test_every_transfer_adds_its_dwell_to_the_transit_time(self):
