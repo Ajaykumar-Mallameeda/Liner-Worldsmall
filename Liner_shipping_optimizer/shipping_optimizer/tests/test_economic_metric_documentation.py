@@ -270,11 +270,13 @@ def test_revenue_is_four_times_the_raw_csv_product():
 
 
 def test_ffe_to_teu_table_has_unreachable_keys():
-    """F-01: two table keys contain a literal space and can never match."""
+    """F-01 (resolved in Issue 1, 2026-10-13): the lane-specific FFE->TEU table, which held two
+    keys with a literal space that could never match, no longer exists - every lane uses
+    1 FFE = 2 TEU exactly.  The test now pins the resolution: the table is empty (an exception
+    can only be added together with a source) and the malformed keys are gone."""
     src = (ROOT / "src" / "data" / "network_loader.py").read_text(encoding="utf-8")
-    assert '"CNSHA-USA NY"' in src and '"JPTYO-USA NY"' in src, (
-        "the malformed FFE->TEU keys are gone; re-verify the default-2.0 share "
-        "claim in the document")
+    assert "FFE_TO_TEU_LANE_FACTORS = {}" in src
+    assert '"CNSHA-USA NY"' not in src and '"JPTYO-USA NY"' not in src
 
 
 def test_demand_scale_still_applies_unconditionally():

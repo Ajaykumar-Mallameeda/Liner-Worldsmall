@@ -9,19 +9,25 @@ despite the ``.csv`` extension):
     dist_dense.csv                  2162 directed OD pairs, Distance [nautical miles]
     fleet_WorldSmall.csv            vessel-class quantities (263 vessels)
     fleet_data.csv                  per-vessel specifications
-                                    ``Capacity FFE`` is used directly as
-                                    ``capacity_teu`` (no further x2). This
-                                    reading is PROVISIONAL: no authoritative
-                                    source defines the unit (see
-                                    ``CAPACITY_UNIT_PROVENANCE``).
+                                    ``Capacity FFE`` is an FFE count and is
+                                    converted once, here, to TEU:
+                                    ``capacity_teu = 2 * Capacity FFE``.
+                                    Status ``secondary_source``: the unit is
+                                    defined by the RL paper (arXiv:2411.09068,
+                                    App. A.1); the primary LINERLIB report was
+                                    not available (``CAPACITY_UNIT_PROVENANCE``).
 
 Unit contract (FFE -> TEU; 1 FFE = 2 TEU):
 
-    quantities     FFEPerWeek [FFE/wk]  * lane factor k  -> weekly_teu [TEU/wk]
-    revenue rates  Revenue_1  [USD/FFE] / lane factor k  -> revenue_per_teu [USD/TEU]
+    quantities     FFEPerWeek [FFE/wk]  * 2.0  -> weekly_teu [TEU/wk]
+    revenue rates  Revenue_1  [USD/FFE] / 2.0  -> revenue_per_teu [USD/TEU]
+    capacity       Capacity FFE [FFE/vessel] * 2.0 -> capacity_teu [TEU/vessel]
     port costs     CostPerFULL, CostPerFULLTrnsf, PortCallCostPerFFE [USD/FFE]
-                   / 2.0                                  -> USD/TEU
-    fixed cost     PortCallCostFixed [USD per call]       -> unchanged
+                   / 2.0                        -> USD/TEU
+    fixed cost     PortCallCostFixed [USD per call] -> unchanged
+
+1 FFE = 2 TEU exactly; there are no lane-specific factors (the six factors that
+earlier versions applied to WorldSmall lanes had no source and were removed).
 
 The same invariant holds for all per-FFE rates: ``converted TEU flow *
 converted USD/TEU == raw FFE flow * raw USD/FFE``. Per-FFE rates are always
@@ -72,29 +78,16 @@ WORLDSMALL_FILES = {
 # --------------------------------
 # Unit conversions and scaling
 # --------------------------------
-# FFE -> TEU. Quantities are multiplied by the lane factor and revenue rates
-# are divided by it, so that weekly_teu * revenue_per_teu == FFEPerWeek * Revenue_1.
+# FFE -> TEU: 1 FFE = 2 TEU exactly. Quantities (demand, vessel capacity) are
+# multiplied by it and per-FFE rates (revenue, port costs) are divided by it, so that
+# weekly_teu * revenue_per_teu == FFEPerWeek * Revenue_1.
 DEFAULT_FFE_TO_TEU = 2.0
 
-# Trade lane specific FFE to TEU conversion factors (based on typical cargo mix).
-FFE_TO_TEU_LANE_FACTORS = {
-    # Asia-Europe: Higher ratio of 40' containers (2.1)
-    "AEJEA-GBSOU": 2.1, "AEJEA-DEHAM": 2.1, "AEJEA-NLRTM": 2.1, "AEJEA-ITGOA": 2.1,
-    "CNSHA-GBSOU": 2.1, "CNSHA-DEHAM": 2.1, "CNSHA-NLRTM": 2.1, "CNSHA-ITGOA": 2.1,
-
-    # Transpacific: Balanced mix (1.85)
-    "CNSHA-USLAX": 1.85, "CNSHA-USAOS": 1.85, "CNSHA-USSEA": 1.85, "CNSHA-USA NY": 1.85,
-    "JPTYO-USLAX": 1.85, "JPTYO-USAOS": 1.85, "JPTYO-USSEA": 1.85, "JPTYO-USA NY": 1.85,
-
-    # Transatlantic: More 20' containers (1.75)
-    "USLAX-GBSOU": 1.75, "USAOS-GBSOU": 1.75, "USNYC-DEHAM": 1.75, "USNYC-NLRTM": 1.75,
-
-    # Intra-Asia: High 40' usage (2.0)
-    "CNSHA-JPTYO": 2.0, "CNSHA-SGSGP": 2.0, "JPTYO-KRPUS": 2.0,
-
-    # Latin America: Mixed (1.9)
-    "BRSSZ-USLAX": 1.9, "BRSSZ-USAOS": 1.9, "MXVER-CNSHA": 1.9,
-}
+# Lane-specific FFE -> TEU factors (1.75 - 2.1 "based on typical cargo mix") were applied
+# to six WorldSmall lanes in earlier versions. No authoritative source defines them, they
+# contradict 1 FFE = 2 TEU and the lane-independent cost conversion, so they are removed.
+# The mapping is kept (empty) so that an exception can only be added together with a source.
+FFE_TO_TEU_LANE_FACTORS = {}
 
 # Demand scaling is dataset specific. WorldSmall is never scaled beyond the
 # FFE -> TEU conversion; the legacy multiplier below belongs to WorldLarge.
@@ -111,43 +104,52 @@ TEU_PER_FFE = 2.0
 # --------------------------------
 # Vessel capacity unit: provenance and status
 # --------------------------------
-# The fleet specification column is named "Capacity FFE". No document available to
-# this project defines its unit, so it is used as TEU capacity as-is and that reading
-# is recorded here as PROVISIONAL. It must only become "verified" together with an
-# authoritative source entry (see tests/test_capacity_units.py, which enforces it).
-# Not applied, only documented: if the column really were FFE, TEU capacity would be
-# TEU_PER_FFE times the loaded value and every capacity-derived feasibility result
-# would change by that factor.
+# The fleet specification column is named "Capacity FFE". The LINERLIB files and README
+# state no unit; the RL paper that uses the benchmark (Dutta, Lin, Jin, arXiv:2411.09068,
+# App. A.1 "vcap: the maximum number of FFEs the vessel can carry at once"; section 6.1
+# "capacity of 800 FFEs") defines the capacity in FFE and never uses TEU. Decision of
+# 2026-10-13: the column is an FFE count and is converted ONCE, at this boundary, to the
+# model's internal TEU. The evidence is a secondary source: the status is therefore
+# "secondary_source", never "verified" (that requires the primary LINERLIB report).
 CAPACITY_SOURCE_COLUMN = "Capacity FFE"
 CAPACITY_INTERNAL_UNIT = "TEU"
-CAPACITY_UNIT_STATUS = "provisional"        # "verified" requires authoritative_source
+CAPACITY_UNIT_STATUS = "secondary_source"   # "verified" requires authoritative_source
 CAPACITY_UNIT_PROVENANCE = {
     "source_file": "data/raw/WorldSmall/fleet_data.csv",
     "source_column": CAPACITY_SOURCE_COLUMN,
+    "raw_unit": "FFE",
     "internal_unit": CAPACITY_INTERNAL_UNIT,
-    "conversion_applied": "none (value used as-is; no x2)",
+    "conversion_applied": "x2 once at the loader boundary (capacity_teu = 2 * Capacity FFE)",
     "status": CAPACITY_UNIT_STATUS,
     "authoritative_source": None,
+    "secondary_source": (
+        "Dutta, Lin, Jin, 'Liner Shipping Network Design with Reinforcement Learning', "
+        "arXiv:2411.09068v1, App. A.1 (vcap = maximum number of FFEs) and section 6.1 "
+        "(Feeder 800 'with a capacity of 800 FFEs')"
+    ),
     "reason": (
-        "the source defines the column only by its name; no document available to "
-        "this project states whether the number is FFE or TEU"
+        "the dataset documents give the column only by name; the secondary source defines "
+        "the capacity of the same vessel classes in FFE; the primary LINERLIB technical "
+        "report (Brouer, Pisinger, Sigurd) was not available to confirm it"
     ),
     "capacity_feasibility_is_conditional": True,
     "unapplied_alternative": (
-        f"if the column is FFE, capacity in TEU = {TEU_PER_FFE} x the loaded value"
+        "if the column were TEU, capacity_teu would equal the loaded value (the earlier "
+        "provisional reading, which understated capacity by a factor "
+        f"{TEU_PER_FFE} relative to the converted demand)"
     ),
     "evidence_checked": [
         "fleet_data.csv header 'Capacity FFE': column name only, no unit definition",
         "LINERLIB README (github.com/blof/LINERLIB): describes fleet_data.csv as 'all "
         "data on the 6 vessel types'; states no capacity unit (it calls demand 'FFe')",
         "Google OR-tools LINERLIB benchmark page: states no vessel capacity unit",
-        "upstream LINERLIB data/fleet_data.csv: same header and numeric values as the "
-        "local file (establishes provenance of the file, not the unit)",
+        "RL paper arXiv:2411.09068 (secondary source): capacity in FFE, p.15 and p.9; the "
+        "string 'TEU' does not occur; used as the decision basis",
         "Brouer et al., Transportation Science 48(2) 281-312 (2014), "
         "doi:10.1287/trsc.2013.0471: full text not retrievable in this environment; "
-        "not checked",
-        "repository documents (MA_02, MA_05, reports/worldsmall_phase1_5_2_audit.md) "
-        "restate the column name; derived, not authoritative",
+        "not checked (primary source unavailable)",
+        "repository documents (MA_02, MA_05, reports/audit_20261013_phaseADB) restate "
+        "the column name and the open question; derived, not authoritative",
     ],
 }
 
@@ -173,8 +175,19 @@ class DataValidationError(ValueError):
 # Public helpers
 # --------------------------------
 def ffe_to_teu_factor(origin, destination):
-    """FFE -> TEU factor for an OD lane (lane specific, default 2.0)."""
+    """FFE -> TEU factor for an OD lane: 2.0 unless a sourced exception is registered in
+    ``FFE_TO_TEU_LANE_FACTORS`` (none is)."""
     return FFE_TO_TEU_LANE_FACTORS.get(f"{origin}-{destination}", DEFAULT_FFE_TO_TEU)
+
+
+def ffe_to_teu(ffe):
+    """Quantity in FFE -> TEU (1 FFE = 2 TEU)."""
+    return ffe * TEU_PER_FFE
+
+
+def teu_to_ffe(teu):
+    """Quantity in TEU -> FFE (1 FFE = 2 TEU)."""
+    return teu / TEU_PER_FFE
 
 
 def demand_scale_for_dataset(dataset_name):
@@ -626,10 +639,10 @@ class NetworkLoader:
                                              Bunker ton per day at designSpeed, Idle Consumption ton/day,
                                              panamaFee, suezFee
 
-        ``Capacity FFE`` is used as the per-vessel TEU capacity and is NOT
-        multiplied again. That reading is PROVISIONAL (see
-        ``CAPACITY_UNIT_PROVENANCE``): the returned ``Fleet`` carries
-        ``capacity_unit_status == "provisional"``. Quantities and
+        ``Capacity FFE`` is an FFE count: ``capacity_teu = 2 * Capacity FFE`` (converted
+        here, once; nothing downstream converts again). The reading rests on a secondary
+        source (see ``CAPACITY_UNIT_PROVENANCE``): the returned ``Fleet`` carries
+        ``capacity_unit_status == "secondary_source"`` (never "verified"). Quantities and
         specifications must describe exactly the same set of vessel classes.
 
         Returns:
@@ -671,8 +684,8 @@ class NetworkLoader:
                 )
 
             spec = {
-                # "Capacity FFE" is used as TEU capacity as-is (no x2).
-                "capacity_teu": _positive(row["Capacity FFE"], spec_src, "Capacity FFE", label),
+                # "Capacity FFE" is an FFE count: converted to TEU here, once (1 FFE = 2 TEU).
+                "capacity_teu": ffe_to_teu(_positive(row["Capacity FFE"], spec_src, "Capacity FFE", label)),
                 "tc_rate_daily": _non_negative(
                     row["TC rate daily (fixed Cost)"], spec_src, "TC rate daily (fixed Cost)", label
                 ),
@@ -744,11 +757,11 @@ class NetworkLoader:
             "canal_fee_blank": fee_blank,
             # Capacity unit is an assumption, not a verified fact (see the
             # constants above); consumers must not present capacity feasibility
-            # as source-verified while this says "provisional".
+            # as source-verified while this says "provisional" or "secondary_source".
             "capacity_unit": dict(CAPACITY_UNIT_PROVENANCE),
         }
         logger.info(
-            "fleet capacity unit is %s: '%s' used as %s as-is (no x2)",
+            "fleet capacity unit status %s: '%s' (FFE) converted to %s once (x2)",
             CAPACITY_UNIT_STATUS, CAPACITY_SOURCE_COLUMN, CAPACITY_INTERNAL_UNIT,
         )
         fleet = Fleet(

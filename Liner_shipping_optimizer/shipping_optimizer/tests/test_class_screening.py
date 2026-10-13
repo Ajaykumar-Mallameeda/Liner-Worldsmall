@@ -451,8 +451,13 @@ class TestGeneratorAndRegionalFilterIntegration:
         from src.optimization.data import Service
         ports, dem, dist, fl = ws
         f450 = fl.get_class("Feeder_450")
+        # The legacy margin guess is ``capacity x 0.5 x 150 > weekly_cost``.  The weekly cost
+        # of one Feeder_450 (35,000) used to exceed 450 x 75; with the capacity in TEU
+        # (900 since Issue 1) it no longer does, so the fixture states the intended premise
+        # explicitly: a service whose weekly cost is just above the guess, which the
+        # legacy filter must remove whatever its class or provenance.
         base = dict(ports=["MYPKG", "MYTPP"], capacity=f450.capacity_teu,
-                    weekly_cost=f450.tc_rate_daily * 7, vessel_class="Feeder_450")
+                    weekly_cost=f450.capacity_teu * 0.5 * 150 + 1.0, vessel_class="Feeder_450")
         a = Service(id="legacy_f450", **base)
         b = Service(id="screened_f450", **base)
         b.economically_screened = True

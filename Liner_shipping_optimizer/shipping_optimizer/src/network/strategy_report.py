@@ -25,7 +25,8 @@ Accounting of a strategy (USD / week)
                     ledger's totals are the authority).
 
 Utilisation is measured at four levels with the capacity unit of the model (``capacity_teu``
-= the fleet file's ``Capacity FFE`` read as TEU, flagged provisional by the loader):
+= the fleet file's ``Capacity FFE`` x 2, converted once by the loader; status
+``secondary_source``):
     leg      load / (capacity x frequency) of every operated leg
     service  carried TEU-legs / offered TEU-legs of one service
     fleet    vessels used / class inventory, per class
@@ -239,7 +240,7 @@ def build_strategy_report(plan, *, fleet=None, distance_matrix=None, speed_facto
     used_total = sum(r["vessels_used"] for r in fleet_rows.values())
     inv_total = sum(r["inventory"] for r in fleet_rows.values())
     utilisation = {
-        "capacity_unit": "TEU (fleet file 'Capacity FFE' read as TEU; provisional)",
+        "capacity_unit": "TEU (fleet file 'Capacity FFE' is FFE, converted x2 once by the loader; status secondary_source)",
         "leg": {"legs": len(leg_lf),
                 "load_factor_mean": (sum(leg_lf) / len(leg_lf)) if leg_lf else None,
                 "p10": _pct(leg_sorted, 0.10), "p50": _pct(leg_sorted, 0.50), "p90": _pct(leg_sorted, 0.90),

@@ -280,10 +280,10 @@ def section_worldsmall_data_contract(problem: "Problem") -> Dict[str, Any]:
 
     # -- Demand semantics: FFE -> TEU, with NO artificial scaling ---------
     total_teu = sum(d.weekly_teu for d in demands)
-    # The loader applies lane-specific FFE->TEU factors (6 lanes differ from
-    # the 2.0 default), so the runtime total is marginally below the flat
-    # FFE x 2 nominal. The ratio must stay ~2.0 -- a ratio near 12.0 would
-    # indicate the legacy WorldLarge DEMAND_SCALE=6 leaked in.
+    # The loader converts 1 FFE = 2 TEU exactly (no lane-specific factors since
+    # Issue 1), so the runtime total equals the flat FFE x 2 nominal. The ratio
+    # must be 2.0 -- a ratio near 12.0 would indicate the legacy WorldLarge
+    # DEMAND_SCALE=6 leaked in.
     ratio = total_teu / WS_EXPECTED_RAW_FFE
 
     print_kv("Raw source FFE/week", f"{WS_EXPECTED_RAW_FFE:,}")
@@ -291,7 +291,7 @@ def section_worldsmall_data_contract(problem: "Problem") -> Dict[str, Any]:
     print_kv("TEU / FFE ratio",     f"{ratio:.4f}  (expected ~2.0; x6 scaling => 12.0)")
     print_kv("Flat FFE x 2 nominal", f"{WS_EXPECTED_RAW_FFE * 2:,}")
     print_kv("Delta vs nominal",    f"{total_teu - WS_EXPECTED_RAW_FFE * 2:,.1f} TEU "
-                                    f"(lane-specific factors on 6 lanes)")
+                                    f"(0 expected: 1 FFE = 2 TEU exactly)")
 
     assert_true(
         1.99 <= ratio <= 2.01,
@@ -2506,15 +2506,16 @@ def section_network_ledger_validation(result: Dict, problem: "Problem") -> Dict[
     prices = sorted({round(sv["fuel_price"], 2) for sv in rc["services"].values()})
     print_kv("Distinct applied prices (USD/t)", str(prices))
 
-    # -- N.8 capacity-unit provisional flag ------------------------------------------
+    # -- N.8 capacity-unit status flag (secondary_source since Issue 1) -------------
     print(f"\n  {C.BOLD}N.8 Stated assumptions{C.RESET}")
     cu = assumptions.get("capacity_unit") or {}
-    assert_true(cu.get("status") in ("provisional", "verified"), "capacity unit status is reported",
+    assert_true(cu.get("status") in ("provisional", "secondary_source", "verified"),
+                "capacity unit status is reported",
                 f"{cu}")
     if cu.get("status") != "verified":
         assert_true(bool(cu.get("capacity_feasibility_is_conditional")),
-                    "capacity feasibility is flagged as conditional on the unverified TEU reading")
-        print(f"  {warn('Capacity FFE read as TEU (provisional): fleet-capacity feasibility is conditional')}")
+                    "capacity feasibility is flagged as conditional on the non-primary-source unit reading")
+        print(f"  {warn('Capacity FFE read as FFE (secondary source): fleet-capacity feasibility is conditional')}")
     print_kv("Port stay assumed", f"{assumptions['port_stay_hours']:g} h per call")
     print_kv("Bunker price (uniform / reference)", f"${assumptions['bunker_price_usd_per_t']:g}/t")
     print_kv("Transfer dwell assumed",

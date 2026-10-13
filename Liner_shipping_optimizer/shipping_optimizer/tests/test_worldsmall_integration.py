@@ -133,7 +133,7 @@ class TestDemandIntegrity:
     def test_worldsmall_total_teu_is_unscaled(self):
         """No legacy demand multiplier is applied to WorldSmall.
 
-        Total TEU is the raw FFE total times the lane factors (1.85-2.1). The
+        Total TEU is exactly the raw FFE total times 2 (1 FFE = 2 TEU, no lane factors). The
         legacy x6 multiplier (a WorldLarge-only convention) would give ~12x.
         Both sides are read from WorldSmall; the raw side bypasses the loader.
         """
@@ -141,8 +141,8 @@ class TestDemandIntegrity:
         raw_ffe = sum(float(r["FFEPerWeek"]) for r in _raw_rows(path))
         teu = sum(d.weekly_teu for d in NetworkLoader().load_demands(path))
         assert raw_ffe == 138247
-        assert teu == pytest.approx(276_446.8, abs=0.5)
-        assert 1.85 <= teu / raw_ffe <= 2.1, f"TEU/FFE = {teu / raw_ffe:.3f}"
+        assert teu == pytest.approx(276_494.0, abs=1e-6)
+        assert teu / raw_ffe == pytest.approx(2.0, abs=1e-12), f"TEU/FFE = {teu / raw_ffe:.3f}"
 
     def test_csv_path_no_scaling(self):
         """CSV loader path should not apply any DEMAND_SCALE."""
@@ -206,7 +206,8 @@ class TestFleetIntegrity:
         )
         post = fleet.get_class("Post_panamax")
         assert post is not None
-        assert post.capacity_teu == 4200.0, f"Expected 4200, got {post.capacity_teu}"
+        # 4200 FFE x 2 (converted once at the loader boundary)
+        assert post.capacity_teu == 8400.0, f"Expected 8400, got {post.capacity_teu}"
         assert post.design_speed > 0
         assert post.bunker_consumption_tons_per_day > 0
 

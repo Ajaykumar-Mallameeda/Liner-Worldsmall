@@ -37,7 +37,7 @@ WS_DIRECTED_PAIRS = 47 * 46
 WS_FLEET_TOTAL = 263
 WS_RAW_FFE = 138247
 WS_RAW_GROSS_REVENUE = 264_870_100.0
-WS_TEU = 276_446.8
+WS_TEU = 276_494.0          # 2 x 138,247 FFE exactly (no lane factors since Issue 1)
 WS_FLEET = {
     "Feeder_450": 24,
     "Feeder_800": 29,
@@ -261,17 +261,17 @@ class TestRevenuePreservation:
             assert d.weekly_teu * d.revenue_per_teu == pytest.approx(ffe * rev, rel=1e-12), (o, dst)
 
     def test_revenue_is_divided_not_multiplied_by_the_factor(self, loader, tmp_path):
-        # Both ends of the lane are WorldSmall ports (AEJEA->NLRTM is in the
-        # canonical data with lane factor 2.1), so the fixture is a valid
-        # WorldSmall-identity file.
+        # Both ends of the lane are WorldSmall ports, so the fixture is a valid
+        # WorldSmall-identity file.  Every lane uses 1 FFE = 2 TEU exactly: the earlier
+        # lane-specific factor (2.1 on AEJEA->NLRTM) had no source and was removed.
         p = write_tsv(tmp_path / "d.csv", DEMAND_HEADER, [
-            ["AEJEA", "NLRTM", 10, 2100, 5],   # lane factor 2.1
-            ["AOLAD", "AEJEA", 1, 2290, 5],    # default factor 2.0
+            ["AEJEA", "NLRTM", 10, 2100, 5],
+            ["AOLAD", "AEJEA", 1, 2290, 5],
         ])
         by_od = {(d.origin, d.destination): d for d in loader.load_demands(p)}
         lane = by_od[("AEJEA", "NLRTM")]
-        assert lane.weekly_teu == pytest.approx(21.0)
-        assert lane.revenue_per_teu == pytest.approx(1000.0)
+        assert lane.weekly_teu == pytest.approx(20.0)
+        assert lane.revenue_per_teu == pytest.approx(1050.0)
         default = by_od[("AOLAD", "AEJEA")]
         assert default.weekly_teu == 2.0
         assert default.revenue_per_teu == 1145.0   # not 4580.0
@@ -292,13 +292,14 @@ class TestRevenuePreservation:
 # 10-12. Fleet
 # ---------------------------------------------------------------------------
 class TestFleet:
-    def test_capacity_is_not_doubled(self, loader):
+    def test_capacity_is_converted_exactly_once(self, loader):
+        """``Capacity FFE`` is an FFE count: capacity_teu = 2 x the column, never 1x, never 4x."""
         fleet = loader.load_fleet()
         raw = {r["Vessel class"].strip(): float(r["Capacity FFE"])
                for r in read_raw(WORLDSMALL_FILES["fleet_data"])}
         for c in fleet.classes:
-            assert c.capacity_teu == raw[c.vessel_class], c.vessel_class
-        assert fleet.get_class("Post_panamax").capacity_teu == 4200.0
+            assert c.capacity_teu == 2.0 * raw[c.vessel_class], c.vessel_class
+        assert fleet.get_class("Post_panamax").capacity_teu == 8400.0
 
     def test_six_classes_and_canonical_inventory(self, loader):
         fleet = loader.load_fleet()
@@ -313,7 +314,7 @@ class TestFleet:
         s = write_tsv(tmp_path / "s.csv", SPEC_HEADER, [spec_row("A"), spec_row("B", 2000)])
         fleet = loader.load_fleet(q, s)
         assert fleet.total_vessels == 12
-        assert fleet.get_class("B").capacity_teu == 2000.0
+        assert fleet.get_class("B").capacity_teu == 4000.0     # 2000 FFE x 2
 
     def test_blank_fees_are_unknown_not_zero_and_other_blanks_are_rejected(self, loader, tmp_path):
         # Task 2 contract: a blank canal fee is "no value given" (None). It is not

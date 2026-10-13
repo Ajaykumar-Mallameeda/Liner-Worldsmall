@@ -1,11 +1,13 @@
 """
-Vessel-capacity unit contract (Task 2).
+Vessel-capacity unit contract (Task 2, revised in Issue 1 of the 2026-10-13 campaign).
 
 Question: what unit is the fleet column ``Capacity FFE``?
-Finding: no authoritative document available to this project defines it. The loader
-therefore keeps the established reading (used as TEU capacity, no x2) and records it as
-PROVISIONAL. These tests pin that behaviour and make it impossible to present the
-convention as source-verified without adding an authoritative source entry.
+Finding: the primary LINERLIB report is unavailable; the secondary source (RL paper
+arXiv:2411.09068, App. A.1 / section 6.1) defines vessel capacity as a number of FFEs. The
+loader therefore converts the column ONCE to TEU (x2) and records the status as
+``secondary_source``. These tests pin that behaviour and make it impossible to present the
+convention as source-verified ("verified") without a primary / authoritative source entry.
+(The broader dimensional invariants live in ``tests/test_unit_contract.py``.)
 
 Canonical files are read from data/raw/WorldSmall and compared with an independent
 ``csv`` read; malformed input uses small synthetic fixtures in tmp_path.
@@ -60,7 +62,7 @@ def loader():
 
 
 # ---------------------------------------------------------------------------
-# Fleet-field interpretation: read as-is, never rescaled
+# Fleet-field interpretation: an FFE count, converted once (x2) to TEU
 # ---------------------------------------------------------------------------
 class TestFieldInterpretation:
     def test_every_class_capacity_equals_the_raw_column_value(self, loader):
@@ -68,17 +70,17 @@ class TestFieldInterpretation:
                for r in _raw(WORLDSMALL_FILES["fleet_data"])}
         assert len(raw) == 6
         loaded = {c.vessel_class: c.capacity_teu for c in loader.load_fleet().classes}
-        assert loaded == raw                      # exact: no x2, no rounding
+        assert loaded == {k: 2.0 * v for k, v in raw.items()}   # exact: x2 once, no rounding
 
     def test_canonical_capacities(self, loader):
         loaded = {c.vessel_class: c.capacity_teu for c in loader.load_fleet().classes}
-        assert loaded == {"Feeder_450": 450.0, "Feeder_800": 800.0, "Panamax_1200": 1200.0,
-                          "Panamax_2400": 2400.0, "Post_panamax": 4200.0, "Super_panamax": 7500.0}
+        assert loaded == {"Feeder_450": 900.0, "Feeder_800": 1600.0, "Panamax_1200": 2400.0,
+                          "Panamax_2400": 4800.0, "Post_panamax": 8400.0, "Super_panamax": 15000.0}
 
-    def test_synthetic_value_is_not_scaled(self, loader, tmp_path):
+    def test_synthetic_value_is_doubled_exactly_once(self, loader, tmp_path):
         q = _write(tmp_path / "q.csv", QTY_HEADER, [["X", 1]])
         s = _write(tmp_path / "s.csv", SPEC_HEADER, [_spec("X", 1234)])
-        assert loader.load_fleet(q, s).get_class("X").capacity_teu == 1234.0
+        assert loader.load_fleet(q, s).get_class("X").capacity_teu == 2468.0
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +99,7 @@ class TestClassIdentity:
         raw_cap = {r["Vessel class"].strip(): float(r["Capacity FFE"])
                    for r in _raw(WORLDSMALL_FILES["fleet_data"])}
         for name in names:
-            assert fleet.get_class(name).capacity_teu == raw_cap[name]
+            assert fleet.get_class(name).capacity_teu == 2.0 * raw_cap[name]
         assert fleet.get_class("Not_A_Class") is None
 
     def test_classes_missing_from_either_file_are_rejected(self, loader, tmp_path):
@@ -108,15 +110,17 @@ class TestClassIdentity:
 
 
 # ---------------------------------------------------------------------------
-# Provisional status is declared, propagated, and cannot silently become "verified"
+# Source status is declared, propagated, and cannot silently become "verified"
 # ---------------------------------------------------------------------------
 class TestProvisionalStatus:
-    def test_constants_declare_the_provisional_teu_reading(self):
+    def test_constants_declare_the_secondary_source_ffe_reading(self):
         assert CAPACITY_SOURCE_COLUMN == "Capacity FFE"
         assert CAPACITY_INTERNAL_UNIT == "TEU"
-        assert CAPACITY_UNIT_STATUS == "provisional"
+        assert CAPACITY_UNIT_STATUS == "secondary_source"
+        assert CAPACITY_UNIT_PROVENANCE["raw_unit"] == "FFE"
         assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is True
         assert CAPACITY_UNIT_PROVENANCE["authoritative_source"] is None
+        assert "arXiv:2411.09068" in CAPACITY_UNIT_PROVENANCE["secondary_source"]
 
     def test_verified_status_requires_an_authoritative_source(self):
         """Invariant: 'verified' is only legal together with a named source."""
@@ -125,31 +129,31 @@ class TestProvisionalStatus:
             assert isinstance(src, str) and src.strip(), "verified without a cited source"
             assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is False
         else:
-            assert CAPACITY_UNIT_PROVENANCE["status"] == "provisional"
+            assert CAPACITY_UNIT_PROVENANCE["status"] in ("provisional", "secondary_source")
             assert CAPACITY_UNIT_PROVENANCE["capacity_feasibility_is_conditional"] is True
 
     def test_evidence_trail_is_recorded_and_states_no_unit_definition_was_found(self):
         ev = CAPACITY_UNIT_PROVENANCE["evidence_checked"]
         assert len(ev) >= 4 and all(isinstance(e, str) and e for e in ev)
-        assert any("not retrievable" in e or "not checked" in e for e in ev)
-        assert "x the loaded value" in CAPACITY_UNIT_PROVENANCE["unapplied_alternative"]
+        assert any("not retrievable" in e or "not checked" in e for e in ev)     # primary source
+        assert "capacity_teu would equal the loaded value" in CAPACITY_UNIT_PROVENANCE["unapplied_alternative"]
 
     def test_loaded_fleet_carries_the_status(self, loader):
         fleet = loader.load_fleet()
         assert fleet.capacity_unit == "TEU"
-        assert fleet.capacity_unit_status == "provisional"
+        assert fleet.capacity_unit_status == "secondary_source"
         assert fleet.capacity_source_column == "Capacity FFE"
 
     def test_problem_built_by_the_loader_exposes_the_status(self, loader):
         problem = loader.load_problem()
         assert isinstance(problem, Problem)
-        assert problem.fleet.capacity_unit_status == "provisional"
+        assert problem.fleet.capacity_unit_status == "secondary_source"
 
     def test_validation_report_states_the_assumption(self, loader):
         loader.load_fleet()
         cu = loader.validation_report["fleet"]["capacity_unit"]
-        assert cu["status"] == "provisional"
-        assert cu["conversion_applied"].startswith("none")
+        assert cu["status"] == "secondary_source"
+        assert cu["conversion_applied"].startswith("x2")
         assert cu["capacity_feasibility_is_conditional"] is True
 
     def test_hand_built_fleet_defaults_to_provisional(self):
@@ -159,7 +163,7 @@ class TestProvisionalStatus:
     def test_report_copy_cannot_mutate_the_module_constant(self, loader):
         loader.load_fleet()
         loader.validation_report["fleet"]["capacity_unit"]["status"] = "verified"
-        assert nl.CAPACITY_UNIT_PROVENANCE["status"] == "provisional"
+        assert nl.CAPACITY_UNIT_PROVENANCE["status"] == "secondary_source"
 
 
 # ---------------------------------------------------------------------------

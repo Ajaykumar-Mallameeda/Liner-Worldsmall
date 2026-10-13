@@ -1,0 +1,751 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........F......................................................FFFFFFFFF [ 22%]
+FF..........F.................FFFFFFFFFFFFFFFFFF........................ [ 30%]
+........................................................................ [ 37%]
+........................................................................ [ 45%]
+........................................................................ [ 53%]
+......................................xxx...x..xxx.xx................... [ 60%]
+........................................................................ [ 68%]
+...................................FFFFF.........FF..................... [ 75%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 98%]
+..........F...                                                           [100%]
+================================== FAILURES ===================================
+_ TestGeneratorAndRegionalFilterIntegration.test_the_regional_filter_is_not_bypassed_by_screening _
+
+self = <tests.test_class_screening.TestGeneratorAndRegionalFilterIntegration object at 0x000001C74D39E990>
+ws = ([Port(id='AEJEA', name='Jebel Ali', latitude=25.14, longitude=55.19, handling_cost=66.5, draft=13.5, port_call_cost=4..._fee=1035376.0)], capacity_unit='TEU', capacity_unit_status='secondary_source', capacity_source_column='Capacity FFE'))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001C76F4A9C90>
+
+    def test_the_regional_filter_is_not_bypassed_by_screening(self, ws, monkeypatch):
+        """Measured decision (ablation ``+noexempt``): screened classes face the same
+        regional margin test and cap as every legacy candidate. The test removes
+        Feeder_450 whatever its economics; only demand-coherent loops are exempt.
+    
+        This pins the LEGACY filter (``LINER_REGIONAL_FILTER=legacy``): Task 16 adds an
+        economic filter, selected by default while the Task 9/10 generators are on, which
+        does not apply the class-level margin guess (see ``tests/test_regional_filter.py``).
+        The assertion below is unchanged."""
+        monkeypatch.setenv("LINER_REGIONAL_FILTER", "legacy")
+        from src.agents.regional_agent import RegionalAgent
+        from src.optimization.adaptive_budget import AdaptiveBudget, compute_complexity_signals
+        from src.optimization.data import Service
+        ports, dem, dist, fl = ws
+        f450 = fl.get_class("Feeder_450")
+        base = dict(ports=["MYPKG", "MYTPP"], capacity=f450.capacity_teu,
+                    weekly_cost=f450.tc_rate_daily * 7, vessel_class="Feeder_450")
+        a = Service(id="legacy_f450", **base)
+        b = Service(id="screened_f450", **base)
+        b.economically_screened = True
+        c = Service(id="loop_f450", **base)
+        c.origin_section = "demand_loop"
+        pr = Problem(ports=ports, services=[a, b, c], demands=dem, distance_matrix=dist, fleet=fl)
+        agent = RegionalAgent("regional_t", "Asia", "none")
+        budget = AdaptiveBudget.from_signals(
+            compute_complexity_signals(num_ports=len(pr.ports), demands=pr.demands, fleet=fl))
+        kept = {s_.id for s_ in agent._filter_services(pr, budget).services}
+>       assert kept == {"loop_f450"}
+E       AssertionError: assert {'legacy_f450...creened_f450'} == {'loop_f450'}
+E         Extra items in the left set:
+E         'screened_f450'
+E         'legacy_f450'
+E         Use -v to get more diff
+
+tests\test_class_screening.py:466: AssertionError
+_______ test_artifact_exists_and_parses[MULTI_AGENT_FORMULA_INDEX.json] _______
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_FORMULA_INDEX.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+__ test_artifact_exists_and_parses[MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json] ___
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+______ test_artifact_exists_and_parses[MULTI_AGENT_METRIC_LINEAGE.json] _______
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_METRIC_LINEAGE.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_METRIC_LINEAGE.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_METRIC_LINEAGE.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_METRIC_LINEAGE.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_METRIC_LINEAGE.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+___ test_artifact_exists_and_parses[MULTI_AGENT_RL_COMPARISON_MATRIX.json] ____
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_RL_COMPARISON_MATRIX.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+___ test_artifact_exists_and_parses[MULTI_AGENT_DATASET_COMPARABILITY.json] ___
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_DATASET_COMPARABILITY.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_DATASET_COMPARABILITY.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_DATASET_COMPARABILITY.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_DATASET_COMPARABILITY.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_DATASET_COMPARABILITY.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+____ test_artifact_exists_and_parses[MULTI_AGENT_PAPER_TRACEABILITY.json] _____
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_PAPER_TRACEABILITY.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_PAPER_TRACEABILITY.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_PAPER_TRACEABILITY.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_PAPER_TRACEABILITY.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_PAPER_TRACEABILITY.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+____ test_artifact_exists_and_parses[MULTI_AGENT_FILE_DEPENDENCY_MAP.json] ____
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json')
+
+    @pytest.mark.parametrize("path", ALL_ARTIFACTS, ids=lambda p: p.name)
+    def test_artifact_exists_and_parses(path):
+>       assert path.exists(), f"missing audit artifact: {path.name}"
+E       AssertionError: missing audit artifact: MULTI_AGENT_FILE_DEPENDENCY_MAP.json
+E       assert False
+E        +  where False = <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json')>()
+E        +    where <bound method Path.exists of WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json')> = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json').exists
+
+tests\test_economic_metric_documentation.py:67: AssertionError
+____________________ test_artifact_declares_its_generator _____________________
+
+    def test_artifact_declares_its_generator():
+        for path in ALL_ARTIFACTS:
+>           data = _load(path)
+
+tests\test_economic_metric_documentation.py:74: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FORMULA_INDEX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_______________________ test_every_formula_has_evidence _______________________
+
+    def test_every_formula_has_evidence():
+>       index = _load(FORMULA_INDEX)
+
+tests\test_economic_metric_documentation.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FORMULA_INDEX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+____________________ test_every_formula_citation_resolves _____________________
+
+    def test_every_formula_citation_resolves():
+        """The core discipline: a `file:line` citation must still say what we claim."""
+>       index = _load(FORMULA_INDEX)
+
+tests\test_economic_metric_documentation.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FORMULA_INDEX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_________________________ test_formula_ids_are_unique _________________________
+
+    def test_formula_ids_are_unique():
+>       index = _load(FORMULA_INDEX)
+
+tests\test_economic_metric_documentation.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FORMULA_INDEX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FORMULA_INDEX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_________________ test_ffe_to_teu_table_has_unreachable_keys __________________
+
+    def test_ffe_to_teu_table_has_unreachable_keys():
+        """F-01: two table keys contain a literal space and can never match."""
+        src = (ROOT / "src" / "data" / "network_loader.py").read_text(encoding="utf-8")
+>       assert '"CNSHA-USA NY"' in src and '"JPTYO-USA NY"' in src, (
+            "the malformed FFE->TEU keys are gone; re-verify the default-2.0 share "
+            "claim in the document")
+E       AssertionError: the malformed FFE->TEU keys are gone; re-verify the default-2.0 share claim in the document
+E       assert ('"CNSHA-USA NY"' in '"""WorldSmall network loader.\n\nData contract (all sources live in ``data/raw/WorldSmall`` and are tab-separated\nde...[:3]}. Regenerate it from "\n                f"data/raw/WorldSmall or load the CSV sources directly."\n            )\n')
+
+tests\test_economic_metric_documentation.py:275: AssertionError
+________________ test_every_rl_cell_carries_rl_ref_provenance _________________
+
+    def test_every_rl_cell_carries_rl_ref_provenance():
+        """Spec section 18: no comparability may be asserted from a shared name."""
+>       matrix = _load(RL_MATRIX)
+
+tests\test_economic_metric_documentation.py:465: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_RL_COMPARISON_MATRIX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_________________ test_rl_grades_use_the_mandated_vocabulary __________________
+
+    def test_rl_grades_use_the_mandated_vocabulary():
+>       matrix = _load(RL_MATRIX)
+
+tests\test_economic_metric_documentation.py:478: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_RL_COMPARISON_MATRIX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+______________ test_rl_comparisons_apply_the_six_criterion_test _______________
+
+    def test_rl_comparisons_apply_the_six_criterion_test():
+>       matrix = _load(RL_MATRIX)
+
+tests\test_economic_metric_documentation.py:486: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_RL_COMPARISON_MATRIX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+________________ test_no_verdict_ranking_language_in_rl_matrix ________________
+
+    def test_no_verdict_ranking_language_in_rl_matrix():
+        """Spec section 37: no scores, rankings, winners or superiority claims."""
+        forbidden = ("better", "worse", "best", "worst", "winner", "loser",
+                     "superior", "outperform", "rank ")
+>       raw = RL_MATRIX.read_text(encoding="utf-8").lower()
+
+tests\test_economic_metric_documentation.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_RL_COMPARISON_MATRIX.json'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1044: FileNotFoundError
+_________________ test_grade_summary_matches_the_comparisons __________________
+
+    def test_grade_summary_matches_the_comparisons():
+>       matrix = _load(RL_MATRIX)
+
+tests\test_economic_metric_documentation.py:506: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_RL_COMPARISON_MATRIX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_RL_COMPARISON_MATRIX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_________ test_dataset_comparability_records_the_unit_reconciliation __________
+
+    def test_dataset_comparability_records_the_unit_reconciliation():
+>       data = _load(DATASET_COMPARABILITY)
+
+tests\test_economic_metric_documentation.py:521: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_DATASET_COMPARABILITY.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_DATASET_COMPARABILITY.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_______________ test_dataset_comparability_grades_are_justified _______________
+
+    def test_dataset_comparability_grades_are_justified():
+>       data = _load(DATASET_COMPARABILITY)
+
+tests\test_economic_metric_documentation.py:530: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_DATASET_COMPARABILITY.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_DATASET_COMPARABILITY.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+____________ test_metric_matrix_classifications_are_in_vocabulary _____________
+
+    def test_metric_matrix_classifications_are_in_vocabulary():
+>       matrix = _load(METRIC_MATRIX)
+
+tests\test_economic_metric_documentation.py:540: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_____________ test_metric_matrix_declares_non_reconciling_metrics _____________
+
+output = {'all_selected_services': [{'capacity': 1600.0, 'cost': 1358722.5777009213, 'cycle_time_days': 47, 'frequency_per_week...in_pct': 35.83819376705662, ...}, 'max': 5, 'reasons': ['regional avg coverage 29.2% < target 70.0%'], ...}, ...}, ...}
+
+    def test_metric_matrix_declares_non_reconciling_metrics(output):
+>       matrix = _load(METRIC_MATRIX)
+
+tests\test_economic_metric_documentation.py:549: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+___________________ test_metric_lineage_stages_are_labelled ___________________
+
+    def test_metric_lineage_stages_are_labelled():
+>       lineage = _load(METRIC_LINEAGE)
+
+tests\test_economic_metric_documentation.py:557: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_METRIC_LINEAGE.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_METRIC_LINEAGE.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_______________ test_dependency_map_totals_are_self_consistent ________________
+
+    def test_dependency_map_totals_are_self_consistent():
+>       dep = _load(DEP_MAP)
+
+tests\test_economic_metric_documentation.py:572: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FILE_DEPENDENCY_MAP.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+_________________ test_dependency_edges_reference_known_files _________________
+
+    def test_dependency_edges_reference_known_files():
+>       dep = _load(DEP_MAP)
+
+tests\test_economic_metric_documentation.py:582: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FILE_DEPENDENCY_MAP.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+____________ test_economic_core_is_present_in_the_dependency_graph ____________
+
+    def test_economic_core_is_present_in_the_dependency_graph():
+        """The modules the economics depend on must be in the scanned graph, or the
+        document's architecture claims rest on an incomplete map."""
+>       dep = _load(DEP_MAP)
+
+tests\test_economic_metric_documentation.py:593: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_FILE_DEPENDENCY_MAP.json')
+
+    def _load(path):
+>       with open(path, encoding="utf-8") as fh:
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_FILE_DEPENDENCY_MAP.json'
+
+tests\test_economic_metric_documentation.py:54: FileNotFoundError
+______________ test_main_document_exists_with_required_sections _______________
+
+    def test_main_document_exists_with_required_sections():
+        if not DOC.exists():
+>           pytest.fail(f"main deliverable missing: {DOC.name}")
+E           Failed: main deliverable missing: MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md
+
+tests\test_economic_metric_documentation.py:613: Failed
+_______________ test_main_document_defines_the_source_hierarchy _______________
+
+    def test_main_document_defines_the_source_hierarchy():
+>       text = DOC.read_text(encoding="utf-8")
+
+tests\test_economic_metric_documentation.py:621: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1044: FileNotFoundError
+____________ test_main_document_records_the_llm_influence_verdict _____________
+
+    def test_main_document_records_the_llm_influence_verdict():
+>       text = DOC.read_text(encoding="utf-8")
+
+tests\test_economic_metric_documentation.py:627: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1044: FileNotFoundError
+__________________ test_main_document_cites_rl_as_unverified __________________
+
+    def test_main_document_cites_rl_as_unverified():
+>       text = DOC.read_text(encoding="utf-8")
+
+tests\test_economic_metric_documentation.py:636: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1044: FileNotFoundError
+_________________ test_main_document_avoids_ranking_language __________________
+
+    def test_main_document_avoids_ranking_language():
+        """Spec section 37: the document states comparability, never preference."""
+>       text = DOC.read_text(encoding="utf-8").lower()
+
+tests\test_economic_metric_documentation.py:644: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\MULTI_AGENT_ARCHITECTURE_FORMULATIONS_ECONOMIC_METRIC_INTEGRITY.md'
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\pathlib.py:1044: FileNotFoundError
+________ TestVesselClass.test_nearest_capacity_class[1000-Feeder_800] _________
+
+self = <tests.test_service_feasibility.TestVesselClass object at 0x000001C76F3D9F50>
+fleet = Fleet(classes=[FleetClass(vessel_class='Feeder_450', quantity=24, capacity_teu=900.0, tc_rate_daily=5000.0, draft=8.0,...z_fee=1035376.0)], capacity_unit='TEU', capacity_unit_status='secondary_source', capacity_source_column='Capacity FFE')
+target = 1000, expected = 'Feeder_800'
+
+    @pytest.mark.parametrize("target, expected", [
+        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
+        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
+        (8000, "Super_panamax"), (14000, "Super_panamax"),
+    ])
+    def test_nearest_capacity_class(self, fleet, target, expected):
+>       assert choose_vessel_class(target, fleet).vessel_class == expected
+E       AssertionError: assert 'Feeder_450' == 'Feeder_800'
+E         - Feeder_800
+E         ?        ^ -
+E         + Feeder_450
+E         ?        ^^
+
+tests\test_service_feasibility.py:228: AssertionError
+_______ TestVesselClass.test_nearest_capacity_class[1201-Panamax_1200] ________
+
+self = <tests.test_service_feasibility.TestVesselClass object at 0x000001C76F3DA4D0>
+fleet = Fleet(classes=[FleetClass(vessel_class='Feeder_450', quantity=24, capacity_teu=900.0, tc_rate_daily=5000.0, draft=8.0,...z_fee=1035376.0)], capacity_unit='TEU', capacity_unit_status='secondary_source', capacity_source_column='Capacity FFE')
+target = 1201, expected = 'Panamax_1200'
+
+    @pytest.mark.parametrize("target, expected", [
+        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
+        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
+        (8000, "Super_panamax"), (14000, "Super_panamax"),
+    ])
+    def test_nearest_capacity_class(self, fleet, target, expected):
+>       assert choose_vessel_class(target, fleet).vessel_class == expected
+E       AssertionError: assert 'Feeder_450' == 'Panamax_1200'
+E         - Panamax_1200
+E         + Feeder_450
+
+tests\test_service_feasibility.py:228: AssertionError
+_______ TestVesselClass.test_nearest_capacity_class[2000-Panamax_2400] ________
+
+self = <tests.test_service_feasibility.TestVesselClass object at 0x000001C76F3DA350>
+fleet = Fleet(classes=[FleetClass(vessel_class='Feeder_450', quantity=24, capacity_teu=900.0, tc_rate_daily=5000.0, draft=8.0,...z_fee=1035376.0)], capacity_unit='TEU', capacity_unit_status='secondary_source', capacity_source_column='Capacity FFE')
+target = 2000, expected = 'Panamax_2400'
+
+    @pytest.mark.parametrize("target, expected", [
+        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
+        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
+        (8000, "Super_panamax"), (14000, "Super_panamax"),
+    ])
+    def test_nearest_capacity_class(self, fleet, target, expected):
+>       assert choose_vessel_class(target, fleet).vessel_class == expected
+E       AssertionError: assert 'Feeder_800' == 'Panamax_2400'
+E         - Panamax_2400
+E         + Feeder_800
+
+tests\test_service_feasibility.py:228: AssertionError
+_______ TestVesselClass.test_nearest_capacity_class[5000-Post_panamax] ________
+
+self = <tests.test_service_feasibility.TestVesselClass object at 0x000001C76F3DA790>
+fleet = Fleet(classes=[FleetClass(vessel_class='Feeder_450', quantity=24, capacity_teu=900.0, tc_rate_daily=5000.0, draft=8.0,...z_fee=1035376.0)], capacity_unit='TEU', capacity_unit_status='secondary_source', capacity_source_column='Capacity FFE')
+target = 5000, expected = 'Post_panamax'
+
+    @pytest.mark.parametrize("target, expected", [
+        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
+        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
+        (8000, "Super_panamax"), (14000, "Super_panamax"),
+    ])
+    def test_nearest_capacity_class(self, fleet, target, expected):
+>       assert choose_vessel_class(target, fleet).vessel_class == expected
+E       AssertionError: assert 'Panamax_2400' == 'Post_panamax'
+E         - Post_panamax
+E         + Panamax_2400
+
+tests\test_service_feasibility.py:228: AssertionError
+_______ TestVesselClass.test_nearest_capacity_class[8000-Super_panamax] _______
+
+self = <tests.test_service_feasibility.TestVesselClass object at 0x000001C76F3DA5D0>
+fleet = Fleet(classes=[FleetClass(vessel_class='Feeder_450', quantity=24, capacity_teu=900.0, tc_rate_daily=5000.0, draft=8.0,...z_fee=1035376.0)], capacity_unit='TEU', capacity_unit_status='secondary_source', capacity_source_column='Capacity FFE')
+target = 8000, expected = 'Super_panamax'
+
+    @pytest.mark.parametrize("target, expected", [
+        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
+        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
+        (8000, "Super_panamax"), (14000, "Super_panamax"),
+    ])
+    def test_nearest_capacity_class(self, fleet, target, expected):
+>       assert choose_vessel_class(target, fleet).vessel_class == expected
+E       AssertionError: assert 'Post_panamax' == 'Super_panamax'
+E         - Super_panamax
+E         + Post_panamax
+
+tests\test_service_feasibility.py:228: AssertionError
+______ TestWorldSmallPool.test_every_service_is_independently_consistent ______
+
+self = <tests.test_service_feasibility.TestWorldSmallPool object at 0x000001C76F3E9450>
+ws = (<src.optimization.data.Problem object at 0x000001C7743CE4D0>, [Service(id='0', ports=['CNYTN', 'USLAX'], capacity=480...cate_rotation_class=443, legacy_cycle_inconsistent=560, legacy_cycle_checked=603, rejected_samples=[], max_samples=25))
+
+    def test_every_service_is_independently_consistent(self, ws):
+        """Re-derive route closure, time, cycle and vessels without the module under test."""
+        problem, pool, _ = ws
+        spec = {c.vessel_class: c for c in problem.fleet.classes}
+        dm = problem.distance_matrix
+        for s in pool:
+            ports = list(s.ports[:-1] if len(s.ports) > 1 and s.ports[0] == s.ports[-1] else s.ports)
+            assert len(ports) >= 2 and len(set(ports)) == len(ports), s.id
+            nm = sum(dm[ports[i]][ports[(i + 1) % len(ports)]] for i in range(len(ports)))
+            c = spec[s.vessel_class]
+            cycle = nm / (c.design_speed * 24.0) + len(ports) * 1.0       # 24 h per call
+            assert s.distance_nm == pytest.approx(nm), s.id
+            assert s.cycle_time == math.ceil(round(cycle, 9)), s.id
+            assert s.cycle_time + 1e-9 >= nm / (c.max_speed * 24.0), s.id  # sailable at max speed
+            assert s.required_vessels == math.ceil(s.cycle_time / 7.0), s.id
+            assert s.required_vessels <= c.quantity, s.id                   # one departure/week
+            assert s.weekly_cost == c.tc_rate_daily * 7.0, s.id
+            assert s.speed == c.design_speed, s.id
+>           assert s.capacity_unit_status == "provisional", s.id
+E           AssertionError: 0
+E           assert 'secondary_source' == 'provisional'
+E             - provisional
+E             + secondary_source
+
+tests\test_service_feasibility.py:332: AssertionError
+_________ TestWorldSmallPool.test_report_is_arithmetically_consistent _________
+
+self = <tests.test_service_feasibility.TestWorldSmallPool object at 0x000001C76F3EAB10>
+ws = (<src.optimization.data.Problem object at 0x000001C7743CE4D0>, [Service(id='0', ports=['CNYTN', 'USLAX'], capacity=480...cate_rotation_class=443, legacy_cycle_inconsistent=560, legacy_cycle_checked=603, rejected_samples=[], max_samples=25))
+
+    def test_report_is_arithmetically_consistent(self, ws):
+        _, pool, rep = ws
+        d = rep.to_dict()
+        assert d["generated"] == d["accepted"] + d["rejected"]
+        assert d["accepted"] == len(pool)
+        assert sum(d["generated_by_section"].values()) == d["generated"]
+        assert sum(d["accepted_by_section"].values()) == d["accepted"]
+        assert sum(d["accepted_by_class"].values()) == d["accepted"]
+        assert all(d["accepted_by_section"].get(k, 0) <= v for k, v in d["generated_by_section"].items())
+        # (the rejection paths themselves are exercised by the synthetic tests above)
+        assert sum(d["rejections_by_reason"].values()) >= d["rejected"]
+        assert set(d["rejections_by_reason"]) <= set(sf.ALL_REASONS)
+>       assert d["capacity_unit_status"] == "provisional"
+E       AssertionError: assert 'secondary_source' == 'provisional'
+E         - provisional
+E         + secondary_source
+
+tests\test_service_feasibility.py:346: AssertionError
+_____________________ test_regions_count_and_keys_frozen ______________________
+
+    def test_regions_count_and_keys_frozen():
+        data = _artifact()
+        regions = data["regional_results"]
+>       assert len(regions) == 5, f"expected 5 regional results, got {len(regions)}"
+E       AssertionError: expected 5 regional results, got 3
+E       assert 3 == 5
+E        +  where 3 = len([{'agent': 'regional_asia', 'annual_profit': 1560940656.4761903, 'archetype_params': {'archetype_mix': {'direct_ratio'...rgo (GA) service, driven by the 97.4% top-500 share.', 'vessel_bias': 'balanced'}, 'cost_per_service': 2137006.0, ...}])
+
+tests\architecture\test_output_contract.py:121: AssertionError
+============================== warnings summary ===============================
+tests/test_llm.py::test_simple_call
+  C:\Users\WINDOWS\Liner-Worldsmall\Liner_shipping_optimizer\shipping_optimizer\venv\Lib\site-packages\_pytest\python.py:198: PytestReturnNotNoneWarning: Expected None, but tests/test_llm.py::test_simple_call returned True, which will be an error in a future version of pytest.  Did you mean to use `assert` instead of `return`?
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_class_screening.py::TestGeneratorAndRegionalFilterIntegration::test_the_regional_filter_is_not_bypassed_by_screening
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_FORMULA_INDEX.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_ECONOMIC_METRIC_MATRIX.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_METRIC_LINEAGE.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_RL_COMPARISON_MATRIX.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_DATASET_COMPARABILITY.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_PAPER_TRACEABILITY.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_exists_and_parses[MULTI_AGENT_FILE_DEPENDENCY_MAP.json]
+FAILED tests/test_economic_metric_documentation.py::test_artifact_declares_its_generator
+FAILED tests/test_economic_metric_documentation.py::test_every_formula_has_evidence
+FAILED tests/test_economic_metric_documentation.py::test_every_formula_citation_resolves
+FAILED tests/test_economic_metric_documentation.py::test_formula_ids_are_unique
+FAILED tests/test_economic_metric_documentation.py::test_ffe_to_teu_table_has_unreachable_keys
+FAILED tests/test_economic_metric_documentation.py::test_every_rl_cell_carries_rl_ref_provenance
+FAILED tests/test_economic_metric_documentation.py::test_rl_grades_use_the_mandated_vocabulary
+FAILED tests/test_economic_metric_documentation.py::test_rl_comparisons_apply_the_six_criterion_test
+FAILED tests/test_economic_metric_documentation.py::test_no_verdict_ranking_language_in_rl_matrix
+FAILED tests/test_economic_metric_documentation.py::test_grade_summary_matches_the_comparisons
+FAILED tests/test_economic_metric_documentation.py::test_dataset_comparability_records_the_unit_reconciliation
+FAILED tests/test_economic_metric_documentation.py::test_dataset_comparability_grades_are_justified
+FAILED tests/test_economic_metric_documentation.py::test_metric_matrix_classifications_are_in_vocabulary
+FAILED tests/test_economic_metric_documentation.py::test_metric_matrix_declares_non_reconciling_metrics
+FAILED tests/test_economic_metric_documentation.py::test_metric_lineage_stages_are_labelled
+FAILED tests/test_economic_metric_documentation.py::test_dependency_map_totals_are_self_consistent
+FAILED tests/test_economic_metric_documentation.py::test_dependency_edges_reference_known_files
+FAILED tests/test_economic_metric_documentation.py::test_economic_core_is_present_in_the_dependency_graph
+FAILED tests/test_economic_metric_documentation.py::test_main_document_exists_with_required_sections
+FAILED tests/test_economic_metric_documentation.py::test_main_document_defines_the_source_hierarchy
+FAILED tests/test_economic_metric_documentation.py::test_main_document_records_the_llm_influence_verdict
+FAILED tests/test_economic_metric_documentation.py::test_main_document_cites_rl_as_unverified
+FAILED tests/test_economic_metric_documentation.py::test_main_document_avoids_ranking_language
+FAILED tests/test_service_feasibility.py::TestVesselClass::test_nearest_capacity_class[1000-Feeder_800]
+FAILED tests/test_service_feasibility.py::TestVesselClass::test_nearest_capacity_class[1201-Panamax_1200]
+FAILED tests/test_service_feasibility.py::TestVesselClass::test_nearest_capacity_class[2000-Panamax_2400]
+FAILED tests/test_service_feasibility.py::TestVesselClass::test_nearest_capacity_class[5000-Post_panamax]
+FAILED tests/test_service_feasibility.py::TestVesselClass::test_nearest_capacity_class[8000-Super_panamax]
+FAILED tests/test_service_feasibility.py::TestWorldSmallPool::test_every_service_is_independently_consistent
+FAILED tests/test_service_feasibility.py::TestWorldSmallPool::test_report_is_arithmetically_consistent
+FAILED tests/architecture/test_output_contract.py::test_regions_count_and_keys_frozen
+39 failed, 902 passed, 9 xfailed, 1 warning in 52.51s

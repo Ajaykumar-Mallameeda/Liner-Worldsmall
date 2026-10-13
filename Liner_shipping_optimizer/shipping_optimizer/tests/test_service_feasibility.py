@@ -219,10 +219,13 @@ class TestVesselClass:
     def fleet(self):
         return NetworkLoader().load_fleet()
 
+    # Fleet capacities in TEU are 2 x the ``Capacity FFE`` column since Issue 1
+    # (900 / 1600 / 2400 / 4800 / 8400 / 15000); the targets are the previous ones x 2,
+    # so every case keeps its meaning (including the tie 1600 / 2400 -> the smaller class).
     @pytest.mark.parametrize("target, expected", [
-        (100, "Feeder_450"), (450, "Feeder_450"), (1000, "Feeder_800"),   # tie 800/1200 -> smaller
-        (1201, "Panamax_1200"), (2000, "Panamax_2400"), (5000, "Post_panamax"),
-        (8000, "Super_panamax"), (14000, "Super_panamax"),
+        (200, "Feeder_450"), (900, "Feeder_450"), (2000, "Feeder_800"),   # tie 1600/2400 -> smaller
+        (2402, "Panamax_1200"), (4000, "Panamax_2400"), (10000, "Post_panamax"),
+        (16000, "Super_panamax"), (28000, "Super_panamax"),
     ])
     def test_nearest_capacity_class(self, fleet, target, expected):
         assert choose_vessel_class(target, fleet).vessel_class == expected
@@ -329,7 +332,7 @@ class TestWorldSmallPool:
             assert s.required_vessels <= c.quantity, s.id                   # one departure/week
             assert s.weekly_cost == c.tc_rate_daily * 7.0, s.id
             assert s.speed == c.design_speed, s.id
-            assert s.capacity_unit_status == "provisional", s.id
+            assert s.capacity_unit_status == "secondary_source", s.id
 
     def test_report_is_arithmetically_consistent(self, ws):
         _, pool, rep = ws
@@ -343,7 +346,7 @@ class TestWorldSmallPool:
         # (the rejection paths themselves are exercised by the synthetic tests above)
         assert sum(d["rejections_by_reason"].values()) >= d["rejected"]
         assert set(d["rejections_by_reason"]) <= set(sf.ALL_REASONS)
-        assert d["capacity_unit_status"] == "provisional"
+        assert d["capacity_unit_status"] == "secondary_source"
         assert d["capacity_feasibility_is_conditional"] is True
 
     def test_long_loops_fall_back_to_a_class_with_enough_vessels(self, ws):
