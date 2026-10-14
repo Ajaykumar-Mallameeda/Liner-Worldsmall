@@ -85,9 +85,8 @@ export default function MapCanvas({
 
   const sm = optimizationState?.global || {};
   const effectiveServices = selectedServices || sm.selected_services || [];
-  const selectedCount = effectiveServices.length || 547;
-  const totalProfit = sm.weeklyProfit || 1176324858;
-  const coverage = sm.coverage || 50.9;
+  // counts come from the data actually on disk; a missing value is shown as unavailable, never as a demo number
+  const selectedCount = effectiveServices.length;
   const regions = Object.values(optimizationState?.regions || {});
 
   return (
@@ -162,11 +161,11 @@ export default function MapCanvas({
           <div className="text-[8px] font-mono text-slate-400 uppercase tracking-widest mr-2">GLOBAL SUMMARY</div>
           <div className="row">
             <span className="k">PORTS</span>
-            <span className="v">{sm.ports != null ? sm.ports : '47'}</span>
+            <span className="v">{sm.ports != null ? sm.ports : '—'}</span>
           </div>
           <div className="row">
             <span className="k">LANES</span>
-            <span className="v">{sm.lanes != null ? (sm.lanes >= 1000 ? (sm.lanes / 1000).toFixed(1) + 'K' : sm.lanes) : '1.8K'}</span>
+            <span className="v">{sm.lanes != null ? (sm.lanes >= 1000 ? (sm.lanes / 1000).toFixed(1) + 'K' : sm.lanes) : '—'}</span>
           </div>
           <div className="row">
             <span className="k">SERVICES</span>
@@ -174,7 +173,7 @@ export default function MapCanvas({
           </div>
           <div className="row">
             <span className="k">WEEKLY TEU</span>
-            <span className="v">{sm.weeklyDemand != null ? `${(sm.weeklyDemand / 1000).toFixed(0)}K` : '276K'}</span>
+            <span className="v">{sm.weeklyDemand != null ? `${(sm.weeklyDemand / 1000).toFixed(0)}K` : '—'}</span>
           </div>
         </div>
       </div>

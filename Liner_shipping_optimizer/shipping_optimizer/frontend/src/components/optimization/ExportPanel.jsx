@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from 'react';
+import { csvNumber } from '../../utils/metrics.js';
 
 export default function ExportPanel({ optimizationState }) {
   const services = useMemo(() => optimizationState.global.selected_services || [], [optimizationState.global.selected_services]);
@@ -45,7 +46,7 @@ export default function ExportPanel({ optimizationState }) {
     const headers = ['ID','Ports','Load','Capacity','VesselClass','WeeklyProfit','Margin','Region'];
     const rows = services.map(s => [
       s.id, (s.ports || []).join(';'), s.load, s.capacity, s.vessel_class,
-      (s.weekly_profit || 0).toFixed(2), (s.margin_pct || 0).toFixed(2), s.region
+      csvNumber(s.weekly_profit), csvNumber(s.margin_pct), s.region
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

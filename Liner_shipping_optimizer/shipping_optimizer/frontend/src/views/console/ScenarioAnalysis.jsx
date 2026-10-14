@@ -1007,7 +1007,7 @@ export default function ScenarioAnalysis(props) {
       h(Provenance, {
         source: 'pipeline_output.json (summary_metrics, selected_services, regional_results)',
         sourceStatus: 'available',
-        attribution: `${baseline.runId} · Canonical baseline: ITER ${String(baseline.selectedIteration).padStart(2, '0')}`,
+        attribution: `${baseline.runId ?? 'run id unavailable'} · Canonical baseline: ITER ${String(baseline.selectedIteration).padStart(2, '0')}`,
         license: 'Internal what-if simulation',
         recordCount: baseline.totalServices,
         snapshotId: baseline.evaluatedAt,

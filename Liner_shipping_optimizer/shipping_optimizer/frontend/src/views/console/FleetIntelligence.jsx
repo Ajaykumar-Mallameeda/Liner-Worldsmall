@@ -240,7 +240,7 @@ export default function FleetIntelligence(props) {
                         h('div', { className: 'p12-kv-grid', style: { marginTop: 6 } },
                           h(Kv, { k: 'capacity', v: fmtNum(st.capacity) }),
                           h(Kv, { k: 'load', v: fmtNum(st.load) }),
-                          h(Kv, { k: 'util', v: st.capacity > 0 ? ((st.load / st.capacity) * 100).toFixed(1) + '%' : EM })
+                          h(Kv, { k: 'leg load', v: st.offeredLegs > 0 ? ((st.carriedLegs / st.offeredLegs) * 100).toFixed(1) + '%' : EM })
                         )
                       );
                     })

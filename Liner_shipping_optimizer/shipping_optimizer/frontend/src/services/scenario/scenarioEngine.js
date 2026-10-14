@@ -7,6 +7,7 @@
  */
 
 import { CHOKEPOINT_DEFINITIONS, SEVERITY_THRESHOLDS } from './scenarioTypes.js';
+import { numOrNull } from '../../utils/metrics.js';
 
 /**
  * Normalizes raw pipeline output into a consistent baseline state.
@@ -21,28 +22,48 @@ export function extractBaselineState(runtimeOrJson) {
   const iterSelection = gbl.iteration_selection || runtimeOrJson.iteration_selection || {};
   const selectedIter = gbl.selected_iteration ?? gbl.final_selected_iteration ?? gbl.best_iteration ?? 0;
 
-  // Global economic totals
-  const weeklyProfit = Number(summary.weekly_profit ?? gbl.weekly_profit ?? gbl.weeklyProfit ?? 1161089814.67);
-  const annualProfit = Number(summary.annual_profit ?? gbl.annual_profit ?? gbl.annualProfit ?? weeklyProfit * 52);
-  const fuelCost = Number(summary.fuel_cost ?? gbl.fuel_cost ?? gbl.fuelCost ?? 1701742221.48);
-  const portCost = Number(summary.port_cost ?? gbl.port_cost ?? gbl.portCost ?? 91944229.28);
-  const transshipCost = Number(summary.transship_cost ?? gbl.transship_cost ?? 63532725.33);
-  const totalCost = Number(summary.total_cost ?? summary.cost ?? gbl.totalCost ?? gbl.cost ?? 2073980426.09);
-  const operatingCost = Number(summary.operating_cost ?? gbl.operatingCost ?? 216761250.0);
-  const revenue = Number(summary.revenue ?? gbl.revenue ?? (weeklyProfit + totalCost));
+  // Global economic totals.  Every figure must come from the run on disk (summary_metrics, the global block
+  // or the independent ledger's weekly totals).  A missing or non-numeric figure makes the baseline
+  // UNAVAILABLE (null): no demo number is substituted, and a genuine 0 is kept.
+  const ledgerWeekly = (runtimeOrJson.network_ledger && runtimeOrJson.network_ledger.weekly_usd) || {};
+  const pick = (...vals) => {
+    for (const v of vals) {
+      const n = numOrNull(v);
+      if (n !== null) return n;
+    }
+    return null;
+  };
+  const weeklyProfit = pick(summary.weekly_profit, gbl.weekly_profit, gbl.weeklyProfit, ledgerWeekly.operating_profit);
+  const fuelCost = pick(summary.fuel_cost, gbl.fuel_cost, gbl.fuelCost, ledgerWeekly.fuel_cost);
+  const portCost = pick(summary.port_cost, gbl.port_cost, gbl.portCost,
+    ledgerWeekly.port_call_fixed_cost != null ? Number(ledgerWeekly.port_call_fixed_cost) + Number(ledgerWeekly.port_variable_cost || 0) : null);
+  const transshipCost = pick(summary.transship_cost, gbl.transship_cost, ledgerWeekly.transshipment_cost);
+  const totalCost = pick(summary.total_cost, summary.cost, gbl.totalCost, gbl.cost, ledgerWeekly.total_operating_cost);
+  const operatingCost = pick(summary.operating_cost, gbl.operatingCost, ledgerWeekly.vessel_cost);
+  const revenue = pick(summary.revenue, gbl.revenue, ledgerWeekly.revenue);
+  const annualProfit = pick(summary.annual_profit, gbl.annual_profit, gbl.annualProfit) ?? (weeklyProfit !== null ? weeklyProfit * 52 : null);
 
-  // Operational totals
-  const satisfiedDemand = Number(summary.satisfied_demand ?? gbl.satisfiedDemand ?? gbl.satisfied_demand ?? 922177.87);
-  const unservedDemand = Number(summary.unserved_demand ?? gbl.unserved ?? gbl.unserved_demand ?? 973051.73);
-  const totalDemand = (satisfiedDemand + unservedDemand) > 0 ? (satisfiedDemand + unservedDemand) : 1895229.6;
-  const coverage = Number(summary.coverage ?? gbl.coverage ?? (totalDemand > 0 ? (satisfiedDemand / totalDemand) * 100 : 48.66));
-  const profitMargin = revenue > 0 ? (weeklyProfit / revenue) * 100 : 35.9;
-  const totalServices = services.length > 0 ? services.length : Number(summary.total_services ?? gbl.totalServices ?? 565);
+  const satisfiedDemand = pick(summary.satisfied_demand, gbl.satisfiedDemand, gbl.satisfied_demand);
+  const unservedDemand = pick(summary.unserved_demand, gbl.unserved, gbl.unserved_demand);
+  const totalDemand = satisfiedDemand !== null && unservedDemand !== null ? satisfiedDemand + unservedDemand : null;
+  const coverage = pick(summary.coverage, gbl.coverage) ?? (totalDemand > 0 ? (satisfiedDemand / totalDemand) * 100 : null);
+  const totalServices = services.length > 0 ? services.length : pick(summary.total_services, gbl.totalServices);
+
+  const required = { weeklyProfit, revenue, totalCost, fuelCost, portCost, transshipCost, operatingCost,
+    satisfiedDemand, unservedDemand, coverage, totalServices };
+  const missing = Object.keys(required).filter((k) => required[k] === null);
+  if (missing.length > 0) {
+    // the scenario playground shows its "awaiting authoritative baseline" state for a null baseline
+    if (typeof console !== 'undefined' && console.warn) console.warn('scenario baseline unavailable; missing: ' + missing.join(', '));
+    return null;
+  }
+  if (!(revenue > 0)) return null;               // a margin needs a positive revenue base
+  const profitMargin = (weeklyProfit / revenue) * 100;
 
   return {
     selectedIteration: selectedIter,
     selectionMethod: iterSelection.selection_method || 'deterministic_multi_objective',
-    confidenceScore: iterSelection.confidence ?? 0.95,
+    confidenceScore: numOrNull(iterSelection.confidence),
     weeklyProfit,
     annualProfit,
     revenue,
@@ -60,7 +81,7 @@ export function extractBaselineState(runtimeOrJson) {
     services,
     regionalResults,
     evaluatedAt: rawHealthTime(gbl) || new Date().toISOString(),
-    runId: gbl.health_status?.run_id || gbl.run_id || 'run-03',
+    runId: gbl.health_status?.run_id || gbl.run_id || null,
   };
 }
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { fmt, fmtNum } from '../../utils/formatters.js';
+import { fmtPct, fmtOr, networkLegLoadFactor, serviceLegLoadFactor, sumOrNull } from '../../utils/metrics.js';
 
 export default function RouteTable({ optimizationState }) {
   const [sortKey, setSortKey] = useState('profit');
@@ -50,9 +51,9 @@ export default function RouteTable({ optimizationState }) {
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: 'Total Routes', value: fmtNum(services.length), color: '#00d4ff' },
-          { label: 'Total Weekly Profit', value: fmt(services.reduce((s, sv) => s + (sv.weekly_profit || 0), 0)), color: '#10b981' },
+          { label: 'Total Weekly Profit', value: fmtOr(sumOrNull(services, (sv) => sv.weekly_profit), fmt), color: '#10b981' },
           { label: 'Total TEU Moved', value: `${(services.reduce((s, sv) => s + (sv.load || 0), 0) / 1000).toFixed(0)}K`, color: '#8b5cf6' },
-          { label: 'Avg Load Factor', value: services.length ? `${(services.reduce((s, sv) => s + (sv.load || 0), 0) / services.reduce((s, sv) => s + (sv.capacity || 0), 0) * 100).toFixed(1)}%` : '—', color: '#f59e0b' },
+          { label: 'Network Leg Load Factor', value: fmtPct(networkLegLoadFactor(services)), color: '#f59e0b' },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl p-3 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
             <div className="text-lg font-bold font-mono" style={{ color }}>{value}</div>
@@ -99,12 +100,12 @@ export default function RouteTable({ optimizationState }) {
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.ports?.join(' → ')}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.load)} TEU</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.capacity)} TEU</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: s.capacity && (s.load / s.capacity) > 0.9 ? '#10b981' : '#f59e0b' }}>
-                  {s.capacity ? ((s.load / s.capacity) * 100).toFixed(0) : 0}%
+                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (serviceLegLoadFactor(s) ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>
+                  {fmtPct(serviceLegLoadFactor(s), 0)}
                 </td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-emerald-400">${(s.weekly_profit / 1000).toFixed(0)}K</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (s.margin_pct || 0) > 50 ? '#10b981' : (s.margin_pct || 0) > 0 ? '#f59e0b' : '#ef4444' }}>
-                  {s.margin_pct?.toFixed(1)}%
+                <td className="px-2 py-1.5 text-[10px] font-mono text-emerald-400">{fmtOr(s.weekly_profit, (v) => `$${(v / 1000).toFixed(0)}K`)}</td>
+                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (s.margin_pct ?? 0) > 50 ? '#10b981' : (s.margin_pct ?? 0) > 0 ? '#f59e0b' : '#ef4444' }}>
+                  {fmtOr(s.margin_pct, (v) => `${v.toFixed(1)}%`)}
                 </td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.vessel_class}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.region}</td>
@@ -138,9 +139,9 @@ export default function RouteTable({ optimizationState }) {
               { label: 'Route', value: selectedService.ports?.join(' → ') || '—', color: '#00d4ff' },
               { label: 'Vessel Class', value: selectedService.vessel_class || '—', color: '#8b5cf6' },
               { label: 'Load / Capacity', value: `${fmtNum(selectedService.load)} / ${fmtNum(selectedService.capacity)} TEU`, color: '#10b981' },
-              { label: 'Leg Load Factor', value: selectedService.leg_load_factor != null ? `${(selectedService.leg_load_factor * 100).toFixed(1)}%` : '—', color: '#f59e0b' },
-              { label: 'Weekly Profit', value: fmt(selectedService.weekly_profit || 0), color: '#10b981' },
-              { label: 'Profit Margin', value: `${(selectedService.margin_pct || 0).toFixed(1)}%`, color: (selectedService.margin_pct || 0) > 0 ? '#10b981' : '#ef4444' },
+              { label: 'Leg Load Factor', value: fmtPct(serviceLegLoadFactor(selectedService)), color: '#f59e0b' },
+              { label: 'Weekly Profit', value: fmtOr(selectedService.weekly_profit, fmt), color: '#10b981' },
+              { label: 'Profit Margin', value: fmtOr(selectedService.margin_pct, (v) => `${v.toFixed(1)}%`), color: (selectedService.margin_pct ?? 0) > 0 ? '#10b981' : '#ef4444' },
               { label: 'Revenue', value: fmt(selectedService.revenue || 0), color: '#00d4ff' },
               { label: 'Cost', value: fmt(selectedService.cost || 0), color: '#ef4444' },
               { label: 'Region', value: selectedService.region || '—', color: '#6366f1' },

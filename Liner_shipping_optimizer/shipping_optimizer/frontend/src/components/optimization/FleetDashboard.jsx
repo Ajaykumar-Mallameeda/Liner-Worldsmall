@@ -1,5 +1,19 @@
 import { useMemo, useState } from 'react';
 import { fmt, fmtNum } from '../../utils/formatters.js';
+import { fmtPct, fmtOr, serviceLegLoadFactor, numOrNull } from '../../utils/metrics.js';
+
+// carried / offered TEU-legs (leg load factor); services without the leg fields do not enter the ratio
+function addLegs(acc, s) {
+  const c = numOrNull(s.carried_teu_legs);
+  const o = numOrNull(s.offered_teu_legs);
+  if (c !== null && o !== null) {
+    acc.carriedLegs += c;
+    acc.offeredLegs += o;
+  }
+}
+function legUtil(acc) {
+  return acc.offeredLegs > 0 ? fmtPct(acc.carriedLegs / acc.offeredLegs) : fmtPct(null);
+}
 
 export default function FleetDashboard({ optimizationState }) {
   const [sortKey, setSortKey] = useState('count');
@@ -17,13 +31,15 @@ export default function FleetDashboard({ optimizationState }) {
     svcs.forEach(s => {
       const cls = s.vessel_class || 'Unknown';
       const reg = s.region || 'Unknown';
-      if (!classes[cls]) classes[cls] = { count: 0, totalCap: 0, totalLoad: 0, totalProfit: 0 };
+      if (!classes[cls]) classes[cls] = { count: 0, totalCap: 0, totalLoad: 0, totalProfit: 0, carriedLegs: 0, offeredLegs: 0 };
       classes[cls].count++;
+      addLegs(classes[cls], s);
       classes[cls].totalCap += s.capacity || 0;
       classes[cls].totalLoad += s.load || 0;
       classes[cls].totalProfit += s.weekly_profit || 0;
-      if (!byRegion[reg]) byRegion[reg] = { count: 0, totalCap: 0, totalLoad: 0 };
+      if (!byRegion[reg]) byRegion[reg] = { count: 0, totalCap: 0, totalLoad: 0, carriedLegs: 0, offeredLegs: 0 };
       byRegion[reg].count++;
+      addLegs(byRegion[reg], s);
       byRegion[reg].totalCap += s.capacity || 0;
       byRegion[reg].totalLoad += s.load || 0;
     });
@@ -40,8 +56,8 @@ export default function FleetDashboard({ optimizationState }) {
       list = list.filter(s => s.id?.toLowerCase().includes(t) || s.ports?.some(p => p.toLowerCase().includes(t)));
     }
     list = [...list].sort((a, b) => {
-      const av = sortKey === 'profit' ? (a.weekly_profit || 0) : sortKey === 'load' ? (a.load || 0) : sortKey === 'capacity' ? (a.capacity || 0) : sortKey === 'util' ? ((a.load || 0) / (a.capacity || 1)) : 0;
-      const bv = sortKey === 'profit' ? (b.weekly_profit || 0) : sortKey === 'load' ? (b.load || 0) : sortKey === 'capacity' ? (b.capacity || 0) : sortKey === 'util' ? ((b.load || 0) / (b.capacity || 1)) : 0;
+      const av = sortKey === 'profit' ? (a.weekly_profit || 0) : sortKey === 'load' ? (a.load || 0) : sortKey === 'capacity' ? (a.capacity || 0) : sortKey === 'util' ? (serviceLegLoadFactor(a) ?? -1) : 0;
+      const bv = sortKey === 'profit' ? (b.weekly_profit || 0) : sortKey === 'load' ? (b.load || 0) : sortKey === 'capacity' ? (b.capacity || 0) : sortKey === 'util' ? (serviceLegLoadFactor(b) ?? -1) : 0;
       return sortDir === 'asc' ? av - bv : bv - av;
     });
     return list;
@@ -83,12 +99,12 @@ export default function FleetDashboard({ optimizationState }) {
         <div className="space-y-2">
           {classes.map(([cls, data]) => {
             const pct = ((data.count / fleet.total) * 100).toFixed(0);
-            const util = data.totalCap > 0 ? ((data.totalLoad / data.totalCap) * 100).toFixed(1) : 0;
+            const util = legUtil(data);
             return (
               <div key={cls}>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-white/80 font-mono">{cls}</span>
-                  <span className="text-white/50 font-mono">{data.count} vessels · {fmtNum(data.totalCap)} TEU · {util}% util</span>
+                  <span className="text-white/50 font-mono">{data.count} services · {fmtNum(data.totalCap)} TEU/departure · {util} leg load</span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
                   <div className="h-full rounded-full transition-all duration-500"
@@ -104,14 +120,15 @@ export default function FleetDashboard({ optimizationState }) {
       <div className="grid grid-cols-5 gap-3">
         {Object.entries(fleet.byRegion).map(([reg, data]) => {
           const color = { Asia: '#00d4ff', Europe: '#7c3aed', Americas: '#10b981', 'Middle East': '#f59e0b', Africa: '#ef4444' }[reg] || '#00d4ff';
-          const utilPct = data.totalCap > 0 ? ((data.totalLoad / data.totalCap) * 100).toFixed(1) : 0;
+          const utilFrac = data.offeredLegs > 0 ? data.carriedLegs / data.offeredLegs : null;
+          const utilPct = legUtil(data);
           return (
             <div key={reg} className="rounded-xl p-3 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
               <div className="text-[10px] font-mono font-bold" style={{ color }}>{reg}</div>
               <div className="text-lg font-bold font-mono text-white/90 mt-1">{data.count}</div>
-              <div className="text-[9px] text-white/40 font-mono">vessels</div>
-              <div className="text-[10px] text-white/50 font-mono mt-1">{(data.totalLoad / 1000).toFixed(0)}K / {(data.totalCap / 1000).toFixed(0)}K TEU</div>
-              <div className="text-[9px] font-mono" style={{ color: parseFloat(utilPct) > 90 ? '#10b981' : '#f59e0b' }}>{utilPct}% util</div>
+              <div className="text-[9px] text-white/40 font-mono">services</div>
+              <div className="text-[10px] text-white/50 font-mono mt-1">{(data.totalLoad / 1000).toFixed(0)}K TEU/wk carried</div>
+              <div className="text-[9px] font-mono" style={{ color: (utilFrac ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>{utilPct} leg load</div>
             </div>
           );
         })}
@@ -142,7 +159,7 @@ export default function FleetDashboard({ optimizationState }) {
               <SortHeader k="id" label="Service" />
               <SortHeader k="load" label="Load" />
               <SortHeader k="capacity" label="Capacity" />
-              <SortHeader k="util" label="Util %" />
+              <SortHeader k="util" label="Leg load %" />
               <SortHeader k="profit" label="Profit" />
               <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Class</th>
               <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Region</th>
@@ -155,10 +172,10 @@ export default function FleetDashboard({ optimizationState }) {
                 <td className="px-2 py-1.5 text-[10px] font-mono text-cyan-400">{s.id}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.load)}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.capacity)}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (s.load / s.capacity) > 0.9 ? '#10b981' : '#f59e0b' }}>
-                  {s.capacity > 0 ? ((s.load / s.capacity) * 100).toFixed(0) : 0}%
+                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (serviceLegLoadFactor(s) ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>
+                  {fmtPct(serviceLegLoadFactor(s), 0)}
                 </td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-emerald-400">${(s.weekly_profit / 1000).toFixed(0)}K</td>
+                <td className="px-2 py-1.5 text-[10px] font-mono text-emerald-400">{fmtOr(s.weekly_profit, (v) => `$${(v / 1000).toFixed(0)}K`)}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.vessel_class}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.region}</td>
                 <td className="px-2 py-1.5 text-[10px] font-mono text-white/40">{s.ports?.[0]} → {s.ports?.[s.ports.length - 1]}</td>
