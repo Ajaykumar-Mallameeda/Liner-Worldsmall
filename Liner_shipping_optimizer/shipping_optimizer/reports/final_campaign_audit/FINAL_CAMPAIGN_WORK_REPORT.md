@@ -443,3 +443,6 @@ Explicit exclusions: no WorldLarge, no Baltic/WAF, no change of canonical data o
 | Data hashes | fleet `a8986ee2…`, demand `fd46294e…`, ports `b6c8c3b6…`, dist_dense `8edf8cdf…` (`reports/worldsmall_hashes.txt`); artifact hashes: committed `37c775c8…`, regenerated `f825d01b…`, post-orchestrator-1 `89623f35…` |
 | Missing evidence | LINERLIB technical report (DTU 19.2010); per-flow handling detail in the authors' log; any owner approval record; a 20-seed batch on current code; baseline-tag suite re-run; browser run of the frontend |
 | Final HEAD | `64bcf73` (unchanged by this audit); the report and the two edited files are uncommitted |
+
+---
+**Continuation (2026-10-15):** current-code 20-seed experiment, decision workstreams and hardening are in `CAMPAIGN_CONTINUATION_REPORT.md`. It supersedes the 32.28 / 38.27 M headline figures with 24.71 / 30.12 M (default / VUB+LS) on the current cost model.
