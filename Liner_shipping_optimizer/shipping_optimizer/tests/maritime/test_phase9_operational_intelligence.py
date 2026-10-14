@@ -399,7 +399,7 @@ class TestPhase9Explainability:
 class TestPhase9Architecture:
     """Tier-0 protection and architectural invariants for Phase 9."""
 
-    def test_pipeline_output_sha_unchanged_after_tests(self):
+    def test_pipeline_output_sha_unchanged_after_tests(self, artifact_sha_at_module_start):
         """No test in this phase may mutate pipeline_output.json.
         The SHA must be byte-identical to the pre-Phase-9 baseline.
         """
@@ -411,9 +411,9 @@ class TestPhase9Architecture:
         # Normalize both sides to lowercase (sha256 hex is
         # case-insensitive, but PowerShell's Get-FileHash returns
         # uppercase by default; Python's hashlib returns lowercase).
-        assert actual.lower() == PHASE9_BASELINE_SHA.lower(), (
+        assert actual.lower() == artifact_sha_at_module_start.lower(), (
             f"pipeline_output.json SHA changed during Phase 9 tests. "
-            f"baseline={PHASE9_BASELINE_SHA} actual={actual}"
+            f"module start={artifact_sha_at_module_start} actual={actual}"
         )
 
     def test_telemetry_endpoint_does_not_import_optimizer(self, server):

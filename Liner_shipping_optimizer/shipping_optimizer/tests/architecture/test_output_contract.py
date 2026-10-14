@@ -56,6 +56,9 @@ FROZEN_REGION_KEYS = {
     "profit_per_service", "cost_per_service", "uncovered_teu", "hub_ports",
     "archetype_params", "regional_policy", "strategy", "explanation",
     "selected_services", "elapsed_sec", "llm_actuation",
+    # Added deliberately (adaptive-budget Phase A/B/C, present in the frozen baseline tree): GA / MILP telemetry
+    # of the regional stage.  Diagnostic only, no economic meaning.
+    "ga_telemetry", "milp_telemetry",
 }
 
 FROZEN_SERVICE_KEYS = {
@@ -115,10 +118,20 @@ def test_iteration_budget_three():
     assert len(data["iteration_results"]) == 3
 
 
+def _expected_region_count():
+    """The orchestrator clusters the ports into 3 regions below 50 ports and into 5 otherwise
+    (``OrchestratorAgent``: ``n_clusters = 3 if num_ports < 50 else 5``).  WorldSmall has 47 ports -> 3.
+    (The test used to hard-code 5, a count that belonged to an earlier larger instance.)"""
+    ports_csv = REPO_ROOT / "data" / "raw" / "WorldSmall" / "ports.csv"
+    n_ports = sum(1 for line in ports_csv.read_text(encoding="utf-8").splitlines()[1:] if line.strip())
+    return 3 if n_ports < 50 else 5
+
+
 def test_regions_count_and_keys_frozen():
     data = _artifact()
     regions = data["regional_results"]
-    assert len(regions) == 5, f"expected 5 regional results, got {len(regions)}"
+    expected = _expected_region_count()
+    assert len(regions) == expected, f"expected {expected} regional results, got {len(regions)}"
     for i, r in enumerate(regions):
         extras = set(r) - FROZEN_REGION_KEYS
         missing = FROZEN_REGION_KEYS - set(r)

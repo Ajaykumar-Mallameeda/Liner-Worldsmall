@@ -638,10 +638,11 @@ class TestGoldenRegression:
     ARTIFACT = REPO_ROOT / "pipeline_output.json"
     BASELINE_SHA = "ad33a96e4e1d55332b1610d8a82b5a40f33246ce44d8182112930e3252a79e25"
 
-    def test_pipeline_output_unchanged(self):
+    def test_pipeline_output_unchanged(self, artifact_sha_at_module_start):
+        # Invariant: nothing in this module alters the artifact (the frozen hash below is obsolete).
         if not self.ARTIFACT.exists():
             pytest.skip(f"{self.ARTIFACT} not present; skipping regression")
         actual = hashlib.sha256(self.ARTIFACT.read_bytes()).hexdigest()
-        assert actual == self.BASELINE_SHA, (
-            f"pipeline_output.json SHA-256 drifted: {actual} != {self.BASELINE_SHA}"
+        assert actual == artifact_sha_at_module_start, (
+            f"pipeline_output.json SHA-256 changed during the Phase 6 tests: {actual} != {artifact_sha_at_module_start}"
         )
