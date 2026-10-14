@@ -36,4 +36,6 @@ def test_nothing_unsourced_is_labelled_sourced():
         assert by[k]["status"] == "PROVISIONAL"
     for k in ("fuel_grade", "weekly_frequency", "transit_scope"):
         assert by[k]["status"] == "UNVERIFIED"
-    assert by["canal_fees"]["status"] == "NOT_MODELLED"
+    # canal fees are charged by the ledger (decision phase, LINERLIB reference rule): the register must not say "not charged"
+    assert by["canal_fees"]["status"] == "SOURCED_PRIMARY_CODE"
+    assert "not charged" not in by["canal_fees"]["value"]
