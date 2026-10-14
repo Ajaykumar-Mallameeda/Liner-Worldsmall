@@ -101,6 +101,12 @@ class NetworkSolution:
     # set when the integer problem used a path set rebuilt for the LP-support services
     # (``path_rebuild``): flows then index THIS dict, not the caller's ``paths_by_od``
     paths_by_od: Optional[Dict] = None
+    # raw closure facts behind the application-level conclusion (see ``solve_semantics``)
+    closed_by_solver: Optional[bool] = None            # CBC sol_status == Optimal (HiGHS: proven within its gap)
+    restricted_to_lp_support: bool = False             # integer problem solved on the LP-support services only
+    time_limit_reached: bool = False
+    integer_phase_sec: float = 0.0
+    integer_phase_budget_sec: float = 0.0
 
     @property
     def usable(self) -> bool:
@@ -486,6 +492,7 @@ def solve_network(
         sol.n_services_restricted_to = len(services)
 
     # ---- phase 2: integer problem on the (restricted) service set --------------------
+    t_int0 = time.perf_counter()
     res = _build_and_solve(models, demands, paths_int, class_vessel_limit, services,
                            integer=True, penalty=unserved_penalty_per_teu,
                            fixed=fixed_frequencies, initial=initial_frequencies,
@@ -508,6 +515,8 @@ def solve_network(
     sol.n_variables = len(res["f"]) + len(res["n"]) + len(res["q"]) + len(res["u"])
     sol.n_constraints = len(prob.constraints)
     sol.runtime_sec = time.perf_counter() - t0
+    sol.integer_phase_sec = time.perf_counter() - t_int0
+    sol.integer_phase_budget_sec = float(budget)
 
     if res["error"]:
         sol.status, sol.message = "solver_error", res["error"]
@@ -545,6 +554,9 @@ def solve_network(
 
     closed = getattr(prob, "sol_status", 1) == pulp.LpSolutionOptimal
     sol.status = "optimal" if (closed and not dropped) else "feasible"
+    sol.closed_by_solver = bool(closed)
+    sol.restricted_to_lp_support = bool(dropped)
+    sol.time_limit_reached = bool((not closed) and sol.integer_phase_sec >= 0.97 * float(budget))
     sol.objective_value = float(pulp.value(prob.objective) or 0.0)
     sol.frequencies = {si: int(round(f[si].varValue or 0)) for si in res["active"]}
     sol.vessels = {si: int(round(n[si].varValue or 0)) for si in res["active"]}

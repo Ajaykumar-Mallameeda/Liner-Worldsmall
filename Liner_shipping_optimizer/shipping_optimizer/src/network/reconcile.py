@@ -30,6 +30,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from src.network.solve_semantics import classify_final_plan, classify_solve
 from src.network.economics import EconomicsAssumptions, assumptions_for_problem
 from src.network.assumption_register import build as _assumption_register
 from src.network.class_variants import (
@@ -174,11 +175,14 @@ def _fallback_owner(proposers_of_sid: Sequence[str], owner_of_sid: Optional[str]
 
 
 def _capped_gap(plan):
+    """(gap USD, gap % of bound) of the capped MILP: its incumbent versus its own bound; never negative."""
     m = getattr(plan, "milp_stage", None) or {}
     inc, bd = m.get("incumbent_profit_usd_per_week"), m.get("relaxation_bound_usd_per_week")
     if inc is None or bd is None:
         return None, None
-    return float(bd) - float(inc), (100.0 * (float(bd) - float(inc)) / abs(float(bd)) if bd else None)
+    c = classify_solve(usable=True, closed=False, restricted=False, time_limit_reached=False,
+                       incumbent=float(inc), bound=float(bd))
+    return c["gap_usd_per_week"], c["gap_pct_of_bound"]
 
 
 def _capped_model_block(plan, led) -> Dict:
@@ -187,6 +191,16 @@ def _capped_model_block(plan, led) -> Dict:
     m.update({"gap_usd_per_week": usd, "gap_pct_of_bound": pct,
               "scope": "model over the retained (capped) path set, restricted to the LP-support services; "
                        "the bound is valid for this model only"})
+    # application-level conclusion; ``solver_status`` stays the raw backend value.  Older plans that were
+    # built without the closure facts get a conservative conclusion (never "proven_optimal").
+    if "conclusion" not in m:
+        m.update(classify_solve(usable=m.get("incumbent_profit_usd_per_week") is not None, closed=False,
+                                restricted=True, time_limit_reached=False,
+                                incumbent=m.get("incumbent_profit_usd_per_week"),
+                                bound=m.get("relaxation_bound_usd_per_week")))
+        m["gap_usd_per_week"], m["gap_pct_of_bound"] = usd, pct
+    m.setdefault("solver_status_semantics",
+                 "raw backend status; 'Optimal' does not by itself prove optimality (see conclusion)")
     return m
 
 
@@ -194,14 +208,16 @@ def _final_plan_block(plan, led) -> Dict:
     m = getattr(plan, "milp_stage", None) or {}
     inc, bd = m.get("incumbent_profit_usd_per_week"), m.get("relaxation_bound_usd_per_week")
     final = float(led.operating_profit)
-    exceeds = (bd is not None and final > float(bd) + 1e-6 * max(1.0, abs(float(bd))))
+    fp = classify_final_plan(final=final, bound=bd)
     return {
         "profit_usd_per_week": final,
         "post_solve_change_usd_per_week": (final - float(inc)) if inc is not None else None,
         "post_solve_steps": {"local_search_applied": bool((getattr(plan, "local_search", {}) or {}).get("applied")),
                              "flow_reoptimisation_applied": bool((plan.flow_reopt or {}).get("applied")),
                              "profit_floor_repair_applied": bool(((plan.flow_reopt or {}).get("repair") or {}).get("applied"))},
-        "exceeds_capped_model_bound": bool(exceeds),
+        "exceeds_capped_model_bound": fp["exceeds_capped_model_bound"],
+        "conclusion": fp["conclusion"],
+        "optimality_claim": fp["optimality_claim"],
         "scope": "ledger-verified plan after post-solve steps; it may use paths and services outside the capped "
                  "model, so it is not comparable with the capped model's bound and a value above the bound "
                  "is not a negative gap and does not prove optimality",
@@ -503,6 +519,10 @@ def reconcile(
         },
         "optimality": {
             "milp_status": plan.status,
+            # raw backend status next to the application-level conclusion ("Optimal" is NOT a proof; see
+            # src/network/solve_semantics.py)
+            "solver_status_raw": _capped_model_block(plan, led).get("solver_status"),
+            "solve_conclusion": _capped_model_block(plan, led).get("conclusion"),
             "relaxation_upper_bound_usd_per_week": sol.relaxation_bound,
             # the gap is a property of the CAPPED MODEL: its incumbent as the solver returned it versus
             # its own bound.  The final plan (after local search / flow re-optimisation over the full

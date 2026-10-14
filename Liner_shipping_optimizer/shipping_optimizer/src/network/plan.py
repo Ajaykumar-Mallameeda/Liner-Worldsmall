@@ -28,6 +28,7 @@ from src.network.local_search import (
     variants_from_environment as local_search_variants_from_environment,
     variants_floor_from_environment as local_search_variants_floor_from_environment,
 )
+from src.network.solve_semantics import classify_solve
 from src.network.network_milp import NetworkSolution, solve_network
 from src.network.paths import (
     BUDGET_FIXED, DEFAULT_MAX_PATHS_PER_OD, SELECT_FASTEST, OdPath, PathConfig, PathStats, build_paths,
@@ -231,6 +232,14 @@ class NetworkPlanner:
             "mip_gap_reported_by_backend": sol.mip_gap, "backend": sol.solver_backend,
             "services_in_integer_problem": sol.n_services_restricted_to,
         }
+        # ``solver_status`` above is the RAW backend status ("Optimal" = the solver returned normally);
+        # the application-level claim the evidence supports is ``conclusion`` (see solve_semantics).
+        res.milp_stage["solver_status_semantics"] = (
+            "raw backend status; 'Optimal' does not by itself prove optimality (see conclusion)")
+        res.milp_stage.update(classify_solve(
+            usable=sol.usable, closed=bool(sol.closed_by_solver), restricted=sol.restricted_to_lp_support,
+            time_limit_reached=sol.time_limit_reached,
+            incumbent=res.milp_stage["incumbent_profit_usd_per_week"], bound=sol.relaxation_bound))
         res.status = sol.status
         res.message = sol.message
         res.flow_reopt = {"applied": False, "reason": "disabled"}
