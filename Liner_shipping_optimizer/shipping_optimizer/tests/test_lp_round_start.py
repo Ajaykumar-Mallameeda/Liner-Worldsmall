@@ -70,3 +70,47 @@ def test_off_is_the_baseline_and_on_gives_a_valid_plan(monkeypatch):
     assert on.ok and on.ledger.valid and on.reconciliation["reconciled"] is True
     assert "lp_round_start" in on.solution.formulation
     assert on.ledger.operating_profit >= base.ledger.operating_profit - 1e-6      # same small instance: the optimum is reached either way
+
+
+# ----------------------------------------------------------------- LINER_MILP_SUPPORT_CAP
+class _V:
+    def __init__(self, v):
+        self.varValue = v
+
+
+class _P:
+    def __init__(self, services):
+        self.services = services
+
+
+def test_support_cap_flag(monkeypatch):
+    monkeypatch.delenv("LINER_MILP_SUPPORT_CAP", raising=False)
+    assert nm.support_cap_from_environment() == 0
+    monkeypatch.setenv("LINER_MILP_SUPPORT_CAP", "25")
+    assert nm.support_cap_from_environment() == 25
+    for bad in ("-1", "x", "1.5", "999999"):
+        monkeypatch.setenv("LINER_MILP_SUPPORT_CAP", bad)
+        with pytest.raises(ValueError):
+            nm.support_cap_from_environment()
+
+
+def test_top_support_keeps_the_services_with_the_most_lp_cargo():
+    path_of = {(0, 0): _P([1, 2]), (0, 1): _P([3]), (1, 0): _P([2])}
+    lp_q = {(0, 0): _V(10.0), (0, 1): _V(5.0), (1, 0): _V(1.0)}
+    assert nm.top_support([1, 2, 3], lp_q, path_of, 2) == [1, 2]       # loads: s1 10, s2 11, s3 5
+    assert nm.top_support([1, 2, 3], lp_q, path_of, 1) == [2]
+    assert nm.top_support([1, 2, 3], lp_q, path_of, 3) == [1, 2, 3]
+
+
+def test_cap_restricts_the_integer_problem_and_the_plan_stays_valid(monkeypatch):
+    pr = _problem(qty=8)
+    monkeypatch.delenv("LINER_MILP_SUPPORT_CAP", raising=False)
+    base = NetworkPlanner(pr).plan(list(POOL), demands=pr.demands, time_limit_sec=60.0)
+    assert base.ok and "support_cap" not in base.solution.formulation
+    monkeypatch.setenv("LINER_MILP_SUPPORT_CAP", "2")
+    capped = NetworkPlanner(pr).plan(list(POOL), demands=pr.demands, time_limit_sec=60.0)
+    assert capped.ok and capped.ledger.valid and capped.reconciliation["reconciled"] is True
+    rep = capped.solution.formulation.get("support_cap")
+    assert rep, "the cap must bite on this instance (the LP uses 3 services)"
+    assert rep["kept"] == 2 and rep["lp_support_services"] > 2
+    assert capped.solution.n_services_restricted_to == 2

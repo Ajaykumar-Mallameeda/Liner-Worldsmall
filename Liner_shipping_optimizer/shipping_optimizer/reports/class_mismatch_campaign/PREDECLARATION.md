@@ -61,3 +61,9 @@ repaired to the class fleet limits by removing sailings from the service with th
 **Arms (seeds 0-9, paired with T2 and with T3):** L = T3 settings + `LINER_MILP_LP_ROUND_START=1`; L2 = T2 settings + `LINER_MILP_LP_ROUND_START=1`.
 **Screening rule:** carried to seeds 10-19 only if: 10/10 solved, 0 violations, paired mean profit vs T2 >= +0.3 M, higher on >= 7/10 seeds, no seed loses more than 3 M vs T2. L must in addition have no seed below 30 M (robustness target for the failure seen in T3 seeds 7 and 9).
 Otherwise rejected. A carried arm is judged on 20 seeds by criteria 1-4 of the main predeclaration against T2.
+
+## Addendum 4 — result of addendum 3 and the support cap (predeclared 2026-10-15, before any run of arm C3)
+Result (seeds 0-9 vs T2): L (T3 + LP-round start) +/-: mean -1.11 M, 5/9 higher, seed 7 **not solved and seed 9 22.95 M exactly as T3** -> the warm start does not fix the failure; L2 (T2 + start) -0.29 M, higher 1/10 -> both **rejected**.
+Cause of the failures (read from the outputs): the integer problems of the failing T3 seeds hold 115 (seed 9) and 119 (seed 7) LP-support services (4.6-4.8 k variables); the T3 seeds that solve well hold 105-111, T2 seeds 90-96. CBC fails at a size threshold, not for lack of a start.
+**Change (opt-in, default OFF):** `LINER_MILP_SUPPORT_CAP=K` keeps at most K of the LP-support services (those carrying the most LP cargo) in the integer problem (`top_support`, `tests/test_lp_round_start.py`, 3 tests). The cap value 105 is chosen **after** seeing those sizes (stated limitation).
+**Arm C3** = T3 settings (`LINER_TRUNK_CANDIDATES=12 LINER_TRUNK_MAX_PORTS=10 LINER_TRUNK_DIVERSE=1`) + `LINER_MILP_SUPPORT_CAP=105`, seeds 0-9, paired with T2 and T3. Rule (same as addendum 3): carried to seeds 10-19 only if 10/10 solved, 0 violations, mean vs T2 >= +0.3 M, higher on >= 7/10, no seed loses > 3 M vs T2 and no seed below 30 M.

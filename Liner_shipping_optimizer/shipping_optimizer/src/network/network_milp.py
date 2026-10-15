@@ -215,6 +215,37 @@ def lp_rounded_start(models, lp_f: Dict[int, float], limits: Dict[str, int]) -> 
     return f0, {"services": len(f0), "sailings": sum(f0.values()), "repair_steps": dropped}
 
 
+ENV_SUPPORT_CAP = "LINER_MILP_SUPPORT_CAP"
+
+
+def support_cap_from_environment(env: Optional[Dict[str, str]] = None) -> int:
+    """``LINER_MILP_SUPPORT_CAP=K``: the integer problem keeps at most K of the services the LP relaxation uses
+    (those carrying the most LP cargo).  Unset / 0 = off (default).  Malformed values raise ``ValueError``."""
+    raw = ((os.environ if env is None else env).get(ENV_SUPPORT_CAP) or "").strip()
+    if not raw:
+        return 0
+    try:
+        k = int(raw)
+    except ValueError:
+        raise ValueError(f"{ENV_SUPPORT_CAP} must be a non-negative integer, got {raw!r}") from None
+    if k < 0 or k > 100000:
+        raise ValueError(f"{ENV_SUPPORT_CAP} must be in [0, 100000], got {k}")
+    return k
+
+
+def top_support(used: Sequence[int], lp_q, path_of, cap: int) -> List[int]:
+    """The ``cap`` services of ``used`` with the largest LP cargo (TEU summed over the LP paths that ride them;
+    ties by index).  ``lp_q`` maps (od, path#) -> LP variable; ``path_of`` maps the same key to its OdPath."""
+    load: Dict[int, float] = defaultdict(float)
+    for key, var in lp_q.items():
+        v = float(var.varValue or 0.0)
+        if v > 0.0:
+            for si in set(path_of[key].services):
+                load[si] += v
+    ranked = sorted(used, key=lambda s: (-load.get(s, 0.0), s))
+    return sorted(ranked[:cap])
+
+
 def _solve_highs(res, deadline: float) -> dict:
     """Solve the PuLP model held in ``res`` (built, not solved) with HiGHS through
     ``scipy.optimize.milp`` and write the values back onto the PuLP variables, so the
@@ -508,6 +539,12 @@ def solve_network(
         else:
             sol.relaxation_bound = float(pulp.value(lp["prob"].objective) or 0.0)
             used = [si for si in lp["active"] if (lp["f"][si].varValue or 0.0) > lp_keep_threshold]
+            cap_k = support_cap_from_environment()
+            if cap_k and len(used) > cap_k:
+                n_before = len(used)
+                path_of_lp = {(di, k): p for di, plist in paths_by_od.items() for k, p in enumerate(plist)}
+                used = top_support(used, lp["q"], path_of_lp, cap_k)
+                sol.formulation["support_cap"] = {"cap": cap_k, "lp_support_services": n_before, "kept": len(used)}
             dropped = len(used) < len(lp["active"])
             services = used
             sol.n_services_restricted_to = len(used)
