@@ -26,7 +26,7 @@ Paths are relative to `Liner_shipping_optimizer/shipping_optimizer/` unless stat
 
 * Start: branch `campaign/20261013-issues-1-8`, `HEAD 3bff834`. Working tree: 45 status entries - 5 modified tracked files (`P2_DIAGNOSTIC_RUNTIME_VALIDATION_REPORT.md`, `SYSTEM_TRUTH_REPORT.md`, `frontend/public/pipeline_output.json`, `reports/decision_phase/d07/outputs/fortnightly_seed2.{json,log}`) and many untracked reports/documents. Recovery material saved in `ws1_provenance/` (`start_git_status.txt`, `start_git_log.txt`, patches of the modified tracked files, a copy of the dirty `pipeline_output.json`). Tag `baseline-t11-20261013` exists.
 * The five pre-existing modified tracked files and the untracked files outside this campaign are **left untouched and not staged**.
-* End: see section 14 (commit hash).
+* End: `HEAD 2e26572` (one commit on top of `3bff834`); the 5 pre-existing modified tracked files and all unrelated untracked files remain exactly as they were.
 
 ## 2. Inputs and baseline provenance (Workstream 1)
 
@@ -129,7 +129,7 @@ Owner: (1) real canal tariff or approval of the benchmark fee basis; (2) the LIN
 
 ## 12. Rollback
 
-All new behaviour is behind unset environment flags (flags off = previous behaviour exactly; the 364/364 orchestrator run and the 142-test narrow set were obtained with flags off). To remove the code: `git revert <campaign commit>` (hash in section 14; not executed). Files added by this campaign are new (`paper_ledger.py`, `trunk_lanes.py`, `targeted_paths.py`, `dual_screen.py`, four test files, `reports/continuation_20261015/`). Modified: `paper_evaluator.py` (fixes 4(a)/(b), `return_flows`), `trunk_candidates.py` (optional restrictions, counters; defaults unchanged), `reconcile.py` (lane hook), `network_milp.py` / `plan.py` (`path_augment` hook, default None), frontend files in section 3. Relocated scratch (revert: `robocopy D:\liner_scratch_continuation\old_session_scratchpads\<id> <C:\Users\WINDOWS\AppData\Local\Temp\claude\C--Users-WINDOWS-Liner-Worldsmall-Liner-shipping-optimizer-shipping-optimizer>\<id> /E /MOVE` for `636cef3d-a9fd-471a-b230-ac3dd4367b29` and `4de648c7-4db7-4986-a7a8-caad08c69c21`).
+All new behaviour is behind unset environment flags (flags off = previous behaviour exactly; the 364/364 orchestrator run and the 142-test narrow set were obtained with flags off). To remove the code: `git revert <campaign commit>` (`2e26572`; not executed). Files added by this campaign are new (`paper_ledger.py`, `trunk_lanes.py`, `targeted_paths.py`, `dual_screen.py`, four test files, `reports/continuation_20261015/`). Modified: `paper_evaluator.py` (fixes 4(a)/(b), `return_flows`), `trunk_candidates.py` (optional restrictions, counters; defaults unchanged), `reconcile.py` (lane hook), `network_milp.py` / `plan.py` (`path_augment` hook, default None), frontend files in section 3. Relocated scratch (revert: `robocopy D:\liner_scratch_continuation\old_session_scratchpads\<id> <C:\Users\WINDOWS\AppData\Local\Temp\claude\C--Users-WINDOWS-Liner-Worldsmall-Liner-shipping-optimizer-shipping-optimizer>\<id> /E /MOVE` for `636cef3d-a9fd-471a-b230-ac3dd4367b29` and `4de648c7-4db7-4986-a7a8-caad08c69c21`).
 
 ## 13. Pre-existing failures and side effects
 
@@ -137,4 +137,4 @@ All new behaviour is behind unset environment flags (flags off = previous behavi
 
 ## 14. Checkpoint
 
-Selective commit of: the new/modified `src/` files and four test files above, the frontend sources and Node test, `reports/continuation_20261015/` and this report. Nothing else is staged. See `git log` for the hash (recorded in the final line of this file if the commit succeeded).
+Selective commit of: the new/modified `src/` files and four test files above, the frontend sources and Node test, `reports/continuation_20261015/` and this report. Nothing else is staged. Committed as **`2e26572`** on `campaign/20261013-issues-1-8` (211 files, mostly experiment artifacts; `git revert 2e26572` removes everything). Not pushed.
