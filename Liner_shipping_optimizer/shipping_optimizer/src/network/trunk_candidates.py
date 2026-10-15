@@ -1,0 +1,166 @@
+"""Class-forced trunk-rotation candidates for under-used vessel classes (opt-in, default OFF).
+
+Problem (measured on the current model, reports/class_mismatch_campaign): the candidate pool is 79 % Feeder_450
+(950 of 1,205 rotations for a class that owns 24 vessels) and contains NO rotation for Post_panamax (58 vessels) and
+two for Super_panamax (10 vessels).  The generator grows rotations of at most 5 ports, scores growth per vessel (which
+favours small ships) and picks the class by the rotation's own cargo.  Evaluating every pool rotation in every class
+(`tools/class_diag.py`) shows 0 of 250 feasible Post_panamax variants is profitable stand-alone: the pool holds only
+thin 2-5 port rotations, which a 8,400-TEU ship cannot fill.  Growing rotations WITH the large class fixed
+(`tools/trunk_proto.py`, eight ports, hubs with enough draft) gives stand-alone-profitable trunks for it.
+
+What this does (``LINER_TRUNK_CANDIDATES`` = rotations to add per class; 0 / unset = OFF)
+  1. a class is a *target* when the pool holds fewer than ``PRESSURE_RATIO`` (2.0) candidates per vessel it owns
+     (the same rule as ``class_variants``);
+  2. for each target class, rotations are grown greedily from the strongest OD pairs between ports whose draft the
+     class can call at, adding the port/position that raises the canonical STAND-ALONE PROFIT most
+     (``demand_coherent._Evaluator``: feasibility, canal and draft rules, vessels against inventory, ride-feasible
+     cargo inside each OD's transit limit, hire + fuel + port calls) up to ``LINER_TRUNK_MAX_PORTS`` (default 8);
+  3. only rotations with a POSITIVE stand-alone profit are kept, near-duplicates (Jaccard >= 0.8) are dropped and the
+     best ``N`` per class by stand-alone profit are returned.
+
+Nothing here prices cargo or accounts cost: the additions are ordinary candidates; the global MILP decides with their
+real fixed and variable costs and the independent ledger verifies the plan.  Stand-alone profit is a screen: a trunk's
+cargo overlaps with other services, so its stand-alone profit is NOT additive with the network's.
+"""
+
+from __future__ import annotations
+
+import math
+import os
+import time
+from collections import Counter, defaultdict
+from typing import Dict, List, Optional, Sequence, Tuple
+
+ENV_TRUNK = "LINER_TRUNK_CANDIDATES"
+ENV_MAX_PORTS = "LINER_TRUNK_MAX_PORTS"
+PRESSURE_RATIO = 2.0
+DEFAULT_MAX_PORTS = 8
+HARD_MAX_PORTS = 12
+SEED_PAIRS = 60
+NEIGHBOURHOOD = 14
+NEAR_DUPLICATE_JACCARD = 0.8
+
+
+def count_from_environment(env: Optional[Dict[str, str]] = None) -> int:
+    """Trunk rotations to add per target class (0 = off).  Malformed values raise ``ValueError``."""
+    raw = ((os.environ if env is None else env).get(ENV_TRUNK) or "").strip()
+    if not raw:
+        return 0
+    try:
+        n = int(raw)
+    except ValueError:
+        raise ValueError(f"{ENV_TRUNK} must be a non-negative integer, got {raw!r}") from None
+    if n < 0 or n > 200:
+        raise ValueError(f"{ENV_TRUNK} must be in [0, 200], got {n}")
+    return n
+
+
+def max_ports_from_environment(env: Optional[Dict[str, str]] = None) -> int:
+    raw = ((os.environ if env is None else env).get(ENV_MAX_PORTS) or "").strip()
+    if not raw:
+        return DEFAULT_MAX_PORTS
+    try:
+        n = int(raw)
+    except ValueError:
+        raise ValueError(f"{ENV_MAX_PORTS} must be an integer, got {raw!r}") from None
+    if n < 3 or n > HARD_MAX_PORTS:
+        raise ValueError(f"{ENV_MAX_PORTS} must be in [3, {HARD_MAX_PORTS}], got {n}")
+    return n
+
+
+def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_class: int,
+                             max_ports: int = DEFAULT_MAX_PORTS, deadline: Optional[float] = None,
+                             id_prefix: str = "tk") -> Tuple[List, Dict]:
+    """Return (new candidates, report).  Never raises for an unattainable rotation: it is counted in the report."""
+    from src.network.plan import Candidate
+    from src.services.demand_coherent import DemandCoherentConfig, _canonical, _Demand, _Evaluator
+
+    t0 = time.perf_counter()
+    rep: Dict = {"requested_per_class": per_class, "max_ports": max_ports, "pool_unique": len(candidates),
+                 "added": 0, "target_classes": {}, "additions": [], "sec": 0.0, "stopped_by_deadline": False}
+    if per_class <= 0 or not candidates:
+        return [], rep
+    fleet = problem.fleet
+    inventory = {c.vessel_class: int(c.quantity) for c in fleet.classes}
+    count = Counter(c.vessel_class for c in candidates)
+    targets = [c.vessel_class for c in fleet.classes
+               if inventory[c.vessel_class] > 0 and count.get(c.vessel_class, 0) / inventory[c.vessel_class] < PRESSURE_RATIO]
+    rep["target_classes"] = {k: {"candidates": count.get(k, 0), "inventory": inventory[k]} for k in sorted(targets)}
+    if not targets:
+        rep["reason"] = "no under-subscribed class"
+        rep["sec"] = round(time.perf_counter() - t0, 2)
+        return [], rep
+
+    catalog = getattr(problem, "port_catalog", None)
+    lookup = dict(catalog) if catalog else {p.id: p for p in problem.ports}
+    D = _Demand(getattr(problem, "global_demands", None) or problem.demands, lookup)
+    cfg = DemandCoherentConfig(max_ports=max(5, max_ports))
+    ev = _Evaluator(problem, fleet, assumptions, D, set(), cfg)
+    known = set(problem.distance_matrix)
+    existing = {(_canonical(c.ports), c.vessel_class) for c in candidates}
+    rank = 0
+    for cname in sorted(targets):
+        cls = fleet.get_class(cname)
+        cdraft = float(getattr(cls, "draft", 0.0) or 0.0)
+        elig = {p for p in lookup if p in known and float(getattr(lookup[p], "draft", 0.0) or 0.0) + 1e-9 >= cdraft}
+        seeds = sorted((k for k in D.teu if k[0] in elig and k[1] in elig and k[0] < k[1]),
+                       key=lambda k: (-D.opportunity(k), k))[:SEED_PAIRS]
+        grown: Dict[Tuple[str, ...], Dict] = {}
+        for sd in seeds:
+            if deadline is not None and time.perf_counter() > deadline:
+                rep["stopped_by_deadline"] = True
+                break
+            ports = list(sd)
+            cur, _ = ev.evaluate(ports, cls)
+            score = cur["standalone"] if cur else -math.inf
+            for _ in range(max_ports - 2):
+                link: Dict[str, float] = defaultdict(float)
+                for m_ in ports:
+                    for k in D.by_port.get(m_, ()):
+                        o = k[1] if k[0] == m_ else k[0]
+                        if o not in ports and o in elig:
+                            link[o] += D.opportunity(k)
+                if not link:
+                    break
+                best = None
+                for P in sorted(link, key=lambda p: (-link[p], p))[:NEIGHBOURHOOD]:
+                    for pos in range(len(ports)):
+                        new = ports[:pos + 1] + [P] + ports[pos + 1:]
+                        m, _w = ev.evaluate(new, cls)
+                        if m is None:
+                            continue
+                        key = (m["standalone"], tuple(new))
+                        if best is None or key[0] > best[0][0] or (key[0] == best[0][0] and key[1] < best[0][1]):
+                            best = (key, new, m)
+                if best is None or best[0][0] <= score + 1e-9:
+                    break
+                (score, _), ports, cur = best
+                if len(ports) >= 3 and cur is not None:
+                    key = _canonical(ports)
+                    prev = grown.get(key)
+                    if prev is None or cur["standalone"] > prev["m"]["standalone"]:
+                        grown[key] = {"ports": list(ports), "m": cur, "seed": sd}
+        chosen: List[Dict] = []
+        for g in sorted(grown.values(), key=lambda g: (-g["m"]["standalone"], tuple(g["ports"]))):
+            if g["m"]["standalone"] <= 0.0 or len(chosen) >= per_class:
+                continue
+            key = _canonical(g["ports"])
+            if (key, cname) in existing:
+                continue
+            pset = set(g["ports"])
+            if any(len(pset & set(s["ports"])) / len(pset | set(s["ports"])) >= NEAR_DUPLICATE_JACCARD for s in chosen):
+                continue
+            chosen.append(g)
+        for g in chosen:
+            m = g["m"]
+            rep["additions"].append({
+                "service_id": f"{id_prefix}{rank:04d}", "ports": list(g["ports"]), "vessel_class": cname, "rank": rank,
+                "seed_od": list(g["seed"]), "standalone_profit_usd_per_week": round(m["standalone"], 1),
+                "vessels_at_f1": m["vessels"], "served_teu_f1": round(m["served"], 1),
+                "fixed_cost_usd_per_week": round(m["fixed"], 1), "cycle_time_days": m["cycle_time_days"],
+                "reason": "class-forced trunk rotation for an under-subscribed class; positive stand-alone profit"})
+            rank += 1
+    new = [Candidate(a["service_id"], tuple(a["ports"]), a["vessel_class"]) for a in rep["additions"]]
+    rep["added"] = len(new)
+    rep["sec"] = round(time.perf_counter() - t0, 2)
+    return new, rep

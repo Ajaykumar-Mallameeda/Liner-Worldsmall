@@ -26,13 +26,17 @@ from __future__ import annotations
 import logging
 import math
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from src.network.solve_semantics import classify_final_plan, classify_solve
 from src.network.economics import EconomicsAssumptions, assumptions_for_problem
 from src.network.assumption_register import build as _assumption_register
+from src.network.trunk_candidates import (
+    augment_trunk_candidates as _augment_trunk, count_from_environment as _trunk_count,
+    max_ports_from_environment as _trunk_max_ports,
+)
 from src.network.class_variants import (
     augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
 )
@@ -263,6 +267,22 @@ def reconcile(
             proposers[sid] = list(proposers.get(add["rotation_of"], [base_owner] if base_owner else []))
         cands = list(cands) + list(extra)
         time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_cv))
+
+    # Opt-in class-forced trunk rotations for under-subscribed (large) classes (``LINER_TRUNK_CANDIDATES`` = per class).
+    trunk_report = None
+    trunk_n = _trunk_count()
+    if trunk_n > 0:
+        t_tk = time.perf_counter()
+        extra_t, trunk_report = _augment_trunk(problem, assumptions, cands, per_class=trunk_n,
+                                               max_ports=_trunk_max_ports(),
+                                               deadline=t_tk + 0.25 * float(time_limit_sec))
+        for add in trunk_report.get("additions", []):
+            ctr = Counter(region_of_od.get((a_, b_)) for a_ in add["ports"] for b_ in add["ports"] if a_ != b_)
+            ctr.pop(None, None)
+            owner[add["service_id"]] = ctr.most_common(1)[0][0] if ctr else None
+            proposers[add["service_id"]] = [owner[add["service_id"]]] if owner[add["service_id"]] else []
+        cands = list(cands) + list(extra_t)
+        time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_tk))
 
     initial = None
     if hints:
@@ -544,6 +564,7 @@ def reconcile(
         },
         "path_model": plan.path_stats.to_dict() if plan.path_stats else {},
         "candidate_augmentation": class_variant_report or {"enabled": False},
+        "trunk_candidates": trunk_report or {"enabled": False},
         "violations": list(led.violations),
         "assumptions": {
             "port_stay_hours": a.port_stay_hours,
