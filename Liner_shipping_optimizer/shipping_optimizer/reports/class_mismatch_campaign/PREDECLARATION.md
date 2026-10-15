@@ -72,3 +72,7 @@ Cause of the failures (read from the outputs): the integer problems of the faili
 C3 on seeds 0-9 vs T2: 10/10 solved, mean +2.80 M, higher 8/10, coverage +3.56 pp, services 28.1, Post_panamax 23.4 vessels; **fails the screening rule on one criterion: seed 0 is -4.39 M (limit 3.0 M)**. The rule is not relaxed.
 Because the arm is otherwise clearly ahead, an **exploratory hold-out on fresh seeds 10-19** is run (C3 only; T2 seeds 10-19 already exist) together with a **drift control `T2r` = T2 rerun on seeds 0-2** (same tree, same flags) to measure how far a stale baseline can move. Criteria for the 20-seed C3 verdict (unchanged main criteria): all solved/valid; mean vs T2 > 0; higher on >= 14/20; no seed loses > 3 M vs T2.
 If the 3 M criterion fails again C3 is reported as "higher mean and coverage, higher variance, not retained under the stated rule", with the numbers.
+
+## Addendum 6 — coverage-floor sweep (diagnostic, predeclared 2026-10-15 before any run)
+Question: what does extra coverage cost? Arm base = C3 settings; `LINER_GLOBAL_MIN_COVERAGE` = 0.50 / 0.55 / 0.60 (existing opt-in epsilon constraint: served TEU >= fraction x demand; infeasible floors give an explicit status), seeds 0-4, 120 s, rotating order.
+Tags F50, F55, F60. **No retention criteria**: this is a measured profit-vs-coverage curve (paired with C3 on the same seeds); a floor is never made a default. Unsolved / infeasible runs are reported as such, not dropped.
