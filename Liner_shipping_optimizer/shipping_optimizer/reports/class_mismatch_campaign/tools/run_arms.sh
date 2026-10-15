@@ -3,9 +3,10 @@
 ROOT="C:/Users/WINDOWS/Liner-Worldsmall_exp/tree_fix1/Liner_shipping_optimizer/shipping_optimizer"
 HERE="C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/reports/decision_phase/d05_final"
 OUTD="C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/reports/class_mismatch_campaign"
+ROOT_RT="C:/Users/WINDOWS/Liner-Worldsmall_exp/tree_fix1_rt/Liner_shipping_optimizer/shipping_optimizer"   # TREE=rt in an arm: revised-transit scenario tree
 PY="C:/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer/venv/Scripts/python.exe"
 SEEDS="$1"; ARMS="$2"
-for v in $(env | grep -oE '^(LINER_|NETWORK_MILP|GLOBAL_STAGE|T15_|T16_|T22_)[A-Za-z0-9_]*'); do unset "$v"; done
+for v in $(env | grep -oE '^(TREE|LINER_|NETWORK_MILP|GLOBAL_STAGE|T15_|T16_|T22_)[A-Za-z0-9_]*'); do unset "$v"; done
 export PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1
 IFS=';' read -ra L <<< "$ARMS"
 mkdir -p "$OUTD/outputs" "$OUTD/runs"
@@ -19,7 +20,8 @@ for S in $SEEDS; do
     st=$(date +%FT%T)
     ( export LINER_MILP_VUB=1 LINER_LOCAL_SEARCH=1
       if [ "$envs" != "-" ]; then IFS=',' read -ra KV <<< "$envs"; for kv in "${KV[@]}"; do export "$kv"; done; fi
-      "$PY" "$HERE/global_stage_experiment.py" "$ROOT" "$OUTD/outputs/${name}.json" "$S" 120 prod > "$OUTD/runs/${name}.log" 2>&1 ); rc=$?
+      R="$ROOT"; [ "$TREE" = "rt" ] && R="$ROOT_RT"
+      "$PY" "$HERE/global_stage_experiment.py" "$R" "$OUTD/outputs/${name}.json" "$S" 120 prod > "$OUTD/runs/${name}.log" 2>&1 ); rc=$?
     n=$((n+1)); echo "$n,$S,$tag,$envs,$st,$(date +%FT%T),$rc" >> "$OUTD/run_order.csv"
   done
 done

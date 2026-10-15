@@ -36,3 +36,17 @@ absorbs the cargo. **Change (opt-in, default OFF):** `LINER_TRUNK_DIVERSE=1` —
 **Arm T2** = arm B + `LINER_TRUNK_CANDIDATES=6 LINER_TRUNK_DIVERSE=1`, seeds 0-19 (single arm, same tree/protocol). **Criteria:** (a) criteria 1-4 of the main predeclaration vs B;
 (b) T2 supersedes T only if the paired mean profit vs T is >= +0.3 M AND T2 is higher on >= 14 of 20 seeds; otherwise T stays the recommended trunk setting;
 (c) mean Post_panamax vessels used must be > 0 (target of the change). Limitation: T was run ~2 h earlier than T2; no drift control is run.
+
+## Addendum 2 — screening of the remaining issues on top of T2 (predeclared 2026-10-15, before any run of these arms)
+Base of every arm = T2 settings (`LINER_MILP_VUB=1 LINER_LOCAL_SEARCH=1 LINER_TRUNK_CANDIDATES=6 LINER_TRUNK_DIVERSE=1`) plus ONE change. Seeds 0-9 (5 for Hg), CBC single thread unless stated, 120 s, sequential, rotating order.
+Paired comparison: T2 of addendum 1 on the same seeds (run 1-3 h earlier; no drift control — stated limitation).
+| tag | change | issue targeted |
+|---|---|---|
+| T3 | `LINER_TRUNK_CANDIDATES=12 LINER_TRUNK_MAX_PORTS=10` | 47 idle Post_panamax; utilisation; coverage |
+| H | `LINER_LOCAL_SEARCH_VARIANTS=0.10 LINER_LOCAL_SEARCH_VARIANTS_FLOOR=-500000` (alternative-class variants visible only to the search, MILP pool unchanged) | services hidden by the stand-alone screen |
+| Pa | `LINER_PATH_BUDGET=adaptive` | 10-path cap |
+| Rt | tree with the revised transit file (`Demand_WorldSmall_Fixed_Sep.csv` of scenario `S_rev_transit`) | input-side blocks (named scenario, NOT a canonical input change) |
+| Hg | `NETWORK_MILP_BACKEND=highs` (scipy/HiGHS, unrestricted integer problem, opt-in) | LP-guided restriction / convergence |
+**Screening rule:** an arm is carried to seeds 10-19 only if on seeds 0-9 it has paired mean profit vs T2 >= +0.3 M, higher on >= 7 of 10 seeds, no not-solved run, 0 ledger/transit violations, and no seed loses > 3 M. Otherwise REJECTED (Hg: 5 seeds, higher on >= 4 of 5). Carried arms are then judged on 20 seeds by criteria 1-4 of the main predeclaration against T2 (mean > 0, >= 14/20, no seed loses > 3 M).
+Rt is a scenario, not a candidate for promotion: its result is reported as the value of the transit decision on top of T2.
+**Not attempted (reason stated in the report):** sub-weekly frequency (model and ledger change; earlier bound <= 2.1 M/week), canal tariff and handling unit (need external sources).
