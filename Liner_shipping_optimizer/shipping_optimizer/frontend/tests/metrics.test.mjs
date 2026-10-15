@@ -101,3 +101,24 @@ test('scenario baseline: coverage is derived from satisfied / total demand when 
   const b = extractBaselineState(j);
   assert.ok(Math.abs(b.coverage - (93946 / 276494) * 100) < 1e-9);
 });
+
+// ---- economic headline figures: unavailable stays unavailable through the runtime adapter -------------------------
+import { normalizeGlobal } from '../src/runtime/runtimeAdapter.js';
+
+test('normalizeGlobal: a run without profit/coverage/cost reports null, not 0 and not a demo number', () => {
+  const g = normalizeGlobal({}, {});
+  for (const k of ['weeklyProfit', 'annualProfit', 'coverage', 'regionalCoverage', 'operatingCost', 'margin']) {
+    assert.equal(g[k], null, k);
+  }
+});
+
+test('normalizeGlobal: real zero and real negative profit are kept; previous unavailable state is not turned into 0', () => {
+  const z = normalizeGlobal({ summary_metrics: { weekly_profit: 0, coverage: 0, operating_cost: 0 } }, {});
+  assert.equal(z.weeklyProfit, 0);
+  assert.equal(z.coverage, 0);
+  assert.equal(z.operatingCost, 0);
+  const n = normalizeGlobal({ summary_metrics: { weekly_profit: -1250000, revenue: 5000000 } }, { weeklyProfit: null });
+  assert.equal(n.weeklyProfit, -1250000);
+  assert.equal(n.margin, -25);
+  assert.equal(normalizeGlobal({}, { weeklyProfit: null, coverage: null }).weeklyProfit, null);
+});

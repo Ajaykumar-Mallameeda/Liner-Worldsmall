@@ -31,13 +31,14 @@ export default function MetricStrip({ optimizationState, runtime }) {
   const totalServices = sm.totalServices;
 
   const segs = [
-    { k: 'PORTS',     v: sm.ports != null ? fmtNum(sm.ports) : '47' },
-    { k: 'LANES',     v: sm.lanes != null ? fmtNum(sm.lanes) : '1,764' },
-    { k: 'SERVICES',  v: sm.services != null ? fmtNum(sm.services) : (totalServices != null ? fmtNum(totalServices) : '551') },
-    { k: 'WEEKLY TEU', v: weeklyDemand != null ? fmtNum(weeklyDemand) : '276K' },
-    { k: 'RUNTIME',   v: runtimeSec != null ? `${Number(runtimeSec).toFixed(1)}s` : '310.0s' },
-    { k: 'ITER',      v: iterCount || 3, sub: `sel ${selIter != null ? String(selIter).padStart(2, '0') : '—'}` },
-    { k: 'COVERAGE',  v: coverage != null ? `${Number(coverage).toFixed(1)}%` : '88.6%' },
+    // A missing figure is shown as unavailable, never as a remembered demo value.
+    { k: 'PORTS',     v: sm.ports != null ? fmtNum(sm.ports) : '—' },
+    { k: 'LANES',     v: sm.lanes != null ? fmtNum(sm.lanes) : '—' },
+    { k: 'SERVICES',  v: sm.services != null ? fmtNum(sm.services) : (totalServices != null ? fmtNum(totalServices) : '—') },
+    { k: 'WEEKLY TEU', v: weeklyDemand != null ? fmtNum(weeklyDemand) : '—' },
+    { k: 'RUNTIME',   v: runtimeSec != null ? `${Number(runtimeSec).toFixed(1)}s` : '—' },
+    { k: 'ITER',      v: iterCount > 0 ? iterCount : '—', sub: `sel ${selIter != null ? String(selIter).padStart(2, '0') : '—'}` },
+    { k: 'COVERAGE',  v: coverage != null ? `${Number(coverage).toFixed(1)}%` : '—' },
     { k: 'PROFIT / WK', v: weeklyProfit != null ? fmtNum(weeklyProfit, { usd: true }) : '$—', accent: true },
   ];
 

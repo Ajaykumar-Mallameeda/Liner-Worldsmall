@@ -1,0 +1,3 @@
+cd /c/Users/WINDOWS/Liner-Worldsmall/Liner_shipping_optimizer/shipping_optimizer
+export PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 LINER_MILP_VUB=1 LINER_LOCAL_SEARCH=1 LINER_MILP_SUPPORT_CAP=105 LINER_TRUNK_CANDIDATES=12 LINER_TRUNK_DIVERSE=1 LINER_TRUNK_MAX_PORTS=10 LINER_TRUNK_LANES=transpacific,atlantic
+venv/Scripts/python.exe reports/continuation_20261015/tools/global_stage_experiment_v2.py /c/Users/WINDOWS/Liner-Worldsmall_exp/tree_lanes1/Liner_shipping_optimizer/shipping_optimizer reports/continuation_20261015/runs/smoke_lanes_seed0.json 0 40 prod

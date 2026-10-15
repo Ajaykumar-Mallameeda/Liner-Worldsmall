@@ -134,13 +134,13 @@ export default function NetworkIntelligenceCanvas({
         <div className="row">
           <span className="k">WEEKLY P&amp;L</span>
           <span className="v">
-            {totalProfit > 0 ? `$${(totalProfit / 1e6).toFixed(1)}M` : '—'}
+            {totalProfit != null ? `${totalProfit < 0 ? '-' : ''}$${(Math.abs(totalProfit) / 1e6).toFixed(1)}M` : '—'}
           </span>
         </div>
         <div className="row">
           <span className="k">COVERAGE</span>
           <span className="v">
-            {coverage > 0 ? `${coverage.toFixed(1)}%` : '—'}
+            {coverage != null ? `${Number(coverage).toFixed(1)}%` : '—'}
           </span>
           <span className="k" style={{ marginLeft: 8 }}>REGIONS</span>
           <span className="v">{regions.length || '—'}</span>

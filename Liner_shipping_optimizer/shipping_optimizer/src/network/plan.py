@@ -28,6 +28,7 @@ from src.network.local_search import (
     variants_from_environment as local_search_variants_from_environment,
     variants_floor_from_environment as local_search_variants_floor_from_environment,
 )
+from src.network.targeted_paths import select_targeted_paths, targeted_from_environment, targeted_resolve_from_environment
 from src.network.solve_semantics import classify_solve
 from src.network.network_milp import NetworkSolution, solve_network
 from src.network.paths import (
@@ -207,6 +208,36 @@ class NetworkPlanner:
                 return build_paths(demands, models, self.port_lookup, self.assumptions,
                                    max_paths_per_od=include_k, config=cfg_inc,
                                    only_services=sorted(services_used))[0]
+        targeted_cfg = targeted_from_environment() if fixed is None else None
+        path_augment = None
+        if targeted_cfg is not None:
+            import dataclasses as _dc2
+            k_ods, m_paths = targeted_cfg
+            t_resolve = targeted_resolve_from_environment()
+
+            def path_augment(lp, current_paths):
+                # the paths are enumerated (without a cap) only for the highest-value candidate demands: those whose
+                # LP-unserved revenue is largest.  A full enumeration of every demand costs ~30 s of the 120 s stage,
+                # which leaves CBC too little time to reach its first incumbent (measured, reports/continuation_20261015).
+                cand = []
+                for di, d in enumerate(demands):
+                    if d.weekly_teu > 0 and di in lp["u"]:
+                        u = float(lp["u"][di].varValue or 0.0)
+                        if u > 1e-6 * float(d.weekly_teu):
+                            cand.append((u * float(d.revenue_per_teu), di))
+                cand.sort(key=lambda x: (-x[0], x[1]))
+                pick = [di for _v, di in cand[:max(100, 4 * k_ods)]]
+                cfg_v = _dc2.replace(self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED)
+                sub, _st = build_paths([demands[di] for di in pick], models, self.port_lookup, self.assumptions,
+                                       max_paths_per_od=10 ** 9, config=cfg_v)
+                valid = {pick[i]: pl for i, pl in sub.items()}
+                allowed = None
+                if not t_resolve:
+                    allowed = {si for si in lp["active"] if (lp["f"][si].varValue or 0.0) > 1e-6}      # the LP support
+                extra, rep = select_targeted_paths(lp, demands, current_paths, valid, k_ods, m_paths, allowed_services=allowed)
+                rep["enumerated_ods"] = len(pick)
+                rep["resolve_lp"] = bool(t_resolve)
+                return extra, rep
         t_solve0 = time.perf_counter()
         sol = solve_network(
             models, demands, paths, limits,
@@ -214,7 +245,7 @@ class NetworkPlanner:
             fixed_frequencies=fixed, initial_frequencies=init,
             time_limit_sec=milp_budget, lp_guided=lp_guided,
             total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
-            min_served_fraction=min_served_fraction, path_rebuild=path_rebuild,
+            min_served_fraction=min_served_fraction, path_rebuild=path_rebuild, path_augment=path_augment,
         )
         if sol.paths_by_od is not None:
             paths = sol.paths_by_od                  # the path set the integer problem actually used

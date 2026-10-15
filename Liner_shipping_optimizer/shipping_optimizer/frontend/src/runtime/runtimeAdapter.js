@@ -171,18 +171,19 @@ export function normalizeGlobal(runtime, prev = {}) {
   // Calculate real net profit margin dynamically from revenue and weekly profit
   const rev = sm.revenue ?? dm.global_metrics?.total_revenue ?? prev.revenue ?? null;
   const totCost = sm.total_cost ?? sm.cost ?? dm.global_metrics?.total_cost ?? null;
-  const wkProfit = sm.weekly_profit ?? dm.global_metrics?.total_profit ?? m.weeklyProfit ?? prev.weeklyProfit ?? 0;
+  // Economic headline figures: a missing value stays null (unavailable); it is never replaced by 0.
+  const wkProfit = sm.weekly_profit ?? dm.global_metrics?.total_profit ?? m.weeklyProfit ?? prev.weeklyProfit ?? null;
   const computedMargin = (rev && rev > 0 && wkProfit != null)
     ? (wkProfit / rev * 100)
-    : (sm.profit_margin ?? dm.global_metrics?.profit_margin_pct ?? (m.margin ?? prev.margin ?? 0));
+    : (sm.profit_margin ?? dm.global_metrics?.profit_margin_pct ?? (m.margin ?? prev.margin ?? null));
 
   return {
     weeklyProfit: wkProfit,
-    annualProfit: sm.annual_profit ?? dm.global_metrics?.annual_profit ?? m.annualProfit ?? prev.annualProfit ?? 0,
-    coverage: sm.global_demand_weighted_coverage ?? sm.coverage ?? dm.global_metrics?.global_demand_weighted_coverage ?? m.coverage ?? prev.coverage ?? 0,
-    regionalCoverage: sm.average_regional_coverage ?? dm.global_metrics?.average_regional_coverage ?? sm.coverage ?? prev.regionalCoverage ?? 0,
+    annualProfit: sm.annual_profit ?? dm.global_metrics?.annual_profit ?? m.annualProfit ?? prev.annualProfit ?? null,
+    coverage: sm.global_demand_weighted_coverage ?? sm.coverage ?? dm.global_metrics?.global_demand_weighted_coverage ?? m.coverage ?? prev.coverage ?? null,
+    regionalCoverage: sm.average_regional_coverage ?? dm.global_metrics?.average_regional_coverage ?? sm.coverage ?? prev.regionalCoverage ?? null,
     totalServices: sm.total_services ?? dm.global_metrics?.total_services ?? m.totalServices ?? (runtime.selected_services ? runtime.selected_services.length : (runtime.all_selected_services ? runtime.all_selected_services.length : (prev.totalServices ?? 0))),
-    operatingCost: sm.operating_cost ?? dm.global_metrics?.operating_cost ?? m.operatingCost ?? prev.operatingCost ?? 0,
+    operatingCost: sm.operating_cost ?? dm.global_metrics?.operating_cost ?? m.operatingCost ?? prev.operatingCost ?? null,
     runtime: sm.total_runtime ?? sm.runtime_seconds ?? m.runtime ?? prev.runtime ?? 0,
     unserved: unservedDemand ?? 0,
     margin: computedMargin,

@@ -1,4 +1,5 @@
 import { fmt, fmtNum } from '../../utils/formatters.js';
+import { fmtOr } from '../../utils/metrics.js';
 
 export default function SummaryView({ optimizationState }) {
   const summaryText = optimizationState.global.executive_summary || "";
@@ -36,7 +37,7 @@ export default function SummaryView({ optimizationState }) {
         </div>
         <p className="text-base text-white/80 font-mono leading-relaxed">
           The global weekly profit is <span className="text-emerald-400 font-bold">{fmt(optimizationState.global.weeklyProfit)}</span>, indicating strong financial performance
-          with an <span className="text-emerald-400 font-bold">{optimizationState.global.margin?.toFixed(1)}% profit margin</span> across {fmtNum(optimizationState.global.totalServices)} deployed services.
+          with an <span className="text-emerald-400 font-bold">{fmtOr(optimizationState.global.margin, (v) => `${v.toFixed(1)}%`)} profit margin</span> across {fmtNum(optimizationState.global.totalServices)} deployed services.
         </p>
       </div>
 

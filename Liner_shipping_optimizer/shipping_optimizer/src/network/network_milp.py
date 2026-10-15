@@ -480,6 +480,7 @@ def solve_network(
     port_capacity: Optional[Dict[str, float]] = None,
     min_served_fraction: Optional[float] = None,
     path_rebuild=None,
+    path_augment=None,
 ) -> NetworkSolution:
     """Solve the network design problem. Never raises for solver outcomes: the
     status field says what happened and ``usable`` says whether values may be used."""
@@ -538,6 +539,49 @@ def solve_network(
             lp_guided = False        # fall back to the unrestricted integer solve
         else:
             sol.relaxation_bound = float(pulp.value(lp["prob"].objective) or 0.0)
+            if path_augment is not None:
+                # opt-in targeted path additions (one round, ``targeted_paths``): add a few excluded paths for a few
+                # high-value ODs, re-solve the LP once; on any failure the original LP and path set are kept
+                t_aug = time.perf_counter()
+                aug_rep: Dict = {"applied": False}
+                sol.formulation["targeted_paths"] = aug_rep
+                try:
+                    extra, rep_sel = path_augment(lp, paths_by_od)
+                    aug_rep.update(rep_sel)
+                    if extra and not rep_sel.get("resolve_lp", True):
+                        # no second LP: the integer problem simply gets the added paths (their services are in the LP support)
+                        from src.network.targeted_paths import merge_paths
+                        merged = merge_paths(paths_by_od, extra)
+                        aug_rep.update({"applied": True, "lp_bound_before": sol.relaxation_bound, "lp_bound_after": None,
+                                        "q_columns_before": len(lp["q"]), "q_columns_after": None})
+                        paths_by_od, paths_int = merged, merged
+                        sol.paths_by_od = merged
+                        sol.n_paths = sum(len(v) for v in merged.values())
+                    elif extra:
+                        from src.network.targeted_paths import merge_paths
+                        merged = merge_paths(paths_by_od, extra)
+                        lp2 = _build_and_solve(models, demands, merged, class_vessel_limit, referenced,
+                                               integer=False, penalty=unserved_penalty_per_teu, fixed=None,
+                                               initial=None, max_departures_cap=max_departures_cap,
+                                               time_limit_sec=min(60.0, budget * 0.4), threads=threads,
+                                               total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
+                                               min_served_fraction=min_served_fraction, vub=vub)
+                        if lp2["error"] or lp2["prob"].status != pulp.LpStatusOptimal:
+                            aug_rep["reason"] = "LP with the added paths not solved: original LP and paths kept"
+                        else:
+                            aug_rep.update({"applied": True, "lp_bound_before": sol.relaxation_bound,
+                                            "lp_bound_after": float(pulp.value(lp2["prob"].objective) or 0.0),
+                                            "q_columns_before": len(lp["q"]), "q_columns_after": len(lp2["q"])})
+                            lp, paths_by_od, paths_int = lp2, merged, merged
+                            sol.paths_by_od = merged
+                            sol.n_paths = sum(len(v) for v in merged.values())
+                            sol.relaxation_bound = aug_rep["lp_bound_after"]
+                            sol.formulation["vub_rows_lp_relaxation"] = int(lp2.get("vub_rows", 0))
+                    else:
+                        aug_rep["reason"] = "no qualifying demand: nothing added"
+                except Exception as exc:                                  # noqa: BLE001
+                    aug_rep["error"] = f"{type(exc).__name__}: {exc}"
+                aug_rep["round_sec"] = round(time.perf_counter() - t_aug, 2)
             used = [si for si in lp["active"] if (lp["f"][si].varValue or 0.0) > lp_keep_threshold]
             cap_k = support_cap_from_environment()
             if cap_k and len(used) > cap_k:

@@ -48,6 +48,8 @@ class FfeData:
     demands: List[Dict]                              # {o, d, ffe, rev}
     dist: Dict[Tuple[str, str], Tuple[float, int, int]]   # (o, d) -> (nm, panama, suez)
     classes: Dict[str, Dict]                         # name -> {cap, n_avail, tc, speed, fuel_sea, fuel_idle, panama, suez}
+    unit: str = "FFE"                                # unit of demand, capacity and every per-unit rate in this instance
+    penalty_per_unit: float = REJECT_PENALTY_PER_FFE  # rejected-demand penalty per unit (1,000 per FFE = 500 per TEU)
 
 
 def load_worldsmall_ffe(root: Path) -> FfeData:
@@ -157,9 +159,29 @@ def _greedy_mcf(data: FfeData, services: List[Dict]) -> Tuple[List[Tuple[int, Li
     return flows, rejected
 
 
+def transfer_ports(services: List[Dict], edges: List[Tuple[int, int]]) -> List[str]:
+    """Ports where a flow changes service.  ``edges`` is the path as ``_greedy_mcf`` returns it (destination to origin).
+
+    The transfer port is the port where the earlier service is left: the end of the last leg the flow rides on it.
+    (An earlier version used the start of that leg, which is a different port whenever a service carries the flow over
+    more than one leg and the transshipment rates differ between ports.)"""
+    fwd = list(reversed(edges))
+    hops: List[Tuple[int, int]] = []             # (service, index of the last leg ridden on it)
+    for si, k in fwd:
+        if hops and hops[-1][0] == si:
+            hops[-1] = (si, k)
+        else:
+            hops.append((si, k))
+    out = []
+    for si, k in hops[:-1]:
+        ps = services[si]["ports"]
+        out.append(ps[(k + 1) % len(ps)])
+    return out
+
+
 def evaluate(data: FfeData, design: Sequence[Dict], *, voyage_basis: str = "per_rotation",
              port_variable_basis: str = "capacity", canal_basis: str = "none",
-             include_unused: bool = True, capacity_basis: str = "per_departure") -> Dict:
+             include_unused: bool = True, capacity_basis: str = "per_departure", return_flows: bool = False) -> Dict:
     """``design``: [{"ports": [closed rotation without the repeated start], "class": name | "capacity": FFE,
     "vessels": optional fractional vessel count (default: from the formula x frequency),
     "frequency": weekly departures (default 1 = the paper's weekly service)}]."""
@@ -179,17 +201,10 @@ def evaluate(data: FfeData, design: Sequence[Dict], *, voyage_basis: str = "per_
         revenue += q * d["rev"]
         served += q
         handle += q * (data.ports[d["o"]]["pl"] + data.ports[d["d"]]["pl"])
-        svcs = []
-        for (si, _k) in edges:
-            if not svcs or svcs[-1][0] != si:
-                svcs.append((si, _k))
-        # a transfer happens between consecutive different services of the path, at the port where the leg changes
-        for a, b in zip(svcs, svcs[1:]):
-            ps = services[b[0]]["ports"]
-            port = ps[b[1]]                     # first leg of the next service starts at this port
+        for port in transfer_ports(services, edges):
             handle += q * data.ports[port]["pt"]
     reject_total = sum(rejected.values())
-    penalty = REJECT_PENALTY_PER_FFE * reject_total
+    penalty = data.penalty_per_unit * reject_total
     service_cost = sum(s["n"] * data.classes[s["class"]]["tc"] * 7.0 for s in services)
     used: Dict[str, float] = defaultdict(float)
     for s in services:
@@ -227,7 +242,7 @@ def evaluate(data: FfeData, design: Sequence[Dict], *, voyage_basis: str = "per_
             pv_cargo += q * (data.ports[d["o"]]["pv"] + data.ports[d["d"]]["pv"])
         voyage += pv_cargo
     fuel_t = sum(s["fuel_tonnes_rotation"] for s in services)
-    return {"revenue": revenue, "served_ffe": served, "rejected_ffe": reject_total,
+    res = {"revenue": revenue, "served_ffe": served, "rejected_ffe": reject_total,
             "demand_ffe": sum(d["ffe"] for d in data.demands), "coverage": served / sum(d["ffe"] for d in data.demands),
             "rejected_penalty": penalty, "handling_and_transshipment": handle, "vessel_service_cost": service_cost,
             "unused_vessel_profit": -unused, "voyage_cost_without_fuel": voyage, "fuel_tonnes_per_week": fuel_t,
@@ -235,6 +250,12 @@ def evaluate(data: FfeData, design: Sequence[Dict], *, voyage_basis: str = "per_
             "interpretation": {"voyage_basis": voyage_basis, "port_variable_basis": port_variable_basis, "canal_basis": canal_basis,
                                "capacity_basis": capacity_basis},
             "note": "net profit = revenue - rejected_penalty - handling - service - voyage(without fuel) - fuel_tonnes*price + unused_vessel_profit"}
+    if return_flows:
+        # raw material for an independent recomputation (``paper_ledger.objective_ledger``): services, flows, rejections
+        res["_services"] = services
+        res["_flows"] = [(di, list(edges), q) for di, edges, q in flows]
+        res["_rejected"] = dict(rejected)
+    return res
 
 
 def net_profit(r: Dict, fuel_price_usd_per_t: float = 600.0) -> float:

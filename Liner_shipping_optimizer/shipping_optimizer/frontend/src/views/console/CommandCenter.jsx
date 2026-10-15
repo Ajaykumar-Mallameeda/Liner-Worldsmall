@@ -119,14 +119,14 @@ export default function CommandCenter({
     if (selectedIterObj && selectedIterObj.profit != null && selectedIterObj.profit > 0) {
       return selectedIterObj.profit;
     }
-    return sm.weeklyProfit || 0;
+    return sm.weeklyProfit ?? null;   // unavailable stays null (never shown as $0)
   }, [selectedIterObj, sm.weeklyProfit]);
 
   const coverage = useMemo(() => {
     if (selectedIterObj && selectedIterObj.coverage != null) {
       return selectedIterObj.coverage;
     }
-    return sm.coverage || 0;
+    return sm.coverage ?? null;
   }, [selectedIterObj, sm.coverage]);
 
   const score = useMemo(() => {
@@ -153,7 +153,7 @@ export default function CommandCenter({
 
   const profitPerService = useMemo(() => {
     const sCount = sm.totalServices || selectedCount || 1;
-    return sCount > 0 ? (weeklyProfit / sCount) : 0;
+    return (weeklyProfit != null && sCount > 0) ? (weeklyProfit / sCount) : null;
   }, [sm.totalServices, selectedCount, weeklyProfit]);
 
   const unservedTeu = useMemo(() => {
@@ -281,7 +281,7 @@ export default function CommandCenter({
               <div className="cd-tile">
                 <span className="lbl">COVERAGE</span>
                 <span className="v text-emerald-400">{fmtPct(coverage)}</span>
-                <span className="sub">{sm.satisfiedDemand != null ? Math.round(sm.satisfiedDemand).toLocaleString() : '964,949'} TEU SERVED</span>
+                <span className="sub">{sm.satisfiedDemand != null ? Math.round(sm.satisfiedDemand).toLocaleString() : '—'} TEU SERVED</span>
               </div>
               <div className="cd-tile">
                 <span className="lbl">SERVICES SELECTED</span>
@@ -557,7 +557,7 @@ export default function CommandCenter({
         <div className="cc-exec-card">
           <div className="exec-title">▪ WEAKNESSES</div>
           <div className="exec-body">
-            <div className="mb-1 text-slate-300">• {(100 - Number(coverage || 0)).toFixed(1)}% demand ({unservedTeu.toLocaleString(undefined, { maximumFractionDigits: 0 })} TEU/week) unserved.</div>
+            <div className="mb-1 text-slate-300">• {coverage != null ? (100 - Number(coverage)).toFixed(1) + '%' : '—'} demand ({unservedTeu.toLocaleString(undefined, { maximumFractionDigits: 0 })} TEU/week) unserved.</div>
             <div className="text-slate-400">• Cost per service {fmtUsd(costPerService)}/week limits expansion.</div>
           </div>
         </div>

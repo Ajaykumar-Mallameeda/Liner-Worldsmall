@@ -67,16 +67,16 @@ export function buildConsoleEvents(optState, maritimeOverview) {
     });
   }
 
-  if (gbl.weeklyProfit || gbl.totalServices || (gbl.selected_services && gbl.selected_services.length > 0)) {
+  if (gbl.weeklyProfit != null || gbl.totalServices || (gbl.selected_services && gbl.selected_services.length > 0)) {
     const svcs = (gbl.selected_services && gbl.selected_services.length > 0) ? gbl.selected_services.length : (gbl.totalServices || 0);
-    const profitM = gbl.weeklyProfit ? (gbl.weeklyProfit / 1e6).toFixed(1) + 'M' : '0.0M';
+    const profitText = gbl.weeklyProfit != null ? '$' + (gbl.weeklyProfit / 1e6).toFixed(1) + 'M' : 'unavailable';
     events.push({
       id: 'ev-dec',
       ts: gbl.evaluated_at || new Date().toISOString(),
       source: 'DECISION',
       type: 'decision',
       severity: 'ok',
-      summary: `Final decision: ${svcs} services selected · weekly profit $${profitM}`,
+      summary: `Final decision: ${svcs} services selected · weekly profit ${profitText}`,
     });
   }
 

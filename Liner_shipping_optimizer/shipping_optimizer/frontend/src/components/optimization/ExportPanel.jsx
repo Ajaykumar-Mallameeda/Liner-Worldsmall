@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { csvNumber } from '../../utils/metrics.js';
+import { csvNumber, fmtOr } from '../../utils/metrics.js';
 
 export default function ExportPanel({ optimizationState }) {
   const services = useMemo(() => optimizationState.global.selected_services || [], [optimizationState.global.selected_services]);
@@ -108,10 +108,10 @@ export default function ExportPanel({ optimizationState }) {
             <div className="text-white/30 uppercase tracking-wider text-[9px] mb-2">Metrics Snapshot</div>
             {[
               ['Weekly Profit', optimizationState.global.weeklyProfit],
-              ['Coverage', `${optimizationState.global.coverage.toFixed(1)}%`],
+              ['Coverage', fmtOr(optimizationState.global.coverage, (v) => `${v.toFixed(1)}%`)],
               ['Services', optimizationState.global.totalServices],
               ['Runtime', `${optimizationState.global.runtime}s`],
-              ['Margin', `${optimizationState.global.margin.toFixed(1)}%`],
+              ['Margin', fmtOr(optimizationState.global.margin, (v) => `${v.toFixed(1)}%`)],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between py-0.5 border-b border-white/5">
                 <span className="text-white/40">{k}</span><span className="text-white/70">{v}</span>

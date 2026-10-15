@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { fmt, fmtNum } from '../../utils/formatters.js';
+import { fmtOr } from '../../utils/metrics.js';
 
 export default function ScenarioWorkspace({ optimizationState }) {
   const [scenarioName, setScenarioName] = useState('');
@@ -94,10 +95,10 @@ export default function ScenarioWorkspace({ optimizationState }) {
                 { label: 'Name', value: currentSnapshot.name, color: '#00d4ff' },
                 { label: 'Date', value: currentSnapshot.timestamp.slice(0, 19).replace('T', ' '), color: '#888' },
                 { label: 'Weekly Profit', value: fmt(currentSnapshot.profit), color: '#10b981' },
-                { label: 'Coverage', value: `${currentSnapshot.coverage.toFixed(1)}%`, color: '#00d4ff' },
+                { label: 'Coverage', value: fmtOr(currentSnapshot.coverage, (v) => `${v.toFixed(1)}%`), color: '#00d4ff' },
                 { label: 'Services', value: fmtNum(currentSnapshot.services), color: '#8b5cf6' },
                 { label: 'Runtime', value: `${currentSnapshot.runtime}s`, color: '#f59e0b' },
-                { label: 'Margin', value: `${currentSnapshot.margin.toFixed(1)}%`, color: '#ec4899' },
+                { label: 'Margin', value: fmtOr(currentSnapshot.margin, (v) => `${v.toFixed(1)}%`), color: '#ec4899' },
                 { label: 'Iterations', value: currentSnapshot.iterations.toString(), color: '#6366f1' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-lg p-3" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
