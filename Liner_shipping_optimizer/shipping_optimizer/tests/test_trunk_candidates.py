@@ -110,3 +110,32 @@ class TestAugment:
         plan = NetworkPlanner(pr).plan(list(POOL) + list(extra), demands=pr.demands, time_limit_sec=60.0)
         assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True
         assert not [r for r in plan.rejected_candidates if str(r.get("service", "")).startswith("tk")]
+
+
+class TestDiverse:
+    def test_flag(self, monkeypatch):
+        monkeypatch.delenv("LINER_TRUNK_DIVERSE", raising=False)
+        assert tk.diverse_from_environment() is False
+        monkeypatch.setenv("LINER_TRUNK_DIVERSE", "1")
+        assert tk.diverse_from_environment() is True
+        monkeypatch.setenv("LINER_TRUNK_DIVERSE", "maybe")
+        with pytest.raises(ValueError):
+            tk.diverse_from_environment()
+
+    def test_diverse_additions_are_valid_profitable_and_deterministic(self):
+        pr = _problem(CLASSES)
+        a = assumptions_for_problem(pr)
+        e1, r1 = tk.augment_trunk_candidates(pr, a, POOL, per_class=3, max_ports=4, diverse=True)
+        e2, _r2 = tk.augment_trunk_candidates(pr, a, POOL, per_class=3, max_ports=4, diverse=True)
+        assert r1["diverse"] is True
+        assert [(c.ports, c.vessel_class) for c in e1] == [(c.ports, c.vessel_class) for c in e2]
+        keys = {(tuple(c.ports), c.vessel_class) for c in POOL}
+        for c, x in zip(e1, r1["additions"]):
+            assert len(c.ports) >= 3 and (tuple(c.ports), c.vessel_class) not in keys
+            assert x["standalone_profit_usd_per_week"] > 0          # a discount never admits a loss-making rotation
+
+    def test_diverse_pool_plans_and_passes_the_ledger(self):
+        pr = _problem(CLASSES)
+        extra, _ = tk.augment_trunk_candidates(pr, assumptions_for_problem(pr), POOL, per_class=3, max_ports=4, diverse=True)
+        plan = NetworkPlanner(pr).plan(list(POOL) + list(extra), demands=pr.demands, time_limit_sec=60.0)
+        assert plan.ok and plan.ledger.valid and plan.reconciliation["reconciled"] is True

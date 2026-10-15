@@ -27,3 +27,12 @@ Comparison: paired with arm B of `current_code_experiment/per_seed_A_B.csv` (sam
 5. the arm must move its target: T -> Post/Super_panamax vessels used rises (mean > 5 vessels combined); V -> services or coverage up (>= +1.0 pp); P -> coverage >= +1.0 pp.
 **Combination rule (fixed now):** one arm "TC" = T plus every other arm that individually met 1-5, 20 seeds, same protocol; reported as exploratory.
 **Not done on purpose:** no default changed, no input or assumption changed, no sub-weekly frequency, no solver-limit change, no WorldLarge.
+
+## Addendum 1 — second trunk arm (predeclared 2026-10-15 13:50, after the T/V/P results, before any run of it)
+Observation (T vs B, 20 seeds): Super_panamax 0.1 -> 10.0 of 10 vessels, profit +3.02 M (20/20), but Post_panamax stays 0 of 58 although 6 Post_panamax
+trunks (best +8.5 M stand-alone) are offered (`outputs/trunk_offer_seed0.json`): the offered trunks of all classes share the same Asia-Europe hubs, so the Super_panamax trunk
+absorbs the cargo. **Change (opt-in, default OFF):** `LINER_TRUNK_DIVERSE=1` — classes served largest first; every selected trunk marks the ODs it carries as covered
+(25 % weight in the growth score of later trunks); ranking by that marginal score; stand-alone profit must still be > 0.
+**Arm T2** = arm B + `LINER_TRUNK_CANDIDATES=6 LINER_TRUNK_DIVERSE=1`, seeds 0-19 (single arm, same tree/protocol). **Criteria:** (a) criteria 1-4 of the main predeclaration vs B;
+(b) T2 supersedes T only if the paired mean profit vs T is >= +0.3 M AND T2 is higher on >= 14 of 20 seeds; otherwise T stays the recommended trunk setting;
+(c) mean Post_panamax vessels used must be > 0 (target of the change). Limitation: T was run ~2 h earlier than T2; no drift control is run.

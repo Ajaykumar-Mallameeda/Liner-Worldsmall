@@ -33,6 +33,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 ENV_TRUNK = "LINER_TRUNK_CANDIDATES"
 ENV_MAX_PORTS = "LINER_TRUNK_MAX_PORTS"
+ENV_DIVERSE = "LINER_TRUNK_DIVERSE"          # 1: set-cover selection (demand already covered by a chosen trunk counts 25 %)
 PRESSURE_RATIO = 2.0
 DEFAULT_MAX_PORTS = 8
 HARD_MAX_PORTS = 12
@@ -68,15 +69,42 @@ def max_ports_from_environment(env: Optional[Dict[str, str]] = None) -> int:
     return n
 
 
+def diverse_from_environment(env: Optional[Dict[str, str]] = None) -> bool:
+    raw = ((os.environ if env is None else env).get(ENV_DIVERSE) or "").strip().lower()
+    if raw in ("", "0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    raise ValueError(f"{ENV_DIVERSE} must be 0 or 1, got {raw!r}")
+
+
+def _mark_covered(ev, D, ports, cls) -> None:
+    """The directed ODs the rotation carries inside their transit limit become 'covered' (discounted for later trunks)."""
+    m, _why = ev.model(ports, cls)
+    if m is None:
+        return
+    for a in m.ports:
+        for b in m.ports:
+            if a == b or not D.teu.get((a, b)):
+                continue
+            ride = m.ride(a, b)
+            if ride is None:
+                continue
+            lim = D.limit.get((a, b))
+            if lim is not None and ride[1] > lim + 1e-9:
+                continue
+            ev.covered.add((a, b))
+
+
 def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_class: int,
                              max_ports: int = DEFAULT_MAX_PORTS, deadline: Optional[float] = None,
-                             id_prefix: str = "tk") -> Tuple[List, Dict]:
+                             id_prefix: str = "tk", diverse: bool = False) -> Tuple[List, Dict]:
     """Return (new candidates, report).  Never raises for an unattainable rotation: it is counted in the report."""
     from src.network.plan import Candidate
     from src.services.demand_coherent import DemandCoherentConfig, _canonical, _Demand, _Evaluator
 
     t0 = time.perf_counter()
-    rep: Dict = {"requested_per_class": per_class, "max_ports": max_ports, "pool_unique": len(candidates),
+    rep: Dict = {"requested_per_class": per_class, "max_ports": max_ports, "diverse": bool(diverse), "pool_unique": len(candidates),
                  "added": 0, "target_classes": {}, "additions": [], "sec": 0.0, "stopped_by_deadline": False}
     if per_class <= 0 or not candidates:
         return [], rep
@@ -99,7 +127,11 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
     known = set(problem.distance_matrix)
     existing = {(_canonical(c.ports), c.vessel_class) for c in candidates}
     rank = 0
-    for cname in sorted(targets):
+    # diverse mode: classes are served largest first and every chosen trunk marks the ODs it carries as covered
+    # (``covered_weight`` 25 % in the growth score of later trunks), so trunks of different classes serve different lanes
+    order = (sorted(targets, key=lambda k: (-float(fleet.get_class(k).capacity_teu), k)) if diverse else sorted(targets))
+    score_key = "weighted" if diverse else "standalone"
+    for cname in order:
         cls = fleet.get_class(cname)
         cdraft = float(getattr(cls, "draft", 0.0) or 0.0)
         elig = {p for p in lookup if p in known and float(getattr(lookup[p], "draft", 0.0) or 0.0) + 1e-9 >= cdraft}
@@ -112,7 +144,9 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
                 break
             ports = list(sd)
             cur, _ = ev.evaluate(ports, cls)
-            score = cur["standalone"] if cur else -math.inf
+            score = (cur[score_key] - (cur["fixed"] if diverse else 0.0)) if cur else -math.inf
+            if diverse:
+                cur_best = (cur, list(ports)) if cur else None
             for _ in range(max_ports - 2):
                 link: Dict[str, float] = defaultdict(float)
                 for m_ in ports:
@@ -129,7 +163,7 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
                         m, _w = ev.evaluate(new, cls)
                         if m is None:
                             continue
-                        key = (m["standalone"], tuple(new))
+                        key = ((m["weighted"] - m["fixed"]) if diverse else m["standalone"], tuple(new))
                         if best is None or key[0] > best[0][0] or (key[0] == best[0][0] and key[1] < best[0][1]):
                             best = (key, new, m)
                 if best is None or best[0][0] <= score + 1e-9:
@@ -139,9 +173,11 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
                     key = _canonical(ports)
                     prev = grown.get(key)
                     if prev is None or cur["standalone"] > prev["m"]["standalone"]:
-                        grown[key] = {"ports": list(ports), "m": cur, "seed": sd}
+                        grown[key] = {"ports": list(ports), "m": cur, "seed": sd, "marg": cur["weighted"] - cur["fixed"]}
+            if diverse and cur is not None and len(ports) >= 3 and cur["standalone"] > 0.0:
+                _mark_covered(ev, D, ports, cls)
         chosen: List[Dict] = []
-        for g in sorted(grown.values(), key=lambda g: (-g["m"]["standalone"], tuple(g["ports"]))):
+        for g in sorted(grown.values(), key=lambda g: (-(g["marg"] if diverse else g["m"]["standalone"]), tuple(g["ports"]))):
             if g["m"]["standalone"] <= 0.0 or len(chosen) >= per_class:
                 continue
             key = _canonical(g["ports"])

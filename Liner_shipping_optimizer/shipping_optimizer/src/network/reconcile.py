@@ -35,7 +35,7 @@ from src.network.economics import EconomicsAssumptions, assumptions_for_problem
 from src.network.assumption_register import build as _assumption_register
 from src.network.trunk_candidates import (
     augment_trunk_candidates as _augment_trunk, count_from_environment as _trunk_count,
-    max_ports_from_environment as _trunk_max_ports,
+    max_ports_from_environment as _trunk_max_ports, diverse_from_environment as _trunk_diverse,
 )
 from src.network.class_variants import (
     augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
@@ -274,7 +274,7 @@ def reconcile(
     if trunk_n > 0:
         t_tk = time.perf_counter()
         extra_t, trunk_report = _augment_trunk(problem, assumptions, cands, per_class=trunk_n,
-                                               max_ports=_trunk_max_ports(),
+                                               max_ports=_trunk_max_ports(), diverse=_trunk_diverse(),
                                                deadline=t_tk + 0.25 * float(time_limit_sec))
         for add in trunk_report.get("additions", []):
             ctr = Counter(region_of_od.get((a_, b_)) for a_ in add["ports"] for b_ in add["ports"] if a_ != b_)
