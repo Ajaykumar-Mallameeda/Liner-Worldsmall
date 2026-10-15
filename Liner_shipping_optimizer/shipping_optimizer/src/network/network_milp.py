@@ -167,6 +167,54 @@ def vub_enabled(env: Optional[Dict[str, str]] = None) -> bool:
     raise ValueError(f"{ENV_VUB} must be 0 or 1, got {raw!r}")
 
 
+ENV_LP_ROUND_START = "LINER_MILP_LP_ROUND_START"
+
+
+def lp_round_start_enabled(env: Optional[Dict[str, str]] = None) -> bool:
+    """``LINER_MILP_LP_ROUND_START``: give CBC an integer starting solution built from the LP relaxation
+    (frequencies rounded half-up, then repaired to the class fleet limits).  Unset / 0 = off (default).
+    A malformed value raises ``ValueError``."""
+    raw = ((os.environ if env is None else env).get(ENV_LP_ROUND_START) or "").strip().lower()
+    if raw in ("", "0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    raise ValueError(f"{ENV_LP_ROUND_START} must be 0 or 1, got {raw!r}")
+
+
+def lp_rounded_start(models, lp_f: Dict[int, float], limits: Dict[str, int]) -> Tuple[Dict[int, int], Dict]:
+    """Integer frequencies from the LP relaxation's values ``lp_f`` (service index -> f), feasible for the fleet.
+
+    f0 = round-half-up(f_lp) (a service the LP runs at >= 0.25 of a sailing is opened at one weekly sailing);
+    vessels needed = ceil(T f0 / 7) per service; while a class needs more vessels than ``limits`` allows, the
+    service of that class with the smallest LP frequency loses one sailing (to 0 = not operated).  Nothing
+    here prices cargo: the solver completes the start (cargo flows) and may discard it."""
+    f0: Dict[int, int] = {}
+    for si, v in lp_f.items():
+        x = float(v or 0.0)
+        r = int(math.floor(x + 0.5))
+        if r == 0 and x >= 0.25:
+            r = 1
+        if r > 0:
+            f0[si] = min(r, int(models[si].max_departures(int(limits.get(models[si].vessel_class, models[si].class_inventory)))))
+    dropped = 0
+    by_class: Dict[str, List[int]] = defaultdict(list)
+    for si in f0:
+        by_class[models[si].vessel_class].append(si)
+    for cls, sis in by_class.items():
+        limit = int(limits.get(cls, models[sis[0]].class_inventory))
+        while True:
+            live = [s for s in sis if f0.get(s, 0) > 0]
+            need = sum(models[s].vessels(f0[s]) for s in live)
+            if need <= limit or not live:
+                break
+            worst = min(live, key=lambda s: (float(lp_f.get(s, 0.0)), -models[s].vessels(f0[s]), s))
+            f0[worst] -= 1
+            dropped += 1
+    f0 = {s: f for s, f in f0.items() if f > 0}
+    return f0, {"services": len(f0), "sailings": sum(f0.values()), "repair_steps": dropped}
+
+
 def _solve_highs(res, deadline: float) -> dict:
     """Solve the PuLP model held in ``res`` (built, not solved) with HiGHS through
     ``scipy.optimize.milp`` and write the values back onto the PuLP variables, so the
@@ -488,6 +536,13 @@ def solve_network(
                 sol.runtime_sec = time.perf_counter() - t0
                 return sol
             budget = max(1.0, time_limit_sec - (time.perf_counter() - t0))
+            if lp_round_start_enabled() and initial_frequencies is None and not use_highs:
+                try:
+                    initial_frequencies, rep_ = lp_rounded_start(
+                        models, {si: float(lp["f"][si].varValue or 0.0) for si in used}, class_vessel_limit)
+                    sol.formulation["lp_round_start"] = rep_
+                except Exception as exc:                                   # noqa: BLE001
+                    sol.formulation["lp_round_start_error"] = f"{type(exc).__name__}: {exc}"
     if not sol.n_services_restricted_to:
         sol.n_services_restricted_to = len(services)
 
