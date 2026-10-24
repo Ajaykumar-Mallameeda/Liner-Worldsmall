@@ -105,7 +105,7 @@ export default function DataSources(props) {
               title: m.name,
               right: h('span', { style: { display: 'inline-flex', gap: 6, alignItems: 'center' } },
                 h(Dot, { tone: st }),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', textTransform: 'uppercase', letterSpacing: '0.14em' } }, st)
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', textTransform: 'uppercase', letterSpacing: '0.14em' } }, st)
               ),
               bodyPadding: 'flush',
             },
@@ -116,7 +116,7 @@ export default function DataSources(props) {
                 h(Kv, { k: 'age', v: m.ageSeconds != null ? (m.ageSeconds + 's') : EM }),
                 h(Kv, { k: 'quality', v: m.quality != null ? Number(m.quality).toFixed(2) : EM })
               ),
-              h('div', { style: { padding: '8px 12px', borderTop: '1px solid var(--cx-edge-soft)', fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, m.attribution)
+              h('div', { style: { padding: '8px 12px', borderTop: '1px solid var(--cx-edge-soft)', fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, m.attribution)
             )
           );
         })
@@ -143,12 +143,12 @@ export default function DataSources(props) {
                 Object.entries(overviewSources).map(function(entry) {
                   const key = entry[0], cell = entry[1] || {};
                   return h('div', { key: key, className: 'cx-row' },
-                    h('div', { style: { color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--cx-mono)', fontSize: 11 } }, key),
+                    h('div', { style: { color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--cx-mono)', fontSize: 12 } }, key),
                     h('div', { style: { color: 'var(--cx-text-dim)' } }, cell.dataset || key),
                     h('div', null,
                       h('span', { style: { display: 'inline-flex', gap: 6, alignItems: 'center' } },
                         h(Dot, { tone: cell.state || 'unknown' }),
-                        h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10 } }, cell.state || 'unknown')
+                        h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12 } }, cell.state || 'unknown')
                       )
                     ),
                     h('div', { style: { textAlign: 'right', color: 'var(--cx-text-dim)' } }, cell.record_count != null ? fmtNum(cell.record_count) : EM),

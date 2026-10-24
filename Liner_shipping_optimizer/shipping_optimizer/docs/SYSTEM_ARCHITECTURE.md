@@ -1,8 +1,18 @@
 # AI Vessel Routing System - Architecture Documentation
 
+> Updated to follow `System_Architecture_Diagram_Large_Font.pdf` (4 pages). Blocks are referred to as *page.number*
+> (for example **3.7** = page 3, block 7); the numbers are reference numbers used in this document only (left to right,
+> top to bottom on each page) and are not printed on the PDF; use the block names to find a block there. Sections that the diagram
+> does not show (data structures, performance, configuration, monitoring, error handling, security, future work) are
+> unchanged from the earlier version of this document; where the earlier text conflicts with the diagram, the diagram applies.
+
 ## System Overview
 
-The AI Vessel Routing System is a multi-agent optimization framework designed for global liner shipping networks. It combines Genetic Algorithms (GA), Mixed-Integer Linear Programming (MILP), Large Language Models (LLMs), and multi-agent coordination to optimize vessel deployment, service selection, and cargo flow allocation across maritime networks.
+The AI Vessel Routing System is a hierarchical multi-agent framework for liner shipping network design. It splits the
+problem into regions, searches for candidate services regionally (genetic algorithms and a regional MILP), makes the
+network decision with **one global network optimisation** over all demand, and has every result re-derived by an
+**independent ledger** before it is reported. Large language models (LLMs) advise and describe; every suggestion is
+validated and the economic accounting never depends on them.
 
 ### Core Problem Domain
 
@@ -12,122 +22,280 @@ The AI Vessel Routing System is a multi-agent optimization framework designed fo
 
 ### Key Innovations
 
-1. **Hierarchical Decomposition**: Global problem split into regional sub-problems
-2. **Hybrid GA-MILP**: GA for service selection, MILP for flow optimization
-3. **LLM-Driven Decisions**: Strategic weight adjustments based on solution analysis
-4. **Iterative Refinement**: Feedback loop with max 3 iterations for convergence
+1. **Hierarchical Decomposition**: the global problem is split into regional sub-problems (k-means port clusters, demand split by origin); the regional agents run in parallel
+2. **Regional search, global decision**: regional GA and MILP produce candidates and hints; one network MILP over all demand decides, and regional economics are indicative only
+3. **Independent verification**: a separate ledger re-derives revenue, every cost item and every constraint from the raw data; the plan is reported as unverified if its profit differs from the optimiser's
+4. **LLM advice behind a trust boundary**: every LLM suggestion is validated and has a rule-based fallback
+5. **Iterative Refinement**: a feedback loop of 3 iterations; the best one is selected
 
 ## Architecture Diagram
 
+### Page 1 - Hierarchical multi-agent architecture
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ORCHESTRATOR AGENT                           │
-│                  (Master Controller)                            │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │ Problem Analysis│  │ Port Clustering │  │ Global Metrics  │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   REGIONAL SPLITTER                             │
-│            (Decompose by Geographic Clusters)                  │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-        ┌─────────────┴─────────────┐
-        │                           │
-        ▼                           ▼
-┌─────────────────┐         ┌─────────────────┐
-│ REGIONAL AGENT  │         │ REGIONAL AGENT  │
-│      Asia       │         │     Europe      │
-└─────────────────┘         └─────────────────┘
-        │                           │
-        └─────────────┬─────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                COORDINATOR AGENT                                │
-│            (Conflict Resolution & Feedback)                     │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 ITERATION CONTROL                              │
-│         (Max 3 iterations with weight adjustment)              │
-└─────────────────────────────────────────────────────────────────┘
+ [1.1] Inputs --> [1.2] Orchestrator Agent (LLM) --> [1.3] Problem Decomposition
+ ports, OD demand,  analysis, iteration control,     k-means port clusters,
+ distances, fleet,  final selection                  demand split by origin
+ port and canal costs                                        |
+                       +-------------------------------------+-------------------------------------+
+                       v                                     v                                     v
+              [1.4] Regional Agent-1                [1.4] Regional Agent-2                [1.4] Regional Agent-3
+                       +-------------------------------------+-------------------------------------+
+                                  (regional agents run in parallel)                                |
+                                                                                                   v
+                                           [1.5] Candidate Services & Frequencies
+                                           rotations - class screening - GA - regional MILP
+                                                                  |
+                                                                  v
+                                           [1.6] Global Network Optimisation
+                                           pooled candidates - one network MILP over all demand
+                                             [1.7] Network MILP             LP bound - integer plan
+                                             [1.8] Local Search & Flow Re-optimisation   exact LP moves
+                                             [1.9] Profit-floor Repair      only if profit < 0
+                                                                  |
+                                                                  v
+                                           [1.10] Independent Ledger Validator Agent
+                                           revenue - six cost items - profit - every constraint
+                                                                  |
+                                                                  v
+    [1.13] Resolutions  ---------------->  [1.11] Coordinator Decision Agent  ------->  [1.12] OPTIMISED NETWORK SOLUTION
+    regional results and context to the Coordinator:                                    services - frequencies - vessels -
+    conflict detection - overlap resolution -                                           cargo flows - revenue - costs -
+    consensus weights                                                                   profit - coverage
+                                                                  |
+    [1.14] Feedbacks  (back to the Orchestrator):  coverage gap - profit gap - conflicts - objective weights -
+    rerun signal  (3 iterations, best one selected)
 ```
+
+| Block | Role |
+|---|---|
+| 1.1 Inputs | Ports, OD demand, distances, fleet, port and canal costs |
+| 1.2 Orchestrator Agent (LLM) | Problem analysis, iteration control (3 iterations), final selection |
+| 1.3 Problem Decomposition | k-means port clusters; demand split by origin |
+| 1.4 Regional Agent-1, -2, -3 | One agent per region, run in parallel (page 2) |
+| 1.5 Candidate Services & Frequencies | Rotations, class screening, GA frequencies and regional MILP results handed to the global stage |
+| 1.6 Global Network Optimisation | Pooled candidates, one network MILP over all demand (page 3); contains 1.7 to 1.9 |
+| 1.7 Network MILP | Integer plan with an LP bound |
+| 1.8 Local Search & Flow Re-optimisation | Exact LP moves; cargo re-routed over all valid paths |
+| 1.9 Profit-floor Repair | Only if profit < 0 |
+| 1.10 Independent Ledger Validator Agent | Re-derives revenue, the six cost items, profit and every constraint |
+| 1.11 Coordinator Decision Agent | Conflict detection, overlap resolution, consensus weights, feedback |
+| 1.12 Optimised Network Solution | Services, frequencies, vessels, cargo flows, revenue, costs, profit, coverage |
+| 1.13 Resolutions | Regional results and context to the Coordinator |
+| 1.14 Feedbacks | Coverage gap, profit gap, conflicts, objective weights, rerun signal back to the Orchestrator |
+
+### Page 2 - Regional Agent: candidate generation, search and allocation
+
+One instance per region, run in parallel; its results become candidates and hints for the global stage.
+
+```
+ [2.1] Regional Problem --> [2.2] Regional Agent (LLM) --> [2.3] Service Generation --> [2.4] Feasibility & Class Screening
+ own ports, demand owned    hub detection,                 closed rotations of         time - draft - canal - inventory
+ by origin, full port       strategy text                  distinct ports, one                       |
+ catalogue                       ^                         vessel class each                         v
+                                 | [2.10] Archetype hints                                [2.5] Economic Filter
+                                 |  LLM candidate-mix suggestion,                        cap the pool by stand-alone economics
+                                 |  validated before use                                              |
+   generators inside 2.3:                                                                               v
+     A Direct services      top demand corridors                                         [2.6] Service GA
+     B Hub loops            multi-port via each hub                                      binary selection - surrogate fitness
+     C Hub trunks           hub-to-hub rotations                                                        |
+     D Feeders              spoke to best hub                                                           v
+     E Heuristic pool       base candidates                                              [2.7] Frequency GA
+     F Demand-coherent loops  3-5 ports, grown from strongest ODs                        integer departures per week
+                                                                                                        |
+                                                                                                        v
+ [2.9] Regional result  <------------------------------------------------------  [2.8] Regional MILP
+ candidate pool - frequency hints - to the global stage                            fixed frequencies - cargo allocation
+        |
+        +--> [2.11] Feedbacks to the Regional Problem: objective weights and regional policy from the Coordinator,
+             applied in the next iteration
+```
+
+Regional economics are indicative only: the global stage re-solves the pooled network and its verified figures replace them.
+
+| Block | Role |
+|---|---|
+| 2.1 Regional Problem | The region's own ports, the demand owned by its origin ports, the full port catalogue |
+| 2.2 Regional Agent (LLM) | Hub detection and strategy text; receives the archetype hints (2.10) |
+| 2.3 Service Generation | Candidate pool of closed rotations of distinct ports, one vessel class each, from generators A to F |
+| A Direct services | Top demand corridors |
+| B Hub loops | Multi-port loops via each hub |
+| C Hub trunks | Hub-to-hub rotations |
+| D Feeders | Spoke to best hub |
+| E Heuristic pool | Base candidates |
+| F Demand-coherent loops | 3 to 5 ports, grown from the strongest ODs |
+| 2.4 Feasibility & Class Screening | Time, draft, canal and inventory checks per rotation and vessel class |
+| 2.5 Economic Filter | Caps the pool by stand-alone economics |
+| 2.6 Service GA | Binary service selection with a surrogate fitness |
+| 2.7 Frequency GA | Integer departures per week |
+| 2.8 Regional MILP | Cargo allocation with the frequencies fixed |
+| 2.9 Regional result | Candidate pool and frequency hints for the global stage |
+| 2.10 Archetype hints | LLM candidate-mix suggestion, validated before use |
+| 2.11 Feedbacks | Objective weights and regional policy from the Coordinator, applied in the next iteration |
+
+### Page 3 - Global network optimisation and independent verification
+
+One network over all demand: candidates are priced by one service model, solved, improved, and re-derived by a separate ledger.
+
+```
+ [3.1] Candidate Pools --> [3.2] Pool Union --> [3.3] Service Models --> [3.4] OD Path Enumeration
+ from all regional agents  de-duplicate         cycle time - vessels -    direct - up to 2 transfers -
+ + frequency hints         rotations, add       fuel - port calls -       transit-time limit
+                           trunk candidates     canal - draft                       |
+                           for under-used                                           v
+                           vessel classes                    [3.5] LP Relaxation        upper bound - service support
+                                                             [3.6] Integer MILP         services - frequencies - vessels - flows
+                                                             [3.7] Local Search         add - drop - frequency moves
+                                                             [3.8] Flow Re-optimisation all valid paths, fixed network
+                                                             [3.9] Profit-floor Repair  only if profit < 0
+                                                                                |
+                                                                                v
+                                    [3.10] Independent Ledger --> [3.11] Verified? --> [3.12] Verified Network Plan
+                                    re-derives revenue, every     optimiser profit =   sum of regional figures equals
+                                    cost item and every           ledger profit        the network total
+                                    constraint from the raw data       |
+                                                                       +--> no: plan reported as unverified
+
+ [3.13] Operating profit = Revenue - ( Vessel hire + Fuel + Port calls + Handling + Transshipment )
+        unserved cargo carries no penalty; checks: fleet inventory - leg capacity - demand conservation -
+        transit time - draft - canal rules
+```
+
+| Block | Role |
+|---|---|
+| 3.1 Candidate Pools | Candidate services and frequency hints from all regional agents |
+| 3.2 Pool Union | De-duplicates rotations and adds trunk candidates for under-used vessel classes |
+| 3.3 Service Models | Prices every candidate: cycle time, vessels, fuel, port calls, canal, draft |
+| 3.4 OD Path Enumeration | Routes per OD pair: direct or up to 2 transfers, within the transit-time limit |
+| 3.5 LP Relaxation | Upper bound and service support |
+| 3.6 Integer MILP | Services, frequencies, vessels and flows |
+| 3.7 Local Search | Add, drop and frequency moves |
+| 3.8 Flow Re-optimisation | All valid paths with the network fixed |
+| 3.9 Profit-floor Repair | Only if profit < 0 |
+| 3.10 Independent Ledger | Re-derives revenue, every cost item and every constraint from the raw data |
+| 3.11 Verified? | Optimiser profit must equal the ledger profit; otherwise the plan is reported as unverified |
+| 3.12 Verified Network Plan | The final plan; the sum of the regional figures equals the network total |
+| 3.13 Profit formula | Operating profit = revenue - (vessel hire + fuel + port calls + handling + transshipment) |
+
+### Page 4 - Agent and LLM layer (trust boundary)
+
+Language models advise and describe; every suggestion is validated, and the economic accounting never depends on them.
+
+```
+ [4.1] Agent Request  -->  [4.2] LLM Client  -->  [4.3] Provider Router  -->  [4.4] OpenRouter / Groq / Cerebras / Google
+ role - prompt - context   single entry point,    role to model - cache -       |
+                           one record per call    circuit breaker - failover    v
+                                  ^    |                  ^               [4.5] Model Response (text or structured JSON)
+                                  |    +---- [4.10] Roles: orchestrator - regional - service generator -     |
+                                  |           coordinator - iteration selector (into the Provider Router)    v
+                                  |                                                       [4.6] Validator (schema - range - consensus rules)
+                                  |                                                          |                          |
+                                  |                                                  accepted|                          |rejected or provider unavailable
+                                  |                                                          v                          v
+                                  |                                          [4.7] Use LLM output          [4.8] Rule-based Fallback
+                                  |                                          decision source: LLM          deterministic template or score
+                                  |                                                          |                          |
+                                  |                                                          +------------+-------------+
+                                  |                                                                       v
+                                  +------ [4.11] Telemetry: provider - model - latency - failures ---  [4.9] Decision Applied
+                                          - fallback flag, per decision                                  source recorded: LLM or rule-based
+```
+
+Used for: narrative text, candidate-mix hints, objective-weight suggestions, iteration choice. Never used for: cost, revenue or profit figures.
+
+| Block | Role |
+|---|---|
+| 4.1 Agent Request | Role, prompt and context of one agent call |
+| 4.2 LLM Client | Single entry point; one record per call |
+| 4.3 Provider Router | Role to model, cache, circuit breaker, failover |
+| 4.4 OpenRouter / Groq / Cerebras / Google | The model providers |
+| 4.5 Model Response | Text or structured JSON |
+| 4.6 Validator | Schema, range and consensus rules |
+| 4.7 Use LLM output | Accepted answer; decision source: LLM |
+| 4.8 Rule-based Fallback | Rejected answer or unavailable provider: deterministic template or score |
+| 4.9 Decision Applied | The decision that enters the system; source recorded (LLM or rule-based) |
+| 4.10 Roles | orchestrator, regional, service generator, coordinator, iteration selector |
+| 4.11 Telemetry | Provider, model, latency, failures and fallback flag per decision |
 
 ## Component Inventory
 
-| Component | Responsibility | Technology | Key Classes |
-|-----------|----------------|------------|-------------|
-| OrchestratorAgent | System entry point, iteration control, problem analysis | Python + LLM | `OrchestratorAgent` |
-| RegionalAgent | Regional GA+MILP optimization, service selection | DEAP + PuLP | `RegionalAgent` |
-| CoordinatorAgent | Conflict detection, resolution, feedback generation | Python + LLM | `CoordinatorAgent` |
-| HierarchicalGA | Service selection + frequency optimization | Custom GA (DEAP) | `HierarchicalGA` |
-| ServiceGA | Service subset selection | DEAP | `ServiceGA` |
-| FrequencyGA | Sailing frequency optimization | Custom GA | `FrequencyGA` |
-| HubMILP | Flow allocation optimization | PuLP | `HubMILP` |
-| ServiceGeneratorAgent | Candidate service generation | Heuristics | `ServiceGeneratorAgent` |
+Technology and class names are given where the earlier version of this document recorded them; "-" means the diagram
+does not name them.
+
+| Component | Responsibility | Technology | Key Classes | Diagram |
+|-----------|----------------|------------|-------------|---------|
+| OrchestratorAgent | Problem analysis (LLM), iteration control (3 iterations), final selection | Python + LLM | `OrchestratorAgent` | 1.2 |
+| RegionalAgent | Per region: hub detection, strategy text (LLM), service generation, screening, economic filter, GA, regional MILP | DEAP + PuLP | `RegionalAgent` | 2.2 |
+| ServiceGeneratorAgent | Candidate service generation, generators A to F | Heuristics | `ServiceGeneratorAgent` | 2.3 |
+| HierarchicalGA | Service GA (binary selection) and Frequency GA (integer departures), surrogate fitness | Custom GA (DEAP) | `HierarchicalGA` | 2.6, 2.7 |
+| ServiceGA | Service subset selection | DEAP | `ServiceGA` | 2.6 |
+| FrequencyGA | Departures per week | Custom GA | `FrequencyGA` | 2.7 |
+| HubMILP (Regional MILP) | Cargo allocation with fixed frequencies | PuLP | `HubMILP` | 2.8 |
+| Global Network Optimisation | Pool union, service models, OD paths, LP relaxation, integer MILP, local search, flow re-optimisation, profit-floor repair | MILP | - | 1.6 to 1.9, 3.2 to 3.9 |
+| Independent Ledger Validator | Re-derives revenue, six cost items, profit and every constraint; verification check | - | - | 1.10, 3.10, 3.11 |
+| CoordinatorAgent | Conflict detection, overlap resolution, consensus weights, feedback | Python + LLM | `CoordinatorAgent` | 1.11 |
+| LLM layer | LLM Client, Provider Router, Validator, Rule-based Fallback, Telemetry | - | - | 4.1 to 4.11 |
 
 ## Optimization Pipeline
 
-### Phase 1: Problem Decomposition
+### Phase 1: Problem Decomposition (1.2, 1.3)
 
-1. **Port Clustering**: Geographic clustering into 3 regions (Asia, Europe, Americas)
-2. **Regional Splitting**: Assign ports and demands to regional agents
-3. **Service Generation**: Create candidate service pool (800-2000 services)
+1. **Problem analysis**: the Orchestrator Agent analyses the inputs (LLM)
+2. **Port clustering**: k-means port clusters (3 regions in the earlier version of this document: Asia, Europe, Americas)
+3. **Regional splitting**: the demand is split by origin, so each region owns its demand
 
-### Phase 2: Regional Optimization
+### Phase 2: Regional Optimisation (1.4, page 2)
 
-Each RegionalAgent executes:
+Each regional agent, run in parallel, executes:
 
 ```
-Service Generation → Service Filtering → Hierarchical GA → Hub MILP
+Service Generation (A-F) -> Feasibility & Class Screening -> Economic Filter -> Service GA -> Frequency GA -> Regional MILP
 ```
 
-#### Service Generation Strategies
+#### Service Generation Strategies (2.3)
 
-- **A. Direct Services**: Top-500 high-demand corridors (point-to-point)
-- **B. Hub Loops**: Hub + spoke regional loops (21-day cycle)
-- **C. Hub-to-Hub Trunks**: Backbone routes between major hubs
-- **D. Feeder Services**: Spoke-to-hub connections (7-day cycle)
-- **E. Heuristic Pool**: Additional candidates from algorithmic generator
+- **A. Direct services**: top demand corridors
+- **B. Hub loops**: multi-port loops via each hub
+- **C. Hub trunks**: hub-to-hub rotations
+- **D. Feeders**: spoke to best hub
+- **E. Heuristic pool**: base candidates
+- **F. Demand-coherent loops**: 3 to 5 ports, grown from the strongest ODs
 
-#### Hierarchical GA Process
+Archetype hints (2.10) from the LLM suggest the candidate mix and are validated before use.
 
-1. **Level 1 - Service Selection GA**:
-   - Population: 80 chromosomes
-   - Generations: 120
-   - Selection: Binary mask for services
-   - Fitness: Weighted profit (50%) + coverage (40%) + cost (10%)
+#### Screening and filtering (2.4, 2.5)
 
-2. **Level 2 - Frequency Optimization GA**:
-   - Frequency range: 1-3 sailings/week
-   - Fleet constraint: ≤300 vessels total
-   - Vessel calculation: ceil(cycle_time * frequency / 7)
+Rotations are checked for time, draft, canal and inventory, with a vessel class assigned (2.4); the pool is then capped by stand-alone economics (2.5).
 
-#### MILP Flow Optimization
+#### Hierarchical GA (2.6, 2.7)
 
-For each hub cluster:
-- **Variables**: Direct flow, transfer flow, unserved demand
-- **Objective**: Maximize profit - costs - unserved penalty
-- **Constraints**: Capacity, demand fulfillment, port handling limits
-- **Transfer Pairs**: Up to 2000 hub-mediated transfers
+1. **Level 1 - Service GA**: binary selection of services with a surrogate fitness
+2. **Level 2 - Frequency GA**: integer departures per week
 
-### Phase 3: Global Coordination
+Parameters of the earlier version of this document (not shown in the diagram): population 80, 120 generations; frequency range 1-3 sailings/week; vessel calculation ceil(cycle_time * frequency / 7).
 
-1. **Conflict Detection**: Identify services selected in multiple regions
-2. **Conflict Resolution**: Keep service in highest-profit region only
-3. **Global Metrics**: Aggregate profit, coverage, cost across regions
-4. **Feedback Generation**: Gradient signals for next iteration
+#### Regional MILP (2.8)
 
-### Phase 4: Iterative Refinement
+Allocates the cargo with the frequencies fixed. Its result (2.9) is the candidate pool and the frequency hints for the global stage; regional economics are indicative only.
 
-Maximum 3 iterations with:
-- **Weight Adjustment**: Profit/Coverage/Cost weights tuned based on gaps
-- **Exploration Factor**: Increased by 10% each iteration for diversity
-- **Convergence Check**: Stop when coverage gap < 1% or max iterations reached
+### Phase 3: Global Network Optimisation (1.5 to 1.9, page 3)
+
+1. **Pool Union (3.2)**: regional pools are merged, duplicate rotations removed, trunk candidates added for under-used vessel classes
+2. **Service Models (3.3)** and **OD Path Enumeration (3.4)**: every candidate is priced; paths are direct or use up to 2 transfers within the transit-time limit
+3. **LP Relaxation (3.5)** and **Integer MILP (3.6)**: upper bound, then the integer plan (services, frequencies, vessels, flows)
+4. **Local Search (3.7)** and **Flow Re-optimisation (3.8)**: add, drop and frequency moves; all valid paths with the network fixed
+5. **Profit-floor Repair (3.9)**: only if profit < 0
+
+### Phase 4: Independent Verification (1.10, 3.10 to 3.12)
+
+The Independent Ledger re-derives revenue, every cost item and every constraint from the raw data. The plan is verified only if the optimiser profit equals the ledger profit; otherwise it is reported as unverified. Only the verified plan is reported (3.12).
+
+### Phase 5: Coordination and Iteration (1.11, 1.13, 1.14)
+
+1. **Coordination**: the Coordinator Decision Agent receives the regional results and context (Resolutions): conflict detection, overlap resolution, consensus weights
+2. **Feedbacks**: coverage gap, profit gap, conflicts, objective weights and a rerun signal return to the Orchestrator; regional agents apply the objective weights and regional policy in the next iteration
+3. **Iterations**: 3 iterations; the best one is selected as the Optimised Network Solution (1.12)
 
 ## Data Flow Architecture
 
@@ -173,9 +341,12 @@ Problem: {
 ### Data Flow Sequence
 
 ```
-Raw Data (CSV) → Problem Instance → Regional Split → GA Optimization → 
-MILP Solving → Regional Results → Conflict Resolution → Global Solution
+Inputs -> Orchestrator Agent -> Problem Decomposition -> Regional Agents (candidate generation, screening, GA, regional MILP)
+-> candidate pools and frequency hints -> Global Network Optimisation -> Independent Ledger -> Verified?
+-> Coordinator Decision Agent -> Feedbacks (3 iterations, best one selected) -> Optimised Network Solution
 ```
+
+Regional results below are indicative only; the verified global figures replace them (page 2 note, 3.12).
 
 ### Intermediate Data Formats
 
@@ -265,40 +436,57 @@ Where:
 
 ### Objective Function
 
-```
-Maximize: α × (Revenue - Operating Costs - Transshipment Costs - Port Costs)
-           - β × UnservedDemandPenalty
-           + γ × CoverageReward
+The global network decision (page 3) maximises operating profit:
 
-Where:
-- α = profit_weight (default 0.5)
-- β = coverage_weight (default 0.4)
-- γ = cost_weight (default 0.1)
 ```
+Operating profit = Revenue - ( Vessel hire + Fuel + Port calls + Handling + Transshipment )
+```
+
+Unserved cargo carries no penalty. The independent ledger checks fleet inventory, leg capacity, demand conservation,
+transit time, draft and canal rules, and the plan is reported as unverified if the optimiser profit differs from the
+ledger profit. The regional GA stage works with a surrogate fitness, and the objective weights returned in the
+feedbacks (1.14) are applied by the regional agents in the next iteration (2.11).
 
 ## LLM Integration Points
 
+### Trust boundary (page 4)
+
+Language models advise and describe; every suggestion is validated, and the economic accounting never depends on
+them. Each call passes the LLM Client (4.2, one record per call) and the Provider Router (4.3: role to model, cache,
+circuit breaker, failover) to a provider (OpenRouter, Groq, Cerebras or Google, 4.4). The Model Response (4.5, text or
+structured JSON) goes to the Validator (4.6: schema, range, consensus rules). An accepted answer is used (4.7, decision
+source: LLM); a rejected answer or an unavailable provider triggers the Rule-based Fallback (4.8, deterministic template
+or score). The Decision Applied (4.9) records its source, and Telemetry (4.11) records provider, model, latency,
+failures and fallback flag per decision.
+
+**Roles that call the LLM (4.10)**: orchestrator, regional, service generator, coordinator, iteration selector.
+
+**Used for**: narrative text, candidate-mix hints, objective-weight suggestions, iteration choice.
+**Never used for**: cost, revenue or profit figures.
+
 ### Strategic Decision Points
 
-1. **Problem Analysis** (Orchestrator):
+1. **Problem Analysis** (Orchestrator, 1.2):
    - Network complexity assessment
    - Decomposition strategy validation
    - Size classification (Small/Medium/Large)
 
-2. **Service Strategy** (RegionalAgent):
-   - Hub-and-spoke vs direct vs hybrid
+2. **Service Strategy** (RegionalAgent, 2.2):
+   - Hub detection and strategy text
+   - Archetype hints for the candidate mix (2.10), validated before use
    - Hub port selection validation
-   - Coverage target setting
 
-3. **Conflict Resolution** (Coordinator):
-   - Weight adjustment recommendations
+3. **Conflict Resolution** (Coordinator, 1.11):
+   - Weight adjustment recommendations (consensus weights)
    - Priority action identification
    - Convergence diagnosis
+
+4. **Iteration choice**: the iteration selector picks the best of the 3 iterations
 
 ### LLM Prompt Engineering
 
 - **Structured Outputs**: JSON format with required fields
-- **Fallback Logic**: Rule-based when LLM fails
+- **Fallback Logic**: Rule-based when LLM fails (4.8)
 - **Validation Checks**: Presence of numeric citations
 - **Temperature Control**: 0.1 for consistent outputs
 

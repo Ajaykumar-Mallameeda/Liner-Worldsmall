@@ -1,5 +1,5 @@
 """LEGACY COPY (verbatim) of the pre-network-model implementation, kept for reference.
-Not imported by the pipeline. Superseded by src/network/* (see reports/overnight_tasks_2_to_4).
+Not imported by the pipeline. Superseded by src/network/*.
 """
 import logging
 import pulp
@@ -20,7 +20,7 @@ DEFAULT_MIN_COVERAGE   = 0.0    # penalty-driven, not constraint-driven
 
 
 # --------------------------------------------------------------------
-# IP-2 (Phase 7) — local-only fuel-cost kwarg builder
+# IP-2 — local-only fuel-cost kwarg builder
 # --------------------------------------------------------------------
 # This helper is structurally identical to
 # ``maritime.optimizer_bridge.fuel_cost_kwargs`` but is duplicated
@@ -63,7 +63,7 @@ class HubMILP:
         time_limit: int               = 120,
         fleet_size: int = 300,
         *,
-        # IP-3 (Phase 7): optional congestion-derived port-capacity
+        # IP-3: optional congestion-derived port-capacity
         # override map. ``None`` or an empty dict preserves the
         # existing pre-maritime synthetic capacity map unchanged.
         # Keys are port ids (int) as used in ``problem.ports``;

@@ -3,7 +3,7 @@
  * Uses runtimeAdapter + websocketManager + apiClient.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   normalizeGlobal,
   normalizeIteration,
@@ -14,6 +14,7 @@ import {
 } from '../runtime/runtimeAdapter.js';
 import { apiClient } from '../services/apiClient.js';
 import { websocketManager } from '../services/websocketManager.js';
+import { subscribeRun } from '../services/runSelection.js';
 
 const INITIAL_STATE = {
   global: {
@@ -46,6 +47,8 @@ const INITIAL_STATE = {
   regions: {},
   iterations: [],
   corridors: [],
+  source: null,
+  wsStatus: 'idle',
   isConnected: false,
   isPipelineRunning: false,
   currentStage: null,
@@ -115,20 +118,30 @@ function handlePipelineCompleted(message, setState) {
 export const PIPELINE_REFRESH_INTERVAL_MS = 5000; // 5-second polling for live rerun reactivity
  
 export function useOptimizationState() {
-  const [state, setState] = useState(INITIAL_STATE);
+  // Start from the shared socket's current status so pages mounted later agree with the header.
+  const [state, setState] = useState(() => {
+    const status = websocketManager.getStatus();
+    return { ...INITIAL_STATE, wsStatus: status, isConnected: status === 'open' };
+  });
   const [freshness, setFreshness] = useState({
     status: 'initial',
     lastFetchedAt: null,
     error: null,
   });
 
+  const lastNormalizedRef = useRef(null);
+
   const fetchRuntimeTruth = useCallback(() => {
     return apiClient
       .loadRuntimeTruth()
       .then((normalized) => {
-      setState((prev) => ({
+        // Unchanged file (304): same object back, nothing to re-render.
+        if (normalized === lastNormalizedRef.current) return;
+        lastNormalizedRef.current = normalized;
+        setState((prev) => ({
           ...prev,
           global: { ...prev.global, ...normalized.global },
+          source: normalized.source || null,
           regions: normalized.regions,
           iterations: normalized.iterations,
           corridors: normalized.corridors,
@@ -156,23 +169,37 @@ export function useOptimizationState() {
       });
   }, []);
 
-  // Initial fetch + Periodic 60s Polling Loop
+  // Initial fetch + polling while the browser tab is visible (conditional requests, see apiClient)
   useEffect(() => {
     fetchRuntimeTruth();
-    const interval = setInterval(fetchRuntimeTruth, PIPELINE_REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchRuntimeTruth();
+    }, PIPELINE_REFRESH_INTERVAL_MS);
+    const onVisible = () => { if (!document.hidden) fetchRuntimeTruth(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchRuntimeTruth]);
+
+  // Switching run (header picker): drop the previous run's figures, then load the new one.
+  useEffect(() => subscribeRun(() => {
+    lastNormalizedRef.current = null;
+    setState((prev) => ({
+      ...INITIAL_STATE,
+      isConnected: prev.isConnected,
+      wsStatus: prev.wsStatus,
+    }));
+    setFreshness({ status: 'initial', lastFetchedAt: null, error: null });
+    fetchRuntimeTruth();
+  }), [fetchRuntimeTruth]);
 
   useEffect(() => {
     const unsubscribers = [
-      websocketManager.on('connected', () => {
-        setState((prev) => ({ ...prev, isConnected: true }));
-      }),
-      websocketManager.on('disconnected', () => {
-        setState((prev) => ({ ...prev, isConnected: false }));
-      }),
-      websocketManager.on('error', () => {
-        setState((prev) => ({ ...prev, pipelineError: 'Connection error' }));
+      websocketManager.on('status', (status) => {
+        setState((prev) => ({ ...prev, wsStatus: status, isConnected: status === 'open' }));
       }),
       websocketManager.on('initial_state', (message) => handleInitialState(message, setState)),
       websocketManager.on('pipeline_started', () => {

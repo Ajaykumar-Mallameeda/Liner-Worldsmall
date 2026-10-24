@@ -23,7 +23,7 @@ export default function RegionCard({ r, onClick, selected }) {
       <div className="text-xl font-bold text-white mb-1" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
         {fmt(r.profit)}
       </div>
-      <div className="text-xs text-white/40 mb-3">weekly profit</div>
+      <div className="text-xs text-white/60 mb-3">weekly profit</div>
 
       <div className="grid grid-cols-3 gap-2 mb-3">
         {[
@@ -32,14 +32,14 @@ export default function RegionCard({ r, onClick, selected }) {
           { label: "Margin", value: `${r.margin.toFixed(1)}%` },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-lg p-2" style={{ background: "rgba(255,255,255,0.04)" }}>
-            <div className="text-xs text-white/40 mb-0.5">{label}</div>
+            <div className="text-xs text-white/60 mb-0.5">{label}</div>
             <div className="text-sm font-mono text-white/90">{value}</div>
           </div>
         ))}
       </div>
 
       <div className="mb-2">
-        <div className="flex justify-between text-xs text-white/40 mb-1">
+        <div className="flex justify-between text-xs text-white/60 mb-1">
           <span>Coverage</span><span>{r.coverage.toFixed(1)}%</span>
         </div>
         <ProgressBar value={r.coverage} color={r.color} />
@@ -51,7 +51,7 @@ export default function RegionCard({ r, onClick, selected }) {
             {h}
           </span>
         ))}
-        <span className="text-xs px-1.5 py-0.5 rounded font-mono text-white/30" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <span className="text-xs px-1.5 py-0.5 rounded font-mono text-white/60" style={{ background: "rgba(255,255,255,0.04)" }}>
           +{r.hubs.length - 3}
         </span>
       </div>

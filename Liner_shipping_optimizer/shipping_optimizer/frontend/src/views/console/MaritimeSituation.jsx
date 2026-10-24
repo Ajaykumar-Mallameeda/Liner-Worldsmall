@@ -37,7 +37,7 @@ function LayerBlock(props) {
     title: title,
     right: h('span', { style: { display: 'inline-flex', gap: 6, alignItems: 'center' } },
       h(Dot, { tone: state || 'unknown' }),
-      h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', textTransform: 'uppercase', letterSpacing: '0.14em' } }, state || 'unknown')
+      h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', textTransform: 'uppercase', letterSpacing: '0.14em' } }, state || 'unknown')
     ),
   },
     loading
@@ -47,7 +47,7 @@ function LayerBlock(props) {
         : h(F, null,
             stats && h('div', { className: 'p12-kv-grid', style: { marginBottom: 10 } }, stats),
             children,
-            h('div', { style: { marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--cx-edge-soft)', fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', letterSpacing: '0.05em', textTransform: 'uppercase' } },
+            h('div', { style: { marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--cx-edge-soft)', fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', letterSpacing: '0.05em', textTransform: 'uppercase' } },
               attribution + ' · ' + license + (evaluatedAt ? (' · eval ' + fmtTime(evaluatedAt)) : '')
             )
           )
@@ -64,6 +64,7 @@ export default function MaritimeSituation(props) {
   useEffect(function() {
     let cancelled = false;
     const load = async function() {
+      if (document.hidden) return;
       try {
         const w = await fetch('/api/maritime/weather/status').then(function(r) { return r.ok ? r.json() : null; });
         const c = await fetch('/api/maritime/congestion/status').then(function(r) { return r.ok ? r.json() : null; });
@@ -103,6 +104,9 @@ export default function MaritimeSituation(props) {
 
     h('div', { className: 'cx-page-body' },
 
+      overallState === 'disabled' && h('div', { className: 'cx-compact-empty', role: 'status', style: { border: '1px solid var(--cx-edge)', marginBottom: 12 } },
+        'Maritime intelligence is off for this run (MARITIME_INTELLIGENCE_ENABLED=0), so the weather, congestion and live layers below have no snapshots. The optimizer used the dataset files only. Set MARITIME_INTELLIGENCE_ENABLED=1 on the backend to turn the layers on.'),
+
       h('div', { className: 'cx-grid-12' },
         h('div', { className: 'cx-span-4' },
           h(LayerBlock, {
@@ -126,12 +130,12 @@ export default function MaritimeSituation(props) {
               (weather.forecasts || []).slice(0, 6).map(function(f, i) {
                 return h('div', { key: i, className: 'cx-row', style: { padding: '6px 10px' } },
                   h('div', null,
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)' } }, f.region || f.area || 'region ' + (i + 1)),
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, f.timestamp ? fmtTime(f.timestamp) : EM)
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, f.region || f.area || 'region ' + (i + 1)),
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, f.timestamp ? fmtTime(f.timestamp) : EM)
                   ),
                   h('div', null,
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)' } }, f.wind_kt ? (f.wind_kt + ' kt') : (f.wind_speed ? (f.wind_speed + ' kt') : EM)),
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, 'wave ' + (f.wave_height_m || 0).toFixed(1) + 'm')
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, f.wind_kt ? (f.wind_kt + ' kt') : (f.wind_speed ? (f.wind_speed + ' kt') : EM)),
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, 'wave ' + (f.wave_height_m || 0).toFixed(1) + 'm')
                   )
                 );
               })
@@ -160,12 +164,12 @@ export default function MaritimeSituation(props) {
               (congestion.hotspots || []).slice(0, 6).map(function(hs, i) {
                 return h('div', { key: i, className: 'cx-row', style: { padding: '6px 10px' } },
                   h('div', null,
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)' } }, hs.region || hs.area || ('hotspot ' + (i + 1))),
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, 'severity ' + (hs.severity || EM))
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, hs.region || hs.area || ('hotspot ' + (i + 1))),
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, 'severity ' + (hs.severity || EM))
                   ),
                   h('div', null,
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)' } }, hs.vessels ? (hs.vessels + ' vessels') : EM),
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, hs.density ? (hs.density + ' / km²') : EM)
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, hs.vessels ? (hs.vessels + ' vessels') : EM),
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, hs.density ? (hs.density + ' / km²') : EM)
                   )
                 );
               })
@@ -194,12 +198,12 @@ export default function MaritimeSituation(props) {
               (live.vessels || []).slice(0, 6).map(function(v, i) {
                 return h('div', { key: i, className: 'cx-row', style: { padding: '6px 10px' } },
                   h('div', null,
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)' } }, v.mmsi || ('vessel ' + (i + 1))),
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, v.vessel_type || EM)
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, v.mmsi || ('vessel ' + (i + 1))),
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, v.vessel_type || EM)
                   ),
                   h('div', null,
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)' } }, v.speed_kt ? (v.speed_kt + ' kt') : EM),
-                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, v.course ? (v.course + ' deg') : EM)
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, v.speed_kt ? (v.speed_kt + ' kt') : EM),
+                    h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, v.course ? (v.course + ' deg') : EM)
                   )
                 );
               })

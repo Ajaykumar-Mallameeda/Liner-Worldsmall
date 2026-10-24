@@ -74,7 +74,7 @@ class OrchestratorAgent(BaseAgent):
         )
 
     # ================================================================
-    # PROJECT X — iteration-candidate snapshot helpers
+    # iteration-candidate snapshot helpers
     # ================================================================
 
     def _iteration_results_append(self, snapshot: Dict[str, Any]) -> None:
@@ -600,7 +600,7 @@ class OrchestratorAgent(BaseAgent):
         problem.coverage_weight = weights['coverage']
         problem.cost_weight = weights['cost']
 
-        # ── IP-1 — Maritime feature attach (additive, optional) ─────
+        # — Maritime feature attach (additive, optional) ─────
         # Read already-materialized local maritime intelligence through
         # the existing read-only feature adapter. The attach is bounded
         # by a wall-clock budget and is fully gated on
@@ -624,7 +624,7 @@ class OrchestratorAgent(BaseAgent):
             if self._maritime_features is not None:
                 # Attach to the Problem so downstream code can read it
                 # without re-reading the snapshot. This is the single
-                # new attribute introduced by IP-1.
+                # new attribute introduced above.
                 try:
                     setattr(problem, "maritime_features", self._maritime_features)
                 except Exception:  # noqa: BLE001
@@ -851,7 +851,7 @@ class OrchestratorAgent(BaseAgent):
                     "problem":            problem,
                     "iteration":          iteration,
                     # the iteration's verified network ledger is the authority for
-                    # the economics the coordinator reports and evaluates (F-15)
+                    # the economics the coordinator reports and evaluates.
                     "network_ledger":     self._iter_network_ledger,
                 })
 
@@ -1271,7 +1271,7 @@ class OrchestratorAgent(BaseAgent):
                 }
             })
 
-        # ⚡ Phase P+1C: Aggregate LLM runtime metrics
+        # ⚡Aggregate LLM runtime metrics
         coordinator_metrics = decision_output.get("llm_runtime_metrics", {})
         # Derive servicegen success from archetype_params across regions
         svcgen_ai_count = 0
@@ -1309,7 +1309,7 @@ class OrchestratorAgent(BaseAgent):
             "servicegen_fallback_count": svcgen_total - svcgen_ai_count,
         }
 
-        # Phase L — provider-aware runtime telemetry aggregated from the
+        # provider-aware runtime telemetry aggregated from the
         # actuation ledger.
         acts = actuation_ledger.all()
         providers_used: Dict[str, int] = {}

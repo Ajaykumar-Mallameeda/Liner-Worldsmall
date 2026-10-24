@@ -65,12 +65,12 @@ export default function LiveMaritimeIntelligenceCard({ status, providers }) {
         }}
       >
         <div className="flex items-center justify-between mb-1">
-          <div className="text-xs uppercase tracking-widest text-white/40 font-mono">
+          <div className="text-xs uppercase tracking-widest text-white/60 font-mono">
             Live Maritime Intelligence
           </div>
-          <span className="text-[10px] font-mono text-white/30 uppercase">Disabled</span>
+          <span className="text-[12px] font-mono text-white/60 uppercase">Disabled</span>
         </div>
-        <div className="text-[11px] text-white/30 font-mono">
+        <div className="text-[12px] text-white/60 font-mono">
           Set <span className="text-white/50">MARITIME_LIVE_ENABLED=1</span> and
           <span className="text-white/50"> MARITIME_LIVE_PROVIDER=digitraffic</span>{" "}
           to enable. Default is OFF. The optimizer never makes a network call.
@@ -97,7 +97,7 @@ export default function LiveMaritimeIntelligenceCard({ status, providers }) {
       }}
     >
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs uppercase tracking-widest text-white/40 font-mono">
+        <div className="text-xs uppercase tracking-widest text-white/60 font-mono">
           Live Maritime Intelligence
         </div>
         <div className="flex items-center gap-2">
@@ -111,35 +111,35 @@ export default function LiveMaritimeIntelligenceCard({ status, providers }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
-        <div className="text-white/40">Provider</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] font-mono">
+        <div className="text-white/60">Provider</div>
         <div className="text-white/80 text-right">
           {provider === "digitraffic" ? "Digitraffic" : provider}
         </div>
 
-        <div className="text-white/40">Last update</div>
+        <div className="text-white/60">Last update</div>
         <div className="text-white/80 text-right">
           {formatAge(status.freshness_seconds)}
         </div>
 
-        <div className="text-white/40">Records</div>
+        <div className="text-white/60">Records</div>
         <div className="text-white/80 text-right">
           {formatNumber(status.record_count)}
         </div>
 
-        <div className="text-white/40">Quality</div>
+        <div className="text-white/60">Quality</div>
         <div className="text-white/80 text-right">
           {status.quality_score != null
             ? Number(status.quality_score).toFixed(2)
             : "—"}
         </div>
 
-        <div className="text-white/40">Fallback</div>
+        <div className="text-white/60">Fallback</div>
         <div className="text-white/80 text-right">
           {status.fallback_tier || "—"}
         </div>
 
-        <div className="text-white/40">Rate-limit</div>
+        <div className="text-white/60">Rate-limit</div>
         <div
           className="text-right"
           style={{ color: rateLimited ? "#f59e0b" : "rgba(255,255,255,0.8)" }}
@@ -147,7 +147,7 @@ export default function LiveMaritimeIntelligenceCard({ status, providers }) {
           {rateLimited ? "RATE LIMITED" : "OK"}
         </div>
 
-        <div className="text-white/40">Snapshot</div>
+        <div className="text-white/60">Snapshot</div>
         <div
           className="text-white/60 text-right truncate"
           title={status.snapshot_id || ""}
@@ -155,13 +155,13 @@ export default function LiveMaritimeIntelligenceCard({ status, providers }) {
           {status.snapshot_id || "—"}
         </div>
 
-        <div className="text-white/40">License</div>
+        <div className="text-white/60">License</div>
         <div className="text-white/80 text-right">{status.license || "unresolved"}</div>
       </div>
 
       {!fresh && (
         <div
-          className="mt-2 pt-2 border-t border-white/5 text-[11px] font-mono"
+          className="mt-2 pt-2 border-t border-white/5 text-[12px] font-mono"
           style={{ color: "#f59e0b" }}
         >
           {state === "stale"
@@ -175,13 +175,13 @@ export default function LiveMaritimeIntelligenceCard({ status, providers }) {
       )}
 
       {attribution && (
-        <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-white/30 font-mono leading-tight">
+        <div className="mt-2 pt-2 border-t border-white/5 text-[12px] text-white/60 font-mono leading-tight">
           {attribution}
         </div>
       )}
 
       {status.error && (
-        <div className="mt-1 text-[10px] text-white/40 font-mono">
+        <div className="mt-1 text-[12px] text-white/60 font-mono">
           Last error: {String(status.error_kind || "—")} · {String(status.error).slice(0, 80)}
         </div>
       )}

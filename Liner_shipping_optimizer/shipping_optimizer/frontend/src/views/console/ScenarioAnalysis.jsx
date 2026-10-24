@@ -95,7 +95,7 @@ function ComparisonRow({ label, base, scenario, delta, isUsd = false, isPct = fa
       padding: '4px 6px',
       borderBottom: '1px solid rgba(255,255,255,0.04)',
       fontFamily: 'var(--cx-mono)',
-      fontSize: 9,
+      fontSize: 12,
     },
   },
     h('span', { style: { color: 'var(--cx-text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' } }, label),
@@ -138,7 +138,7 @@ function SensitivityChart({ points = [], currentMult = 1.0, title = 'Fuel Price 
     h('div', {
       style: {
         display: 'flex', justifyContent: 'space-between',
-        fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+        fontFamily: 'var(--cx-mono)', fontSize: 12,
         color: 'var(--cx-text-faint)', textTransform: 'uppercase', marginBottom: 4,
       },
     },
@@ -170,18 +170,18 @@ function SensitivityChart({ points = [], currentMult = 1.0, title = 'Fuel Price 
           }),
           h('text', {
             x: p.x, y: H - 4, textAnchor: 'middle',
-            fontFamily: 'monospace', fontSize: 7.5, fill: p.isCurrent ? '#fbbf24' : 'rgba(255,255,255,0.4)',
+            fontFamily: 'monospace', fontSize: 12, fill: p.isCurrent ? '#fbbf24' : 'rgba(255,255,255,0.4)',
             fontWeight: p.isCurrent ? 700 : 400,
           }, p.label),
         )
       ),
       h('text', {
         x: PAD.left - 4, y: PAD.top + 3, textAnchor: 'end',
-        fontFamily: 'monospace', fontSize: 7, fill: 'rgba(255,255,255,0.4)',
+        fontFamily: 'monospace', fontSize: 12, fill: 'rgba(255,255,255,0.4)',
       }, fmtUsd(maxP)),
       h('text', {
         x: PAD.left - 4, y: PAD.top + cH + 2, textAnchor: 'end',
-        fontFamily: 'monospace', fontSize: 7, fill: 'rgba(255,255,255,0.4)',
+        fontFamily: 'monospace', fontSize: 12, fill: 'rgba(255,255,255,0.4)',
       }, fmtUsd(minP)),
     ),
   );
@@ -299,7 +299,7 @@ export default function ScenarioAnalysis(props) {
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
           h('span', {
             style: {
-              fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+              fontFamily: 'var(--cx-mono)', fontSize: 12,
               color: 'var(--cx-text-faint)', textTransform: 'uppercase', letterSpacing: '0.1em',
               marginRight: 4,
             },
@@ -314,7 +314,7 @@ export default function ScenarioAnalysis(props) {
                 border: '1px solid var(--cx-edge-soft)',
                 color: 'var(--cx-text-dim)',
                 fontFamily: 'var(--cx-mono)',
-                fontSize: 8.5,
+                fontSize: 12,
                 padding: '3px 8px',
                 cursor: 'pointer',
                 borderRadius: 2,
@@ -334,7 +334,7 @@ export default function ScenarioAnalysis(props) {
               border: '1px solid rgba(239,68,68,0.3)',
               color: '#ef4444',
               fontFamily: 'var(--cx-mono)',
-              fontSize: 8.5,
+              fontSize: 12,
               fontWeight: 600,
               padding: '4px 10px',
               cursor: 'pointer',
@@ -362,7 +362,7 @@ export default function ScenarioAnalysis(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -389,7 +389,7 @@ export default function ScenarioAnalysis(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -415,14 +415,14 @@ export default function ScenarioAnalysis(props) {
                         style: {
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           background: 'rgba(0,245,255,0.06)', border: '1px solid var(--cx-edge-soft)',
-                          padding: '3px 6px', borderRadius: 2, fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                          padding: '3px 6px', borderRadius: 2, fontFamily: 'var(--cx-mono)', fontSize: 12,
                         },
                       },
                         h('span', { style: { color: 'var(--cx-cyan-2)' } }, scKey.replace(/_/g, ' ').toUpperCase()),
                         h('button', {
                           type: 'button',
                           onClick: () => toggleScenario(scKey),
-                          style: { background: 'none', border: 'none', color: 'var(--cx-text-faint)', cursor: 'pointer', fontSize: 10 },
+                          style: { background: 'none', border: 'none', color: 'var(--cx-text-faint)', cursor: 'pointer', fontSize: 12 },
                         }, '✕'),
                       )
                     ),
@@ -436,7 +436,7 @@ export default function ScenarioAnalysis(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -465,7 +465,7 @@ export default function ScenarioAnalysis(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -502,11 +502,11 @@ export default function ScenarioAnalysis(props) {
                     checked: activeScenarios.includes('fuel_cost'),
                     onChange: () => toggleScenario('fuel_cost'),
                   }),
-                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, fontWeight: 600, color: 'var(--cx-text)' } },
+                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: 'var(--cx-text)' } },
                     '💲 Bunker Fuel Price Shift'
                   ),
                 ),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: '#fbbf24', fontWeight: 600 } },
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: '#fbbf24', fontWeight: 600 } },
                   activeScenarios.includes('fuel_cost') ? `${Math.round((parameters.fuelPriceMultiplier - 1) * 100)}%` : 'OFF'
                 ),
               ),
@@ -526,11 +526,11 @@ export default function ScenarioAnalysis(props) {
                     checked: activeScenarios.includes('weather_severity'),
                     onChange: () => toggleScenario('weather_severity'),
                   }),
-                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, fontWeight: 600, color: 'var(--cx-text)' } },
+                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: 'var(--cx-text)' } },
                     '🌊 Metocean Storm & Speed Cut'
                   ),
                 ),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: '#38bdf8', fontWeight: 600 } },
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: '#38bdf8', fontWeight: 600 } },
                   activeScenarios.includes('weather_severity') ? `${Math.round(parameters.weatherSpeedFactor * 100)}% Spd` : 'OFF'
                 ),
               ),
@@ -550,11 +550,11 @@ export default function ScenarioAnalysis(props) {
                     checked: activeScenarios.includes('chokepoint_delay'),
                     onChange: () => toggleScenario('chokepoint_delay'),
                   }),
-                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, fontWeight: 600, color: 'var(--cx-text)' } },
+                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: 'var(--cx-text)' } },
                     '⚓ Canal / Chokepoint Queue'
                   ),
                 ),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: '#f59e0b', fontWeight: 600 } },
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: '#f59e0b', fontWeight: 600 } },
                   activeScenarios.includes('chokepoint_delay') ? `+${parameters.chokepointDelayHours}h` : 'OFF'
                 ),
               ),
@@ -574,11 +574,11 @@ export default function ScenarioAnalysis(props) {
                     checked: activeScenarios.includes('port_closure'),
                     onChange: () => toggleScenario('port_closure'),
                   }),
-                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, fontWeight: 600, color: 'var(--cx-text)' } },
+                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: 'var(--cx-text)' } },
                     '🚫 Port Terminal Closure'
                   ),
                 ),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: '#ef4444', fontWeight: 600 } },
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: '#ef4444', fontWeight: 600 } },
                   activeScenarios.includes('port_closure') ? (parameters.closedPortCode || 'USLAX') : 'OFF'
                 ),
               ),
@@ -598,11 +598,11 @@ export default function ScenarioAnalysis(props) {
                     checked: activeScenarios.includes('demand_change'),
                     onChange: () => toggleScenario('demand_change'),
                   }),
-                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, fontWeight: 600, color: 'var(--cx-text)' } },
+                  h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: 'var(--cx-text)' } },
                     '📦 Demand Surge / Contraction'
                   ),
                 ),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: '#a78bfa', fontWeight: 600 } },
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: '#a78bfa', fontWeight: 600 } },
                   activeScenarios.includes('demand_change') ? `${Math.round((parameters.globalDemandMultiplier - 1) * 100)}%` : 'OFF'
                 ),
               ),
@@ -619,7 +619,7 @@ export default function ScenarioAnalysis(props) {
             h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 10 } },
               // 1. Fuel Slider
               h('div', { style: { opacity: activeScenarios.includes('fuel_cost') ? 1 : 0.45 } },
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--cx-mono)', fontSize: 8.5, marginBottom: 3 } },
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--cx-mono)', fontSize: 12, marginBottom: 3 } },
                   h('span', { style: { color: 'var(--cx-text-dim)' } }, 'BUNKER FUEL PRICE MULTIPLIER:'),
                   h('span', { style: { color: '#fbbf24', fontWeight: 700 } }, `${(parameters.fuelPriceMultiplier).toFixed(2)}× (${parameters.fuelPriceMultiplier >= 1 ? '+' : ''}${Math.round((parameters.fuelPriceMultiplier - 1) * 100)}%)`),
                 ),
@@ -634,7 +634,7 @@ export default function ScenarioAnalysis(props) {
 
               // 2. Weather Speed Factor Slider
               h('div', { style: { opacity: activeScenarios.includes('weather_severity') ? 1 : 0.45 } },
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--cx-mono)', fontSize: 8.5, marginBottom: 3 } },
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--cx-mono)', fontSize: 12, marginBottom: 3 } },
                   h('span', { style: { color: 'var(--cx-text-dim)' } }, 'WEATHER STEAMING SPEED FACTOR:'),
                   h('span', { style: { color: '#38bdf8', fontWeight: 700 } }, `${Math.round(parameters.weatherSpeedFactor * 100)}% (${Math.round((1 - parameters.weatherSpeedFactor) * 100)}% speed cut)`),
                 ),
@@ -655,12 +655,12 @@ export default function ScenarioAnalysis(props) {
                 },
               },
                 h('div', null,
-                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-dim)', marginBottom: 3 } }, 'CHOKEPOINT:'),
+                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', marginBottom: 3 } }, 'CHOKEPOINT:'),
                   h('select', {
                     value: parameters.chokepointId,
                     disabled: !activeScenarios.includes('chokepoint_delay'),
                     onChange: e => setParameters(p => ({ ...p, chokepointId: e.target.value })),
-                    style: { width: '100%', background: '#0a0e1a', color: '#fff', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 8.5 },
+                    style: { width: '100%', background: 'var(--cx-bg-3)', color: 'var(--cx-text)', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 12 },
                   },
                     h('option', { value: 'suez' }, 'Suez Canal (12% Global Trade)'),
                     h('option', { value: 'panama' }, 'Panama Canal (5% Global Trade)'),
@@ -670,7 +670,7 @@ export default function ScenarioAnalysis(props) {
                   ),
                 ),
                 h('div', null,
-                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-dim)', marginBottom: 3 } },
+                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', marginBottom: 3 } },
                     `TRANSIT DELAY: +${parameters.chokepointDelayHours} HOURS`
                   ),
                   h('input', {
@@ -690,12 +690,12 @@ export default function ScenarioAnalysis(props) {
                 },
               },
                 h('div', { style: { opacity: activeScenarios.includes('port_closure') ? 1 : 0.45 } },
-                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-dim)', marginBottom: 3 } }, 'TERMINAL CLOSURE:'),
+                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', marginBottom: 3 } }, 'TERMINAL CLOSURE:'),
                   h('select', {
                     value: parameters.closedPortCode,
                     disabled: !activeScenarios.includes('port_closure'),
                     onChange: e => setParameters(p => ({ ...p, closedPortCode: e.target.value })),
-                    style: { width: '100%', background: '#0a0e1a', color: '#fff', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 8.5 },
+                    style: { width: '100%', background: 'var(--cx-bg-3)', color: 'var(--cx-text)', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 12 },
                   },
                     h('option', { value: 'USLAX' }, 'USLAX — Port of Los Angeles'),
                     h('option', { value: 'NLRTM' }, 'NLRTM — Port of Rotterdam'),
@@ -706,7 +706,7 @@ export default function ScenarioAnalysis(props) {
                   ),
                 ),
                 h('div', { style: { opacity: activeScenarios.includes('demand_change') ? 1 : 0.45 } },
-                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-dim)', marginBottom: 3 } },
+                  h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', marginBottom: 3 } },
                     `DEMAND SCALE: ${parameters.globalDemandMultiplier >= 1 ? '+' : ''}${Math.round((parameters.globalDemandMultiplier - 1) * 100)}%`
                   ),
                   h('input', {
@@ -734,7 +734,7 @@ export default function ScenarioAnalysis(props) {
             h('div', {
               style: {
                 display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
-                fontFamily: 'var(--cx-mono)', fontSize: 8, color: 'var(--cx-text-faint)',
+                fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)',
                 borderBottom: '1px solid var(--cx-edge-soft)', paddingBottom: 3, marginBottom: 4,
               },
             },
@@ -761,7 +761,7 @@ export default function ScenarioAnalysis(props) {
             h('div', {
               style: {
                 display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr',
-                fontFamily: 'var(--cx-mono)', fontSize: 8, color: 'var(--cx-text-faint)',
+                fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)',
                 borderBottom: '1px solid var(--cx-edge-soft)', paddingBottom: 3, marginBottom: 4,
               },
             },
@@ -801,15 +801,15 @@ export default function ScenarioAnalysis(props) {
                 value: serviceSearch,
                 onChange: e => setServiceSearch(e.target.value),
                 style: {
-                  flex: 1, minWidth: 120, background: '#0a0e1a', color: '#fff',
+                  flex: 1, minWidth: 120, background: 'var(--cx-bg-3)', color: 'var(--cx-text)',
                   border: '1px solid var(--cx-edge-soft)', padding: '3px 6px',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8.5, borderRadius: 2,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12, borderRadius: 2,
                 },
               }),
               h('select', {
                 value: serviceRegionFilter,
                 onChange: e => setServiceRegionFilter(e.target.value),
-                style: { background: '#0a0e1a', color: '#fff', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 8.5 },
+                style: { background: 'var(--cx-bg-3)', color: 'var(--cx-text)', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 12 },
               },
                 h('option', { value: 'ALL' }, 'All Regions'),
                 h('option', { value: 'Asia' }, 'Asia'),
@@ -821,7 +821,7 @@ export default function ScenarioAnalysis(props) {
               h('select', {
                 value: serviceStatusFilter,
                 onChange: e => setServiceStatusFilter(e.target.value),
-                style: { background: '#0a0e1a', color: '#fff', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 8.5 },
+                style: { background: 'var(--cx-bg-3)', color: 'var(--cx-text)', border: '1px solid var(--cx-edge-soft)', padding: '3px 6px', fontFamily: 'var(--cx-mono)', fontSize: 12 },
               },
                 h('option', { value: 'ALL' }, 'All Statuses'),
                 h('option', { value: 'UNAFFECTED' }, 'Nominal'),
@@ -834,7 +834,7 @@ export default function ScenarioAnalysis(props) {
             // Table with fixed scroll window
             h('div', { style: { height: 230, overflowY: 'auto' } },
               h('table', {
-                style: { width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--cx-mono)', fontSize: 8.5 },
+                style: { width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--cx-mono)', fontSize: 12 },
               },
                 h('thead', null,
                   h('tr', { style: { borderBottom: '1px solid var(--cx-edge-soft)', color: 'var(--cx-text-faint)', textAlign: 'left' } },
@@ -871,7 +871,7 @@ export default function ScenarioAnalysis(props) {
                         h('span', {
                           style: {
                             background: `${statusColor}22`, border: `1px solid ${statusColor}66`,
-                            color: statusColor, padding: '1px 5px', borderRadius: 2, fontSize: 7.5, fontWeight: 700,
+                            color: statusColor, padding: '1px 5px', borderRadius: 2, fontSize: 12, fontWeight: 700,
                           },
                         }, s.status)
                       ),
@@ -897,13 +897,13 @@ export default function ScenarioAnalysis(props) {
                     style: {
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       background: 'rgba(255,255,255,0.02)', border: '1px solid var(--cx-edge-soft)',
-                      padding: '5px 8px', borderRadius: 2, fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                      padding: '5px 8px', borderRadius: 2, fontFamily: 'var(--cx-mono)', fontSize: 12,
                       flex: 1,
                     },
                   },
                     h('div', null,
                       h('div', { style: { color: 'var(--cx-text)', fontWeight: 600 } }, reg.name),
-                      h('div', { style: { color: 'var(--cx-text-faint)', fontSize: 7.5 } },
+                      h('div', { style: { color: 'var(--cx-text-faint)', fontSize: 12 } },
                         `${reg.scenario_services} svcs · Cov: ${fmtPct(reg.scenario_coverage)} (${fmtDeltaPct(reg.delta_coverage)})`
                       ),
                     ),
@@ -911,7 +911,7 @@ export default function ScenarioAnalysis(props) {
                       h('div', { style: { color: reg.scenario_profit >= 0 ? 'var(--cx-green)' : 'var(--cx-red)', fontWeight: 700 } },
                         fmtUsd(reg.scenario_profit)
                       ),
-                      h('div', { style: { color: deltaColor(reg.delta_profit), fontSize: 7.5 } },
+                      h('div', { style: { color: deltaColor(reg.delta_profit), fontSize: 12 } },
                         isShockActive ? fmtDeltaUsd(reg.delta_profit) : 'Nominal'
                       ),
                     ),
@@ -921,7 +921,7 @@ export default function ScenarioAnalysis(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 6, marginTop: 6,
                 },
@@ -951,7 +951,7 @@ export default function ScenarioAnalysis(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 6, marginTop: 6,
                 },
@@ -972,29 +972,29 @@ export default function ScenarioAnalysis(props) {
               h('div', null,
                 h('div', {
                   style: {
-                    fontFamily: 'var(--cx-mono)', fontSize: 9.5, fontWeight: 700, color: 'var(--cx-cyan-2)', marginBottom: 4,
+                    fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 700, color: 'var(--cx-cyan-2)', marginBottom: 4,
                   },
                 }, scenarioResult.explanations.headline),
                 h('div', {
                   style: {
-                    fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text)', lineHeight: 1.4,
+                    fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)', lineHeight: 1.4,
                     background: 'rgba(0,0,0,0.25)', padding: '6px 8px', borderLeft: '3px solid var(--cx-cyan-2)',
                     marginBottom: 6,
                   },
                 }, scenarioResult.explanations.riskAnalysis),
                 h('div', {
-                  style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-dim)' },
+                  style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)' },
                 },
                   h('span', { style: { color: 'var(--cx-amber)', fontWeight: 600 } }, 'Exposed Regions: '),
                   scenarioResult.explanations.exposedRegions
                 ),
               ),
               h('div', { style: { marginTop: 2 } },
-                h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8, color: 'var(--cx-text-faint)', textTransform: 'uppercase', marginBottom: 2 } }, 'Recommended Mitigations:'),
+                h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', textTransform: 'uppercase', marginBottom: 2 } }, 'Recommended Mitigations:'),
                 scenarioResult.explanations.recommendations.map((rec, i) =>
                   h('div', {
                     key: i,
-                    style: { fontFamily: 'var(--cx-mono)', fontSize: 8, color: 'var(--cx-text-dim)', marginBottom: 2 },
+                    style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', marginBottom: 2 },
                   }, `▸ ${rec}`)
                 ),
               ),

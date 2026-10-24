@@ -1,4 +1,4 @@
-"""Demand-coherent multi-port closed-rotation generation (Task 9).
+"""Demand-coherent multi-port closed-rotation generation .
 
 Problem this addresses
     The candidate pool was dominated by two-port rotations and by random "heuristic"

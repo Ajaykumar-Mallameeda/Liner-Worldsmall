@@ -1,0 +1,33 @@
+flowchart LR
+  USER["Analyst browser"]
+  subgraph FEA["frontend/ (Vite dev server)"]
+    VIEWS["views: console, overview, regions,<br/>map, maritime panels"]
+    RA2["runtimeAdapter<br/>RUNTIME_TRUTH_URL = /pipeline_output.json"]
+    WS["websocketManager"]
+  end
+  subgraph BEA["backend/ (FastAPI + uvicorn)"]
+    API["REST: /api/health, status, metrics,<br/>regions, iterations, corridors, history"]
+    WSS["WebSocket /ws and /pipeline"]
+    STR["pipeline_streamer + real_orchestrator_integration"]
+  end
+  subgraph CORE["src/ (Python 3.11)"]
+    ORC2["OrchestratorAgent.process"]
+  end
+  subgraph OUTS["Artifacts"]
+    PO["pipeline_output.json<br/>(repo root and frontend/public)"]
+    DB["optimization_results.db (sqlite)"]
+    REP2["reports/ evidence folders"]
+  end
+  subgraph REF["Reference runner (evidence runs)"]
+    TO["tests/test_orchestrator.py<br/>applies C3 flags, writes dataset_run block"]
+  end
+
+  USER --> VIEWS --> RA2
+  RA2 -->|fetch| PO
+  VIEWS --> WS <--> WSS
+  API --- DB
+  STR --> ORC2
+  WSS --- STR
+  ORC2 --> PO
+  TO --> ORC2
+  TO --> REP2

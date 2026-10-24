@@ -21,7 +21,7 @@ export default function MaritimeLayerToggle({
     size === 'md' ? 'px-2.5 py-1' :
       size === 'lg' ? 'px-3 py-1.5' :
         'px-2 py-0.5';
-  const font = size === 'lg' ? 'text-[11px]' : 'text-[10px]';
+  const font = size === 'lg' ? 'text-[12px]' : 'text-[12px]';
   return (
     <button
       type="button"

@@ -37,11 +37,6 @@ from src.network.trunk_candidates import (
     augment_trunk_candidates as _augment_trunk, count_from_environment as _trunk_count,
     max_ports_from_environment as _trunk_max_ports, diverse_from_environment as _trunk_diverse,
 )
-from src.network.trunk_lanes import (
-    augment_lane_candidates as _augment_lanes, classes_from_environment as _lane_classes,
-    count_from_environment as _lane_count, lanes_from_environment as _lanes_env,
-    max_ports_from_environment as _lane_max_ports,
-)
 from src.network.class_variants import (
     augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
 )
@@ -289,23 +284,6 @@ def reconcile(
         cands = list(cands) + list(extra_t)
         time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_tk))
 
-    # Opt-in trans-Pacific / Atlantic trunk family (``LINER_TRUNK_LANES``); ordinary candidates, the MILP decides.
-    lane_report = None
-    lanes_on = _lanes_env()
-    if lanes_on:
-        t_ln = time.perf_counter()
-        extra_l, lane_report = _augment_lanes(problem, assumptions, cands, lanes=lanes_on, per_class=_lane_count(),
-                                              classes=_lane_classes(), max_ports=_lane_max_ports(),
-                                              deadline=t_ln + 0.25 * float(time_limit_sec))
-        for add in lane_report.get("by_lane", {}).values():
-            for a_ in add.get("additions", []):
-                ctr = Counter(region_of_od.get((x_, y_)) for x_ in a_["ports"] for y_ in a_["ports"] if x_ != y_)
-                ctr.pop(None, None)
-                owner[a_["service_id"]] = ctr.most_common(1)[0][0] if ctr else None
-                proposers[a_["service_id"]] = [owner[a_["service_id"]]] if owner[a_["service_id"]] else []
-        cands = list(cands) + list(extra_l)
-        time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_ln))
-
     initial = None
     if hints:
         # hints are keyed by regional ids; map through the canonical rotation
@@ -319,7 +297,7 @@ def reconcile(
                     if cid:
                         initial[cid] = max(initial.get(cid, 0), int(f))
 
-    # Opt-in epsilon constraint (Task 19, experimental, NOT the default): profit-maximising
+    # Opt-in epsilon constraint (experimental, NOT the default): profit-maximising
     # subject to served TEU >= fraction x total demand.  Unset = the production objective.
     min_cov = _global_min_coverage()
     plan = planner.plan(cands, demands=problem.demands, initial_frequencies=initial or None,
@@ -587,7 +565,6 @@ def reconcile(
         "path_model": plan.path_stats.to_dict() if plan.path_stats else {},
         "candidate_augmentation": class_variant_report or {"enabled": False},
         "trunk_candidates": trunk_report or {"enabled": False},
-        "trunk_lanes": lane_report or {"enabled": False},
         "violations": list(led.violations),
         "assumptions": {
             "port_stay_hours": a.port_stay_hours,
@@ -621,7 +598,7 @@ def reconcile(
         },
         "runtime_sec": round(time.perf_counter() - t0, 2),
     }
-    # strategy / utilisation / unserved-demand report of the verified plan (Task 19): derived
+    # strategy / utilisation / unserved-demand report of the verified plan: derived
     # from the routed cargo, reconciled against the ledger inside the report; never an input
     try:
         from src.network.strategy_report import build_strategy_report

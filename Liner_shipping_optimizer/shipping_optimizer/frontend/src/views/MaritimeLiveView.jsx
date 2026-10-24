@@ -112,20 +112,20 @@ export default function MaritimeLiveView() {
           title="Latest snapshot"
           density="compact"
         >
-          <div className="text-[11px] font-mono text-white/60 grid grid-cols-2 gap-x-4 gap-y-1">
-            <div className="text-white/40">snapshot_id</div>
+          <div className="text-[12px] font-mono text-white/60 grid grid-cols-2 gap-x-4 gap-y-1">
+            <div className="text-white/60">snapshot_id</div>
             <div className="text-white/80 text-right">{snapshot.metadata.snapshot_id || "—"}</div>
-            <div className="text-white/40">source</div>
+            <div className="text-white/60">source</div>
             <div className="text-white/80 text-right">{snapshot.metadata.source || "—"}</div>
-            <div className="text-white/40">records</div>
+            <div className="text-white/60">records</div>
             <div className="text-white/80 text-right">{snapshot.metadata.accepted_records ?? 0}</div>
-            <div className="text-white/40">created_at</div>
+            <div className="text-white/60">created_at</div>
             <div className="text-white/80 text-right">{snapshot.metadata.created_at || "—"}</div>
           </div>
         </IntelligencePanel>
       )}
 
-      <div className="text-[11px] text-white/30 font-mono leading-relaxed max-w-2xl">
+      <div className="text-[12px] text-white/60 font-mono leading-relaxed max-w-2xl">
         Phase 4 surface for the live maritime ingestion layer. The
         optimizer never makes a network call: live data becomes an
         immutable local snapshot before the rest of the system can see

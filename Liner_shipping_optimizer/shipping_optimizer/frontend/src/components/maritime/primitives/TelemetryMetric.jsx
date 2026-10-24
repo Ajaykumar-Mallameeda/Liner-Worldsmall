@@ -52,7 +52,7 @@ export default function TelemetryMetric({
       {sub != null && (
         <div
           className="font-mono truncate"
-          style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9 }}
+          style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}
           title={typeof sub === 'string' ? sub : undefined}
         >
           {sub}

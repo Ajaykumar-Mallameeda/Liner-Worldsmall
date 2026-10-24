@@ -20,15 +20,14 @@ import React, { useMemo, useState, useEffect } from 'react';
 import WorldMap from '../map/WorldMap.jsx';
 import OperationalEmptyState from '../maritime/OperationalEmptyState.jsx';
 
+// `off` layers have no data on this map yet; they show as disabled with the reason instead of doing nothing.
 const LAYER_DEFS = [
   { id: 'ports',     label: 'PORTS',     swatch: '#00d4ff', tone: 'cyan' },
-  { id: 'routes',    label: 'ROUTES',    swatch: '#a855f7', tone: 'purple' },
-  { id: 'selected',  label: 'SELECTED',  swatch: '#10b981', tone: 'green' },
-  { id: 'demand',    label: 'DEMAND',    swatch: '#f59e0b', tone: 'amber' },
-  { id: 'congestion',label: 'CONGEST.',  swatch: '#ef4444', tone: 'red' },
-  { id: 'weather',   label: 'WEATHER',   swatch: '#38bdf8', tone: 'cyan' },
-  { id: 'vessels',   label: 'VESSELS',   swatch: '#c084fc', tone: 'purple' },
-  { id: 'traffic',   label: 'TRAFFIC',   swatch: '#e879f9', tone: 'pink' },
+  { id: 'selected',  label: 'SERVICES',  swatch: '#10b981', tone: 'green' },
+  { id: 'demand',    label: 'DEMAND',    swatch: '#f59e0b', tone: 'amber',  off: 'Unserved demand is on the Demand tab; not drawn on the map yet' },
+  { id: 'congestion',label: 'CONGEST.',  swatch: '#ef4444', tone: 'red',    off: 'Needs the maritime layers, which are off for this run' },
+  { id: 'weather',   label: 'WEATHER',   swatch: '#38bdf8', tone: 'cyan',   off: 'Needs the maritime layers, which are off for this run' },
+  { id: 'vessels',   label: 'VESSELS',   swatch: '#c084fc', tone: 'purple', off: 'Needs live AIS positions, which are off for this run' },
 ];
 
 const REGIONS = [
@@ -93,17 +92,20 @@ export default function MapCanvas({
     <div className="cc-map" style={{ minHeight: height }} aria-label="Network intelligence map">
       {/* ── Band 1: Layers bar ── */}
       <div className="cc-map-head" role="toolbar" aria-label="Map layer controls">
-        <span className="text-[8px] font-mono text-slate-400 uppercase tracking-widest font-semibold mr-2">LAYERS</span>
+        <span className="text-[12px] font-mono text-slate-400 uppercase tracking-widest font-semibold mr-2">LAYERS</span>
         <div className="cc-map-head-legend">
           {LAYER_DEFS.map((d) => {
-            const active = layers.has(d.id);
+            const active = !d.off && layers.has(d.id);
             return (
               <button
                 key={d.id}
                 type="button"
                 className={`legend-item ${active ? 'on' : ''}`}
-                onClick={() => toggleLayer(d.id)}
+                onClick={() => !d.off && toggleLayer(d.id)}
                 aria-pressed={active}
+                disabled={Boolean(d.off)}
+                title={d.off || undefined}
+                style={d.off ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
               >
                 <span className="swatch" style={{ background: d.swatch }} />
                 {d.label}
@@ -132,13 +134,7 @@ export default function MapCanvas({
 
       {/* ── Map Surface ── */}
       <div className="cc-map-surface" style={{ height }}>
-        {/* Zoom controls on top-left of map */}
-        <div className="cc-map-zoom-controls">
-          <button type="button" className="zoom-btn">+</button>
-          <button type="button" className="zoom-btn">-</button>
-          <button type="button" className="globe-btn">✈ GLOBE MODE</button>
-        </div>
-
+        {/* Zoom, pan and fit live inside WorldMap. */}
         <WorldMap
           optimizationState={filteredState}
           selectedServices={effectiveServices}
@@ -158,7 +154,7 @@ export default function MapCanvas({
 
         {/* Global Summary Overlay (bottom right) */}
         <div className="cc-map-overlay" aria-label="Global Summary">
-          <div className="text-[8px] font-mono text-slate-400 uppercase tracking-widest mr-2">GLOBAL SUMMARY</div>
+          <div className="text-[12px] font-mono text-slate-400 uppercase tracking-widest mr-2">GLOBAL SUMMARY</div>
           <div className="row">
             <span className="k">PORTS</span>
             <span className="v">{sm.ports != null ? sm.ports : '—'}</span>
@@ -172,7 +168,7 @@ export default function MapCanvas({
             <span className="v">{selectedCount}</span>
           </div>
           <div className="row">
-            <span className="k">WEEKLY TEU</span>
+            <span className="k">DEMAND / WK</span>
             <span className="v">{sm.weeklyDemand != null ? `${(sm.weeklyDemand / 1000).toFixed(0)}K` : '—'}</span>
           </div>
         </div>

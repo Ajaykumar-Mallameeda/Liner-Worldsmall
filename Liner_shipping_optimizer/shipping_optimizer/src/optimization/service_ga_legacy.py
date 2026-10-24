@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------
-# IP-2 (Phase 7) — local-only fuel-cost kwarg builder
+# IP-2 — local-only fuel-cost kwarg builder
 # --------------------------------------------------------------------
 # This helper is structurally identical to
 # ``maritime.optimizer_bridge.fuel_cost_kwargs`` but is duplicated

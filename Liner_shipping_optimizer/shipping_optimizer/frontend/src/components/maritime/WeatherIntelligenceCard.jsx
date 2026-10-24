@@ -75,7 +75,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <PulseDot color="#64748b" />
-            <div className="text-xs font-mono text-white/40 uppercase tracking-widest">
+            <div className="text-xs font-mono text-white/60 uppercase tracking-widest">
               Weather Intelligence
             </div>
           </div>
@@ -89,7 +89,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
             DISABLED
           </div>
         </div>
-        <div className="text-xs text-white/30 font-mono">
+        <div className="text-xs text-white/60 font-mono">
           Set <code>MARITIME_WEATHER_ENABLED=1</code> and
           {" "}<code>MARITIME_WEATHER_PROVIDER</code> to opt in. The weather
           layer is OFF by default.
@@ -116,7 +116,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <PulseDot color={color} />
-          <div className="text-xs font-mono text-white/40 uppercase tracking-widest">
+          <div className="text-xs font-mono text-white/60 uppercase tracking-widest">
             Weather Intelligence
           </div>
         </div>
@@ -161,7 +161,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
 
       <div className="grid grid-cols-4 gap-3 mb-3">
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Provider
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -169,7 +169,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Snapshot
           </div>
           <div className="text-sm text-white/80 font-mono truncate">
@@ -177,7 +177,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Records
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -185,7 +185,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Quality
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -198,7 +198,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Freshness
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -206,7 +206,7 @@ export default function WeatherIntelligenceCard({ status, providers }) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Source Health
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -217,18 +217,18 @@ export default function WeatherIntelligenceCard({ status, providers }) {
 
       {(lic || attr) && (
         <div
-          className="text-[11px] font-mono text-white/40 leading-relaxed pt-3"
+          className="text-[12px] font-mono text-white/60 leading-relaxed pt-3"
           style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
         >
           {lic && (
             <div>
-              <span className="text-white/30">License: </span>
+              <span className="text-white/60">License: </span>
               {lic}
             </div>
           )}
           {attr && (
             <div className="mt-1">
-              <span className="text-white/30">Attribution: </span>
+              <span className="text-white/60">Attribution: </span>
               {attr}
             </div>
           )}

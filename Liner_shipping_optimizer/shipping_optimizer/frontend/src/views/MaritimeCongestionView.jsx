@@ -36,7 +36,7 @@ function number(v, digits = 2) {
 
 function Components({ components, missing }) {
   if (!components || typeof components !== "object") {
-    return <span className="text-white/30">—</span>;
+    return <span className="text-white/60">—</span>;
   }
   const keys = ["traffic", "traffic_change", "port_pressure", "weather_risk"];
   return (
@@ -45,7 +45,7 @@ function Components({ components, missing }) {
         const v = Number(components[k]) || 0;
         return (
           <div key={k} className="flex items-center gap-2">
-            <span className="text-[10px] text-white/40 font-mono w-28">
+            <span className="text-[12px] text-white/60 font-mono w-28">
               {k}
             </span>
             <div
@@ -60,7 +60,7 @@ function Components({ components, missing }) {
                 }}
               />
             </div>
-            <span className="text-[10px] text-white/60 font-mono w-10 text-right">
+            <span className="text-[12px] text-white/60 font-mono w-10 text-right">
               {v.toFixed(2)}
             </span>
           </div>
@@ -71,7 +71,7 @@ function Components({ components, missing }) {
           {(missing || []).map((m) => (
             <span
               key={m}
-              className="text-[9px] font-mono px-1 rounded"
+              className="text-[12px] font-mono px-1 rounded"
               style={{
                 background: "rgba(255,255,255,0.05)",
                 color: "#94a3b8",
@@ -90,7 +90,7 @@ function LevelPill({ level }) {
   const color = LEVEL_COLOR[level] || "#64748b";
   return (
     <span
-      className="text-[10px] font-mono px-1 rounded"
+      className="text-[12px] font-mono px-1 rounded"
       style={{
         background: `${color}1a`,
         color: color,
@@ -105,7 +105,7 @@ function LevelPill({ level }) {
 function FreshnessPill({ state }) {
   return (
     <span
-      className="text-[10px] font-mono"
+      className="text-[12px] font-mono"
       style={{ color: 'rgba(255,255,255,0.55)' }}
     >
       {(state || "unknown").toLowerCase()}
@@ -255,7 +255,7 @@ export default function MaritimeCongestionView() {
         right={
           snapshot && snapshot.metadata ? (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-white/30 font-mono">
+              <span className="text-[12px] text-white/60 font-mono">
                 {snapshot.metadata.snapshot_id || "—"}
               </span>
               {snapshot.metadata.synthetic && (
@@ -332,7 +332,7 @@ export default function MaritimeCongestionView() {
           density="comfortable"
         >
           <div className="grid grid-cols-3 gap-2 mb-2">
-            <label className="text-[10px] font-mono text-white/30">
+            <label className="text-[12px] font-mono text-white/60">
               lat
               <input
                 type="number"
@@ -345,7 +345,7 @@ export default function MaritimeCongestionView() {
                 style={{ border: "1px solid rgba(255,255,255,0.1)" }}
               />
             </label>
-            <label className="text-[10px] font-mono text-white/30">
+            <label className="text-[12px] font-mono text-white/60">
               lon
               <input
                 type="number"
@@ -358,7 +358,7 @@ export default function MaritimeCongestionView() {
                 style={{ border: "1px solid rgba(255,255,255,0.1)" }}
               />
             </label>
-            <label className="text-[10px] font-mono text-white/30">
+            <label className="text-[12px] font-mono text-white/60">
               radius (km)
               <input
                 type="number"
@@ -388,10 +388,10 @@ export default function MaritimeCongestionView() {
               atResult.records.map((r, i) => (
                 <div
                   key={i}
-                  className="text-[11px] font-mono text-white/60 py-1"
+                  className="text-[12px] font-mono text-white/60 py-1"
                   style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                 >
-                  <div className="text-white/40">
+                  <div className="text-white/60">
                     {r.entity_id || r.record_id || "?"} — {number(r.latitude)},{number(r.longitude)}
                   </div>
                   <div>
@@ -400,7 +400,7 @@ export default function MaritimeCongestionView() {
                 </div>
               ))
             ) : (
-              <div className="text-[11px] font-mono text-white/30">
+              <div className="text-[12px] font-mono text-white/60">
                 {atResult ? "No records near this coordinate." : "Run a query to see results."}
               </div>
             )}
@@ -438,10 +438,10 @@ export default function MaritimeCongestionView() {
               portResult.records.map((r, i) => (
                 <div
                   key={i}
-                  className="text-[11px] font-mono text-white/60 py-1"
+                  className="text-[12px] font-mono text-white/60 py-1"
                   style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                 >
-                  <div className="text-white/40">
+                  <div className="text-white/60">
                     {r.entity_id || r.record_id || "?"} — {number(r.latitude)},{number(r.longitude)}
                   </div>
                   <div>
@@ -450,7 +450,7 @@ export default function MaritimeCongestionView() {
                 </div>
               ))
             ) : (
-              <div className="text-[11px] font-mono text-white/30">
+              <div className="text-[12px] font-mono text-white/60">
                 {portResult ? "No record for this port." : "Enter a port_id to query."}
               </div>
             )}
@@ -486,10 +486,10 @@ export default function MaritimeCongestionView() {
               routeResult.records.map((r, i) => (
                 <div
                   key={i}
-                  className="text-[11px] font-mono text-white/60 py-1"
+                  className="text-[12px] font-mono text-white/60 py-1"
                   style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                 >
-                  <div className="text-white/40">
+                  <div className="text-white/60">
                     {r.entity_id || r.record_id || "?"} — {number(r.latitude)},{number(r.longitude)}
                   </div>
                   <div>
@@ -498,7 +498,7 @@ export default function MaritimeCongestionView() {
                 </div>
               ))
             ) : (
-              <div className="text-[11px] font-mono text-white/30">
+              <div className="text-[12px] font-mono text-white/60">
                 {routeResult ? "No waypoint matches within radius." : "Enter waypoints to preview."}
               </div>
             )}
@@ -526,12 +526,12 @@ export default function MaritimeCongestionView() {
                   {r.entity_id || r.record_id || "?"}
                 </div>
                 <div
-                  className="text-[10px] font-mono"
+                  className="text-[12px] font-mono"
                   style={{ color: LEVEL_COLOR[r.congestion_level] || "#94a3b8" }}
                 >
                   {(r.congestion_level || "—").toUpperCase()} · {number(r.congestion_score)}
                 </div>
-                <div className="text-[10px] font-mono text-white/40 mt-1">
+                <div className="text-[12px] font-mono text-white/60 mt-1">
                   {number(r.latitude, 2)},{number(r.longitude, 2)} · conf {number(r.confidence)}
                 </div>
               </div>

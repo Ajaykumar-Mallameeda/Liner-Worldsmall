@@ -1,0 +1,29 @@
+flowchart LR
+  subgraph HEUR["Heuristic / advisory zone - may change WHICH plan is explored, never HOW it is priced"]
+    GA["GA surrogates<br/>ServiceGA, FrequencyGA"]
+    SCREEN["Stand-alone screens<br/>class screening, trunk, regional filter"]
+    LLMX["LLM text, archetype hints,<br/>weight and iteration suggestions"]
+    COORD["Coordinator feedback<br/>coverage 70 percent, profit floor 0"]
+  end
+
+  subgraph SOLVE["Optimisation zone"]
+    PL["Candidate pool"]
+    MILP["Network MILP + local search<br/>+ flow re-optimisation + repair"]
+  end
+
+  subgraph TRUST["TRUST zone - the only source of reported numbers"]
+    SM["economics.ServiceModel<br/>(prices the plan inside the optimiser)"]
+    LED["ledger.compute_ledger<br/>(re-derives everything from raw files,<br/>does not import the service model or the MILP)"]
+    CHK["Checks: fleet inventory, leg capacity,<br/>demand conservation, transit time,<br/>draft, canal, path validity"]
+    REP["Reported: revenue, 6 cost items,<br/>profit, margin, coverage"]
+  end
+
+  GA --> PL
+  SCREEN --> PL
+  LLMX -.-> PL
+  PL --> MILP
+  SM --> MILP
+  MILP -->|services, frequencies, flows| LED
+  LED --> CHK --> REP
+  REP --> COORD
+  COORD -.->|weights, rerun| PL

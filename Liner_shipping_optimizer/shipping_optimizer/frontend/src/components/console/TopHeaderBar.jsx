@@ -3,120 +3,134 @@
  * ----------------
  * Unified, persistent top status header for ALL dashboard pages.
  * Displays:
- * 1. Brand identity: AI VESSEL ROUTING SYSTEM
- * 2. Present IST Time Zone (live updating every second)
- * 3. Last Run Timestamp & Run ID from real pipeline output
- * 4. System Status: ONLINE / OFFLINE indicator
- * 5. Optimizer Convergence & Selected Iteration state
+ * 1. Brand identity
+ * 2. Run picker (latest local run or a frozen benchmark seed)
+ * 3. Results file time from the server's Last-Modified header (never a placeholder)
+ * 4. Run outcome and selected iteration, read from the run itself
+ * 5. Live pipeline link state (the one WebSocket status every panel shares)
+ * 6. IST clock
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import RunPicker from './RunPicker.jsx';
+import { selectedIterationOf, liveLinkOf } from '../../runtime/consoleSelectors.js';
+import { openPalette } from './CommandPalette.jsx';
+import LogoMark from '../common/LogoMark.jsx';
+import { useAgentFocus } from '../../services/focusStore.js';
+import { toggleDensity, toggleTheme, usePrefs } from '../../services/prefsStore.js';
 
 function getISTFormatted() {
   try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-IN', {
+    return new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: 'short',
       day: '2-digit',
+      month: 'short',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: true,
-    });
-    return formatter.format(now) + ' IST';
+      hour12: false,
+    }).format(new Date()) + ' IST';
   } catch (_) {
     return new Date().toLocaleTimeString() + ' IST';
   }
 }
 
-export default function TopHeaderBar({ optimizationState, runtime }) {
+function fmtUtc(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+}
+
+export default function TopHeaderBar({ optimizationState, runtime, navOpen = false, onToggleNav }) {
   const [istTime, setIstTime] = useState(() => getISTFormatted());
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setIstTime(getISTFormatted());
-    }, 1000);
+    const timer = setInterval(() => setIstTime(getISTFormatted()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   const opt = runtime || optimizationState || {};
-  const sm = opt.global || {};
-  const runId = sm.run_id || opt.run_id || 'run-03';
-  const status = String(sm.status || '').toLowerCase();
-  const isOnline = optimizationState?.isConnected !== false;
-  
-  // Resolve last run timestamp
-  const lastRunStr = useMemo(() => {
-    const rawTs = opt.timestamp || sm.timestamp || sm.last_update || opt.freshness?.file_mtime;
-    if (rawTs) {
-      try {
-        const d = new Date(rawTs);
-        return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-      } catch (_) {
-        return String(rawTs);
-      }
-    }
-    return '2026-09-03 16:28:46 UTC';
-  }, [opt, sm]);
+  const g = opt.global || {};
+  const source = opt.source || optimizationState?.source || null;
+  const loaded = Boolean(g.selected_services && g.selected_services.length) || g.weeklyProfit != null;
 
-  const selIter = sm.selected_iteration ?? sm.iter ?? 0;
-  const iterCount = opt.iterations?.length || sm.iterations?.length || 3;
-  const servicesCount = sm.selected_services?.length || 563;
+  const fileTime = fmtUtc(source?.modifiedIso || g.evaluated_at);
+  const outcome = String(g.health_status?.status || g.status || '').toLowerCase();
+  const outcomeLabel = !loaded ? 'no results' : (outcome === 'completed' || outcome === 'complete') ? 'completed' : (outcome || 'unknown');
+  const selIter = selectedIterationOf(opt);
+  const servicesCount = g.selected_services?.length ?? null;
+  const link = liveLinkOf(optimizationState);
+  const [agent, setAgent] = useAgentFocus();
+  const prefs = usePrefs();
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || '');
 
   return (
     <header className="cx-top-header" role="banner" aria-label="System status header">
-      {/* Brand Identity */}
       <div className="cx-top-header-left">
-        <span className="cx-top-header-dot" aria-hidden="true" />
+        {onToggleNav && (
+          <button
+            type="button"
+            className="cx-nav-toggle"
+            onClick={onToggleNav}
+            aria-expanded={navOpen}
+            aria-controls="console-nav"
+            aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+          >
+            <span aria-hidden="true">{navOpen ? '✕' : '☰'}</span>
+          </button>
+        )}
+        <LogoMark size={18} />
         <div className="cx-top-header-title">
-          <span className="name">AI VESSEL ROUTING SYSTEM</span>
-          <span className="tag">MULTI-AGENT OPTIMIZER</span>
+          <span className="name">AI Vessel Routing</span>
+          <span className="tag">Multi-agent optimizer</span>
         </div>
       </div>
 
-      {/* System Telemetry & Metrics */}
       <div className="cx-top-header-center">
-        {/* System Online / Offline Status */}
-        <div className="cx-th-pill">
-          <span className={`cx-th-status-dot ${isOnline ? 'online' : 'offline'}`} />
-          <span className="k">SYSTEM:</span>
-          <span className={`v ${isOnline ? 'online' : 'offline'}`}>
-            {isOnline ? 'ONLINE' : 'OFFLINE'}
-          </span>
+        <RunPicker />
+
+        <div className="cx-th-pill" title="Modification time of the results file being shown">
+          <span className={`cx-th-status-dot ${loaded ? 'online' : 'offline'}`} aria-hidden="true" />
+          <span className="k">Results</span>
+          <span className="v">{loaded ? (fileTime || 'time unknown') : 'not loaded'}</span>
         </div>
 
-        {/* Present IST Time Zone */}
-        <div className="cx-th-pill cx-th-pill--time">
-          <span className="k">IST TIME:</span>
-          <span className="v highlight">{istTime}</span>
-        </div>
-
-        {/* Last Run Timestamp */}
-        <div className="cx-th-pill">
-          <span className="k">LAST RUN:</span>
-          <span className="v">{lastRunStr}</span>
-          <span className="tag-run">({runId})</span>
-        </div>
-
-        {/* Optimizer Convergence & Iteration */}
-        <div className="cx-th-pill">
-          <span className="k">OPTIMIZER:</span>
-          <span className="v green">CONVERGED</span>
-          <span className="v-sep">·</span>
-          <span className="k">ITER:</span>
-          <span className="v accent">{String(selIter).padStart(2, '0')}</span>
-          <span className="tag-sub">({servicesCount} SVCS)</span>
+        <div className="cx-th-pill cx-th-pill--secondary">
+          <span className="k">Outcome</span>
+          <span className={`v ${outcomeLabel === 'completed' ? 'green' : 'amber'}`}>{outcomeLabel}</span>
+          {selIter != null && (
+            <>
+              <span className="v-sep">·</span>
+              <span className="k">Selected</span>
+              <span className="v accent">iter {String(selIter).padStart(2, '0')}</span>
+            </>
+          )}
+          {servicesCount != null && <span className="tag-sub">{servicesCount} services</span>}
         </div>
       </div>
 
-      {/* Right Controls */}
       <div className="cx-top-header-right">
-        <span className="cx-th-ws-badge">
-          <span className="dot green" />
-          WS LINKED
+        {agent && (
+          <span className="cx-th-chip" title="Every view is filtered to this regional agent's services">
+            <span className="k">Agent</span> {agent}
+            <button type="button" onClick={() => setAgent(null)} aria-label={`Clear the ${agent} agent filter`}>✕</button>
+          </span>
+        )}
+        <button type="button" className="cx-th-search" onClick={openPalette} aria-label="Search and jump (Ctrl+K)" title="Search tabs, services, ports and agents">
+          <span aria-hidden="true">⌕</span><span className="lbl">Search</span><kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+        </button>
+        <button type="button" className="cx-th-icon" onClick={toggleTheme} aria-label={`Switch to ${prefs.theme === 'dark' ? 'light' : 'dark'} theme`} title={`Theme: ${prefs.theme}`}>
+          <span aria-hidden="true">{prefs.theme === 'dark' ? '☾' : '☀'}</span>
+        </button>
+        <button type="button" className="cx-th-icon" onClick={toggleDensity} aria-label={`Switch to ${prefs.density === 'compact' ? 'comfortable' : 'compact'} density`} title={`Density: ${prefs.density}`}>
+          <span aria-hidden="true">{prefs.density === 'compact' ? '☷' : '☰'}</span>
+        </button>
+        <span className={`cx-th-ws-badge is-${link.tone}`} title={link.title}>
+          <span className="dot" aria-hidden="true" />
+          {link.label}
         </span>
+        <span className="cx-th-clock">{istTime}</span>
       </div>
     </header>
   );

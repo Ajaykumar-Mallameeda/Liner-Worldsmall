@@ -45,7 +45,7 @@ export default function DecisionTrace({ optimizationState }) {
 
   return (
     <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-      <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-3">AI Decision Trace</div>
+      <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-3">AI Decision Trace</div>
 
       <div className="flex flex-col gap-1">
         {STAGES.map((stage, i) => {
@@ -69,20 +69,20 @@ export default function DecisionTrace({ optimizationState }) {
                     <span className="text-xs font-mono" style={{ color: status === 'complete' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)' }}>
                       {stage.label}
                     </span>
-                    <span className="text-[10px] font-mono" style={{ color: statusColor }}>{statusIcon}</span>
+                    <span className="text-[12px] font-mono" style={{ color: statusColor }}>{statusIcon}</span>
                   </div>
-                  <div className="text-[9px] text-white/30 font-mono">{stage.desc}</div>
+                  <div className="text-[12px] text-white/60 font-mono">{stage.desc}</div>
                 </div>
               </div>
 
               {isActive && stage.id === 'coordinator' && metrics.reasons.length > 0 && (
                 <div className="ml-6 mb-1 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                  <div className="text-[10px] text-white/40 font-mono mb-1">Coordinator Feedback</div>
-                  <div className="text-[10px] text-white/60 font-mono leading-relaxed">
+                  <div className="text-[12px] text-white/60 font-mono mb-1">Coordinator Feedback</div>
+                  <div className="text-[12px] text-white/60 font-mono leading-relaxed">
                     {metrics.reasons.map((r, i) => <div key={i}>• {r}</div>)}
                   </div>
                   {metrics.weightProfit != null && (
-                    <div className="mt-1 text-[9px] text-white/40 font-mono">
+                    <div className="mt-1 text-[12px] text-white/60 font-mono">
                       Weights: profit {metrics.weightProfit.toFixed(3)} · coverage {metrics.weightCoverage.toFixed(3)} · cost {metrics.weightCost.toFixed(3)}
                     </div>
                   )}
@@ -91,9 +91,9 @@ export default function DecisionTrace({ optimizationState }) {
 
               {isActive && stage.id === 'consensus' && (
                 <div className="ml-6 mb-1 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                  <div className="text-[10px] text-white/40 font-mono mb-1">Convergence Score: {metrics.convergenceScore?.toFixed(3) ?? 'N/A'}</div>
-                  <div className="text-[10px] text-white/60 font-mono">Coverage gap: {metrics.coverageGap != null ? `${metrics.coverageGap.toFixed(2)}pp` : 'N/A'} from 70% target</div>
-                  <div className="text-[10px] text-white/60 font-mono">Conflicts detected: {metrics.conflictCount}</div>
+                  <div className="text-[12px] text-white/60 font-mono mb-1">Convergence Score: {metrics.convergenceScore?.toFixed(3) ?? 'N/A'}</div>
+                  <div className="text-[12px] text-white/60 font-mono">Coverage gap: {metrics.coverageGap != null ? `${metrics.coverageGap.toFixed(2)}pp` : 'N/A'} from 70% target</div>
+                  <div className="text-[12px] text-white/60 font-mono">Conflicts detected: {metrics.conflictCount}</div>
                 </div>
               )}
 

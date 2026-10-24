@@ -1,5 +1,5 @@
 """
-Adaptive Budget Policy — Phase A / B / C
+Adaptive Budget Policy 
 =========================================
 
 Derives computational/search budgets from measurable instance- and

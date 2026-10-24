@@ -2,13 +2,49 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E⬡%3C/text%3E%3C/svg%3E" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 15.5C3.3 11.6 5.6 6.4 11 5.2c5.6-1.2 9.6 2.2 8.6 6.4-.9 3.9-5.6 6.9-10.4 6.4C7.4 17.8 5.9 17.1 5 15.5Z' fill='none' stroke='%2344ccff' stroke-width='1.8'/%3E%3Ccircle cx='5' cy='15.5' r='2.6' fill='%2344ccff'/%3E%3Ccircle cx='11' cy='5.2' r='2' fill='%23050b14' stroke='%2344ccff' stroke-width='1.6'/%3E%3Ccircle cx='19.6' cy='11.6' r='2' fill='%23050b14' stroke='%2344ccff' stroke-width='1.6'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#020408" />
+    <meta name="color-scheme" content="dark light" />
     <title>AI Vessel Routing System — Liner Shipping Optimizer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind is compiled by PostCSS (tailwind.config.js); the CDN runtime was removed 2026-10-24. -->
+    <script>
+      // Apply the saved theme before first paint so a light-theme viewer never sees a dark flash.
+      try {
+        var p = JSON.parse(localStorage.getItem('vr.prefs') || '{}') || {};
+        if (p.theme === 'light') document.documentElement.dataset.theme = 'light';
+        if (p.density === 'compact') document.documentElement.dataset.density = 'compact';
+      } catch (e) { /* storage blocked: defaults */ }
+    </script>
+    <style>
+      /* Boot splash: shown until React replaces #root's content. */
+      .boot { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px;
+        background: #020408; color: #9bb3ad; font: 13px/1.4 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .06em; }
+      .boot svg { color: #44ccff; }
+      [data-theme="light"] .boot { background: #eef1f5; color: #334155; }
+      [data-theme="light"] .boot svg { color: #0369a1; }
+      [data-theme="light"] .boot .hole { fill: #eef1f5; }
+      .boot .name { color: #e8f4f0; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+      [data-theme="light"] .boot .name { color: #0f172a; }
+      @media (prefers-reduced-motion: no-preference) {
+        .boot .ring { stroke-dasharray: 46; animation: boot-trace 1.6s linear infinite; }
+        @keyframes boot-trace { to { stroke-dashoffset: -92; } }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-label="Loading the dashboard">
+        <svg width="44" height="44" viewBox="0 0 24 24" aria-hidden="true">
+          <path class="ring" d="M5 15.5C3.3 11.6 5.6 6.4 11 5.2c5.6-1.2 9.6 2.2 8.6 6.4-.9 3.9-5.6 6.9-10.4 6.4C7.4 17.8 5.9 17.1 5 15.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          <circle cx="5" cy="15.5" r="2.4" fill="currentColor" />
+          <circle class="hole" cx="11" cy="5.2" r="1.9" fill="#020408" stroke="currentColor" stroke-width="1.4" />
+          <circle class="hole" cx="19.6" cy="11.6" r="1.9" fill="#020408" stroke="currentColor" stroke-width="1.4" />
+        </svg>
+        <span class="name">AI Vessel Routing</span>
+        <span>Loading the console…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

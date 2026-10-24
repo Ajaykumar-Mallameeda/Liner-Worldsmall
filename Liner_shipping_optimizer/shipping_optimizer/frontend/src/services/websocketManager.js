@@ -2,7 +2,16 @@
  * Production WebSocket manager — single connection layer for pipeline events.
  */
 
-const DEFAULT_WS_URL = 'ws://localhost:8000/ws/pipeline';
+// Same host as the page, so the Vite dev proxy (and a production reverse proxy) carry the socket.
+// VITE_WS_URL overrides it for split deployments.
+function defaultWsUrl() {
+  const override = import.meta.env?.VITE_WS_URL;
+  if (override) return override;
+  if (typeof window === 'undefined' || !window.location) return 'ws://localhost:8000/ws/pipeline';
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws/pipeline`;
+}
+const DEFAULT_WS_URL = defaultWsUrl();
 const MAX_RETRIES = 5;
 
 class WebSocketManager {
@@ -14,6 +23,18 @@ class WebSocketManager {
     this.listeners = new Map();
     this.maxRetries = MAX_RETRIES;
     this.connectionCount = 0;
+    // 'idle' | 'connecting' | 'open' | 'retrying' | 'offline' — the one status every panel reads
+    this.status = 'idle';
+  }
+
+  setStatus(status) {
+    if (this.status === status) return;
+    this.status = status;
+    this.emit('status', status);
+  }
+
+  getStatus() {
+    return this.status;
   }
 
   on(event, callback) {
@@ -51,11 +72,12 @@ class WebSocketManager {
     }
 
     try {
+      this.setStatus(this.retryCount > 0 ? 'retrying' : 'connecting');
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        console.log('WebSocket connected');
         this.retryCount = 0;
+        this.setStatus('open');
         this.emit('connected');
       };
 
@@ -72,25 +94,30 @@ class WebSocketManager {
       };
 
       this.ws.onclose = () => {
-        console.log('WebSocket disconnected');
         this.emit('disconnected');
+        if (this.connectionCount === 0) {
+          this.setStatus('idle');
+          return;
+        }
 
         if (this.retryCount < this.maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
           this.retryCount++;
-          console.log(`Reconnecting in ${delay}ms (attempt ${this.retryCount}/${this.maxRetries})...`);
+          this.setStatus('retrying');
           this.reconnectTimeout = setTimeout(() => this.connect(), delay);
         } else {
-          console.log('Max reconnect attempts reached. Giving up.');
+          // The dashboard works from files without the socket; say so once instead of logging every retry.
+          console.info('Live pipeline socket unavailable; showing results from disk.');
+          this.setStatus('offline');
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
         this.emit('error', error);
       };
     } catch (error) {
-      console.error('Failed to connect WebSocket:', error);
+      console.warn('Failed to open WebSocket:', error);
+      this.setStatus('offline');
     }
   }
 
@@ -106,6 +133,8 @@ class WebSocketManager {
       this.ws.close();
       this.ws = null;
     }
+    this.retryCount = 0;
+    this.setStatus('idle');
   }
 
   send(type, data) {

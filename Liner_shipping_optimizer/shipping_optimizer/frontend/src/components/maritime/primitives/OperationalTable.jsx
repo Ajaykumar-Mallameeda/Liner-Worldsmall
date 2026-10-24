@@ -24,7 +24,7 @@ export default function OperationalTable({
 }) {
   const padY = density === 'compact' ? 'py-1' : 'py-1.5';
   const fontClass = monospace ? 'font-mono' : '';
-  const fontSize = monospace ? 'text-[11px]' : 'text-xs';
+  const fontSize = monospace ? 'text-[12px]' : 'text-xs';
   return (
     <div
       className="overflow-x-auto"
@@ -32,7 +32,7 @@ export default function OperationalTable({
     >
       <table className={`w-full ${fontClass} ${fontSize} text-white/60`}>
         <thead>
-          <tr className="text-white/30 text-left">
+          <tr className="text-white/60 text-left">
             {columns.map((c) => (
               <th
                 key={c.key}
@@ -40,7 +40,7 @@ export default function OperationalTable({
                 style={{
                   textAlign: c.align || 'left',
                   width: c.width,
-                  fontSize: 9,
+                  fontSize: 12,
                   letterSpacing: '0.08em',
                 }}
               >
@@ -54,7 +54,7 @@ export default function OperationalTable({
             <tr>
               <td
                 colSpan={columns.length}
-                className={`${padY} text-center text-white/30`}
+                className={`${padY} text-center text-white/60`}
               >
                 {loading ? 'Loading...' : emptyMessage}
               </td>

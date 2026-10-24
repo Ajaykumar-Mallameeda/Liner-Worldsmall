@@ -5,6 +5,53 @@
  * Dynamic selectors sourced directly from live optimization state.
  */
 
+/**
+ * The run's canonical selected iteration, or null when the run does not say.
+ * Order: final_selected_iteration -> iteration_selection.selected_iteration ->
+ * the audit row marked selected_as_final -> normalized global.selected_iteration.
+ * Every tab uses this one answer.
+ */
+export function selectedIterationOf(opt) {
+  if (!opt) return null;
+  const raw = opt.raw || {};
+  const g = opt.global || {};
+  const its = raw.iteration_selection || g.iteration_selection || opt.iteration_selection || {};
+  const audit = raw.iteration_audit || g.iteration_audit || [];
+  const fromAudit = audit.find((a) => a && a.selected_as_final);
+  const v = raw.final_selected_iteration ?? its.selected_iteration ?? (fromAudit ? fromAudit.iteration : null)
+    ?? (opt.raw || opt.source ? g.selected_iteration : null);
+  return v == null || Number.isNaN(Number(v)) ? null : Number(v);
+}
+
+/**
+ * Dataset of the run on screen: the benchmark selection's dataset key, else dataset_run.dataset,
+ * else WorldSmall (the only dataset the latest-local-run file has ever been produced from).
+ */
+export function datasetKeyOf(opt) {
+  const src = (opt && opt.source) || {};
+  return (src.run && src.run.dataset) || src.dataset || (opt && opt.raw && opt.raw.dataset_run && opt.raw.dataset_run.dataset) || 'worldsmall';
+}
+
+/** 'selected' | 'baseline' | 'candidate' for one iteration number. */
+export function iterationRoleOf(iterNum, opt) {
+  const sel = selectedIterationOf(opt);
+  if (sel != null && Number(iterNum) === sel) return 'selected';
+  if (Number(iterNum) === 0) return 'baseline';
+  return 'candidate';
+}
+
+/** One live-link status for the header, sidebar and System Health. */
+export function liveLinkOf(optimizationState) {
+  const s = optimizationState?.wsStatus || (optimizationState?.isConnected ? 'open' : 'idle');
+  if (s === 'open') return { tone: 'ok', label: 'Live link on', title: 'Connected to the pipeline socket' };
+  if (s === 'connecting' || s === 'retrying') return { tone: 'warn', label: 'Connecting…', title: 'Trying to reach the pipeline socket' };
+  return {
+    tone: 'muted',
+    label: 'Live link off',
+    title: 'Results are read from disk; the live pipeline socket is not connected',
+  };
+}
+
 export function buildProfitSeries(iterations = []) {
   if (!iterations || iterations.length === 0) return [];
   return iterations.map((it) => (it.profit ? it.profit / 1e6 : (it.weeklyProfit ? it.weeklyProfit / 1e6 : 0)));

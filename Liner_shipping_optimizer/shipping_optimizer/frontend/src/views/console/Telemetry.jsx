@@ -64,7 +64,7 @@ export default function Telemetry(props) {
       subtitle: 'Real telemetry from the maritime data plane. The dashboard reads /api/maritime/telemetry on a 30s cadence; nothing here is randomized or fabricated.',
       pills: [
         { tone: overallState, label: overallState },
-        { tone: wsState ? 'connected' : 'offline', label: wsState ? 'ws link' : 'ws off' },
+        { tone: wsState ? 'connected' : 'offline', label: wsState ? 'maritime stream on' : 'maritime stream off' },
         { tone: telemetry ? 'available' : 'no_data', label: telemetry ? 'telemetry' : 'no telemetry' },
       ],
     }),
@@ -116,7 +116,7 @@ export default function Telemetry(props) {
                     Object.entries(sources).map(function(entry) {
                       const key = entry[0], cell = entry[1];
                       return h('div', { key: key, className: 'cx-row' },
-                        h('div', { style: { color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--cx-mono)', fontSize: 11 } }, key),
+                        h('div', { style: { color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--cx-mono)', fontSize: 12 } }, key),
                         h('div', { style: { color: 'var(--cx-text)' } }, cell.state || EM),
                         h('div', { style: { textAlign: 'right', color: 'var(--cx-text-dim)' } }, fmtNum(cell.record_count) + ' rec'),
                         h('div', { style: { color: 'var(--cx-text-dim)' } }, cell.freshness_seconds != null ? (cell.freshness_seconds + 's old') : EM),
@@ -137,13 +137,13 @@ export default function Telemetry(props) {
                     Object.entries(freshness).map(function(entry) {
                       const key = entry[0], age = entry[1];
                       return h('div', { key: key, className: 'cx-row', style: { padding: '8px 10px' } },
-                        h('div', { style: { color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--cx-mono)', fontSize: 11 } }, key),
+                        h('div', { style: { color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--cx-mono)', fontSize: 12 } }, key),
                         h('div', null,
                           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                             h('div', { style: { flex: 1, height: 4, background: 'var(--cx-edge)', position: 'relative' } },
                               h('div', { style: { position: 'absolute', left: 0, top: 0, bottom: 0, width: Math.min(100, age) + '%', background: 'var(--cx-warn)' } })
                             ),
-                            h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, color: 'var(--cx-text-dim)' } }, fmtNum(age) + 's')
+                            h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)' } }, fmtNum(age) + 's')
                           )
                         )
                       );

@@ -57,6 +57,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.data.dataset_registry import resolve_dataset
 from src.optimization.data import Port, Demand, Fleet, FleetClass
 from src.utils.fuel_cost import register_fleet_specification
 
@@ -323,26 +324,46 @@ def _identifier(value, source, column, label):
 
 class NetworkLoader:
 
-    def __init__(self, data_dir="data"):
+    def __init__(self, data_dir="data", dataset=None):
+        """``dataset`` selects the source package (``DatasetSpec`` or a registry name).
 
+        ``None`` (the default) is the canonical WorldSmall package: behaviour and messages are
+        exactly those of the WorldSmall-only loader. A selected dataset reads ONLY its own
+        directory below ``data/raw``; every guard below (foreign location, mixed identifiers,
+        missing file) is applied relative to THAT dataset, never to WorldSmall.
+        """
         # ``data_dir`` is accepted for backward compatibility; paths are fixed.
         self.data_dir = RAW_DATA_DIR
         self.worldsmall_dir = WORLDSMALL_DIR
 
+        # The default (WorldSmall) instance reads the module-level WORLDSMALL_FILES / WORLDSMALL_DIR at call
+        # time (they are the canonical definition and tests re-point them); a selected dataset has its own.
+        self._spec = None if dataset is None else resolve_dataset(dataset)
+        self.dataset_key = "WorldSmall" if self._spec is None else self._spec.key
+        self._name = self.dataset_key
+
         # Populated by every load_* call: counts, totals and exclusions.
         self.validation_report = {}
 
-        # Canonical WorldSmall port identifiers (lazy; see _worldsmall_port_ids).
+        # Port identifiers of this dataset's canonical ports file (lazy; see _worldsmall_port_ids).
         self._ws_port_ids = None
+
+    @property
+    def _files(self):
+        return WORLDSMALL_FILES if self._spec is None else self._spec.input_paths()
+
+    @property
+    def _dir(self):
+        return WORLDSMALL_DIR if self._spec is None else self._spec.raw_dir
 
     # --------------------------------
     # Path resolution (explicit, no fallback)
     # --------------------------------
     def _resolve(self, key, explicit, description):
-        path = WORLDSMALL_FILES[key] if explicit is None else Path(explicit)
+        path = self._files[key] if explicit is None else Path(explicit)
         if not path.is_file():
             raise FileNotFoundError(
-                f"Required WorldSmall {description} file not found: {path}. "
+                f"Required {self._name} {description} file not found: {path}. "
                 f"No fallback to another dataset or file is attempted; restore the file "
                 f"or pass an explicit path."
             )
@@ -353,31 +374,36 @@ class NetworkLoader:
     # --------------------------------
     # Dataset boundary for explicit paths
     # --------------------------------
-    @staticmethod
-    def _reject_foreign_location(path, description):
-        """Reject a file that lives in the managed raw-data tree but not in WorldSmall.
+    def _reject_foreign_location(self, path, description):
+        """Reject a file that lives in the managed raw-data tree but not in this dataset's directory.
 
-        Decided from the resolved location only, so a WorldLarge file cannot be
-        passed off as WorldSmall by its name. Locations outside the raw-data tree
+        Decided from the resolved location only, so another dataset's file cannot be
+        passed off as this one by its name. Locations outside the raw-data tree
         (isolated fixtures) are not judged here; see ``_check_dataset_identity``.
         """
         resolved = Path(path).resolve()
         raw_root = RAW_DATA_DIR.resolve()
-        ws_root = WORLDSMALL_DIR.resolve()
+        ws_root = Path(self._dir).resolve()
         if resolved.is_relative_to(raw_root) and not resolved.is_relative_to(ws_root):
+            if self._name == "WorldSmall":
+                raise DataValidationError(
+                    f"{Path(path).name}: {description} file {resolved} is inside the raw-data "
+                    f"tree but not inside {ws_root}; this loader reads only WorldSmall and will "
+                    f"not load or combine another dataset (e.g. WorldLarge)."
+                )
             raise DataValidationError(
                 f"{Path(path).name}: {description} file {resolved} is inside the raw-data "
-                f"tree but not inside {ws_root}; this loader reads only WorldSmall and will "
-                f"not load or combine another dataset (e.g. WorldLarge)."
+                f"tree but not inside {ws_root}; this loader instance reads only {self._name} and "
+                f"will not load or combine another dataset."
             )
 
     def _worldsmall_port_ids(self):
-        """Port identifiers of the canonical WorldSmall ports file (read once)."""
+        """Port identifiers of this dataset's canonical ports file (read once)."""
         if self._ws_port_ids is None:
-            ref = Path(WORLDSMALL_FILES["ports"])
+            ref = Path(self._files["ports"])
             if not ref.is_file():
                 raise FileNotFoundError(
-                    f"Canonical WorldSmall ports file not found: {ref}; it is required "
+                    f"Canonical {self._name} ports file not found: {ref}; it is required "
                     f"to establish dataset identity for explicit paths."
                 )
             df = _read_table(ref, _PORT_REQUIRED, lower_columns=True)
@@ -385,27 +411,27 @@ class NetworkLoader:
         return self._ws_port_ids
 
     def _check_dataset_identity(self, path, kind, ids, source):
-        """Reject an explicit file whose identifiers mix WorldSmall and foreign ports.
+        """Reject an explicit file whose identifiers mix this dataset's ports and foreign ports.
 
-        * every identifier is a WorldSmall port  -> WorldSmall (or a subset)
-        * no identifier is a WorldSmall port     -> isolated fixture, accepted
-        * some are and some are not              -> a different dataset presented
-                                                    as WorldSmall (or a corrupted
-                                                    one); rejected.
+        * every identifier is a port of this dataset -> this dataset (or a subset)
+        * no identifier is a port of this dataset    -> isolated fixture, accepted
+        * some are and some are not                  -> a different dataset presented
+                                                        as this one (or a corrupted
+                                                        one); rejected.
 
         Canonical files are exempt (they define the reference).
         """
-        if Path(path).resolve() == Path(WORLDSMALL_FILES[kind]).resolve():
+        if Path(path).resolve() == Path(self._files[kind]).resolve():
             return
         ws = self._worldsmall_port_ids()
         ids = set(ids)
         known, foreign = ids & ws, ids - ws
         if known and foreign:
             raise DataValidationError(
-                f"{source}: {kind} file mixes {len(known)} WorldSmall port ids with "
-                f"{len(foreign)} ids outside the WorldSmall port set "
-                f"(e.g. {sorted(foreign)[:5]}); a non-WorldSmall dataset cannot be "
-                f"loaded as WorldSmall."
+                f"{source}: {kind} file mixes {len(known)} {self._name} port ids with "
+                f"{len(foreign)} ids outside the {self._name} port set "
+                f"(e.g. {sorted(foreign)[:5]}); a non-{self._name} dataset cannot be "
+                f"loaded as {self._name}."
             )
 
     # --------------------------------
@@ -778,7 +804,9 @@ class NetworkLoader:
             # Capacity unit is an assumption, not a verified fact (see the
             # constants above); consumers must not present capacity feasibility
             # as source-verified while this says "provisional", "secondary_source" or "reference_code".
-            "capacity_unit": dict(CAPACITY_UNIT_PROVENANCE),
+            "capacity_unit": {**CAPACITY_UNIT_PROVENANCE,
+                              "source_file": CAPACITY_UNIT_PROVENANCE["source_file"] if self._name == "WorldSmall"
+                              else str(spec_path)},
         }
         logger.info(
             "fleet capacity unit status %s: '%s' (FFE) converted to %s once (x2)",
@@ -799,7 +827,7 @@ class NetworkLoader:
     # Cross-file validation
     # --------------------------------
     def validate_network(self, ports, demands, distance_matrix):
-        """Check demand and distance records against the loaded WorldSmall port set.
+        """Check demand and distance records against the loaded port set of this dataset.
 
         Raises DataValidationError if a demand or distance record references an
         unknown port, or if any directed pair of distinct ports has no distance.
@@ -811,7 +839,7 @@ class NetworkLoader:
         )
         if bad_demand:
             raise DataValidationError(
-                f"demand references ports not in the WorldSmall port set: {bad_demand[:10]}"
+                f"demand references ports not in the {self._name} port set: {bad_demand[:10]}"
             )
 
         bad_dist = sorted(
@@ -819,7 +847,7 @@ class NetworkLoader:
         )
         if bad_dist:
             raise DataValidationError(
-                f"distance matrix references ports not in the WorldSmall port set: {bad_dist[:10]}"
+                f"distance matrix references ports not in the {self._name} port set: {bad_dist[:10]}"
             )
 
         missing = [
@@ -885,6 +913,12 @@ class NetworkLoader:
                 fleet=self.load_fleet(),
             )
 
+        if self._name != "WorldSmall":
+            raise DataValidationError(
+                f"load_problem(path) is the legacy WorldSmall JSON gate; for {self._name} use "
+                f"src.data.problem_json.load_problem_json (its canonical problem file is validated "
+                f"against this package)."
+            )
         dataset_path = Path(dataset_path)
         # The file name is only a first, cheap gate. Dataset identity is
         # established from content below: a WorldLarge dataset that is merely

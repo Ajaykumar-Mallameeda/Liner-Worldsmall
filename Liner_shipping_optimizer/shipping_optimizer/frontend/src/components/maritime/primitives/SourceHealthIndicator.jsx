@@ -96,7 +96,7 @@ export default function SourceHealthIndicator({
             {source || '—'}
           </span>
           {dataset && (
-            <span className="text-white/30 text-[10px] font-mono truncate">
+            <span className="text-white/60 text-[12px] font-mono truncate">
               · {dataset}
             </span>
           )}
@@ -104,7 +104,7 @@ export default function SourceHealthIndicator({
         <div className="flex items-center gap-4 flex-shrink-0">
           {license && (
             <span
-              className="text-white/35 text-[10px] font-mono uppercase tracking-widest hidden md:inline"
+              className="text-white/35 text-[12px] font-mono uppercase tracking-widest hidden md:inline"
               title={license}
             >
               {license.length > 24 ? `${license.slice(0, 21)}...` : license}
@@ -116,7 +116,7 @@ export default function SourceHealthIndicator({
           )}
           {rc != null && (
             <span
-              className="text-white/55 text-[10px] font-mono tabular-nums"
+              className="text-white/55 text-[12px] font-mono tabular-nums"
               title={`${rc} records`}
             >
               {compactNumber(rc)} rec
@@ -126,10 +126,10 @@ export default function SourceHealthIndicator({
       </div>
       {open && expandable && (
         <div
-          className="mt-2 pt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] font-mono"
+          className="mt-2 pt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] font-mono"
           style={{ borderTop: '1px solid rgba(148,163,184,0.10)' }}
         >
-          <div className="text-white/40">snapshot_id</div>
+          <div className="text-white/60">snapshot_id</div>
           <div
             className="text-white/70 text-right truncate"
             title={snapshotId}
@@ -138,8 +138,8 @@ export default function SourceHealthIndicator({
           </div>
           {attribution && (
             <>
-              <div className="text-white/40 col-span-2 mt-1">attribution</div>
-              <div className="text-white/55 col-span-2 text-[10px] leading-snug">
+              <div className="text-white/60 col-span-2 mt-1">attribution</div>
+              <div className="text-white/55 col-span-2 text-[12px] leading-snug">
                 {attribution}
               </div>
             </>

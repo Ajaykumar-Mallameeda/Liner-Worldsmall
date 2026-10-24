@@ -1,27 +1,22 @@
 /**
  * ConsoleSidebar
  * --------------
- * Terminal-style navigation rail. Grouped by IA section; active
- * item shown via a thin cyan rail + cyan text + faint gradient.
- * No pill-shaped nav buttons. Compact dimensions.
+ * Terminal-style navigation rail: one item per navigation group (navItems.navGroups).
+ * Active group shown via a thin cyan rail + cyan text + faint gradient.
+ *
+ * Responsive: full rail >= 1280 px, icon rail 768-1279 px, off-canvas drawer < 768 px
+ * (opened from the header's menu button; `open` / `onClose` control it).
  *
  * Pure presentational. Counts + state come from props.
  */
 
-import navItems from '../layout/navItems.js';
+import { navGroups, groupOfTab } from '../layout/navItems.js';
 import { fmtNum } from '../../utils/formatters.js';
 import { Pill, State } from './p12.jsx';
+import { liveLinkOf } from '../../runtime/consoleSelectors.js';
 
-export default function ConsoleSidebar({ activeNav, onNavChange, optimizationState, counts = {} }) {
-  const sections = [];
-  navItems.forEach((item) => {
-    const last = sections[sections.length - 1];
-    if (!last || last.name !== item.section) {
-      sections.push({ name: item.section, items: [item] });
-    } else {
-      last.items.push(item);
-    }
-  });
+export default function ConsoleSidebar({ activeNav, onNavChange, optimizationState, counts = {}, lastTabByGroup = {}, open = false, onClose }) {
+  const activeGroup = groupOfTab(activeNav).id;
 
   const sc = optimizationState?.global?.test_scorecard || {};
   const passed = sc.assertions_passed;
@@ -31,67 +26,76 @@ export default function ConsoleSidebar({ activeNav, onNavChange, optimizationSta
   const scorePct =
     score != null ? score :
     passed != null && total ? (passed / total) * 100 : null;
-  const isConnected = !!optimizationState?.isConnected;
+  const link = liveLinkOf(optimizationState);
   const running = !!optimizationState?.isPipelineRunning;
 
+  const go = (g) => {
+    onNavChange(lastTabByGroup[g.id] || g.tabs[0].id);
+    if (onClose) onClose();
+  };
+
   return (
-    <aside className="cx-sidebar" role="navigation" aria-label="Console navigation">
-      <div className="rail-head">
-        <div className="eyebrow">Console Nav</div>
-        <div className="title">Vessel Routing</div>
-      </div>
+    <>
+      <div className={`cx-drawer-scrim ${open ? 'is-open' : ''}`} onClick={onClose} aria-hidden="true" />
+      <aside id="console-nav" className={`cx-sidebar ${open ? 'is-open' : ''}`} role="navigation" aria-label="Console navigation">
+        <div className="rail-head">
+          <div className="eyebrow">Console</div>
+          <div className="title">Vessel Routing</div>
+        </div>
 
-      <nav className="nav-scroll" aria-label="Primary">
-        {sections.map((sec) => (
-          <div key={sec.name}>
-            <div className="nav-section">{sec.name}</div>
-            {sec.items.map(({ id, label, icon }) => {
-              const active = activeNav === id;
-              const count = counts[id];
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onNavChange(id)}
-                  className={`nav-item ${active ? 'is-active' : ''}`}
-                  aria-current={active ? 'page' : undefined}
-                >
-                  <span className="icon" aria-hidden="true">{icon}</span>
-                  <span className="label">{label}</span>
-                  {count != null && <span className="count">{fmtNum(count)}</span>}
-                </button>
-              );
-            })}
+        <nav className="nav-scroll" aria-label="Primary">
+          {navGroups.map((g) => {
+            const active = activeGroup === g.id;
+            const count = counts[g.id];
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => go(g)}
+                className={`nav-item ${active ? 'is-active' : ''}`}
+                aria-current={active ? 'page' : undefined}
+                title={g.tabs.length > 1 ? `${g.label}: ${g.tabs.map((t) => t.label).join(', ')}` : g.label}
+              >
+                <span className="icon" aria-hidden="true">{g.icon}</span>
+                <span className="label">{g.label}</span>
+                {count != null && <span className="count">{fmtNum(count)}</span>}
+                {count == null && g.tabs.length > 1 && <span className="count" aria-hidden="true">{g.tabs.length}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="rail-foot">
+          <div className="rail-foot-link" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <State tone={link.tone === 'ok' ? 'connected' : link.tone === 'warn' ? 'warn' : 'unknown'} label={link.label} />
+            {running && (
+              <span style={{ marginLeft: 'auto' }}>
+                <Pill tone="active">{optimizationState?.currentStage || 'running'}</Pill>
+              </span>
+            )}
           </div>
-        ))}
-      </nav>
-
-      <div className="rail-foot">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          <State tone={isConnected ? 'connected' : 'offline'} label={isConnected ? 'WS · LINK' : 'WS · OFFLINE'} />
-          {running && (
-            <span style={{ marginLeft: 'auto' }}>
-              <Pill tone="active">{optimizationState?.currentStage || 'running'}</Pill>
-            </span>
+          {(passed != null || scorePct != null || warnings != null) && (
+            <>
+              <div className="row">
+                <span className="k">assertions</span>
+                <span className={`v ${passed != null && total && passed / total > 0.95 ? 'good' : 'warn'}`}>
+                  {passed != null ? `${passed}/${total ?? '—'}` : '—'}
+                </span>
+              </div>
+              <div className="row">
+                <span className="k">score</span>
+                <span className={`v ${scorePct !== null && Number(scorePct) >= 95 ? 'good' : scorePct >= 80 ? 'warn' : 'bad'}`}>
+                  {scorePct != null ? `${Number(scorePct).toFixed(1)}%` : '—'}
+                </span>
+              </div>
+              <div className="row">
+                <span className="k">warnings</span>
+                <span className={`v ${(warnings || 0) > 0 ? 'warn' : 'good'}`}>{warnings != null ? warnings : '—'}</span>
+              </div>
+            </>
           )}
         </div>
-        <div className="row">
-          <span className="k">assertions</span>
-          <span className={`v ${passed != null && total && passed / total > 0.95 ? 'good' : 'warn'}`}>
-            {passed != null ? `${passed}/${total ?? '—'}` : '—'}
-          </span>
-        </div>
-        <div className="row">
-          <span className="k">score</span>
-          <span className={`v ${scorePct !== null && Number(scorePct) >= 95 ? 'good' : scorePct >= 80 ? 'warn' : 'bad'}`}>
-            {scorePct != null ? `${Number(scorePct).toFixed(1)}%` : '—'}
-          </span>
-        </div>
-        <div className="row">
-          <span className="k">warnings</span>
-          <span className={`v ${(warnings || 0) > 0 ? 'warn' : 'good'}`}>{warnings != null ? warnings : '0'}</span>
-        </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

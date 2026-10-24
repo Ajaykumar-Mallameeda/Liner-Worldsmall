@@ -21,7 +21,9 @@ import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Pill, Kv, Stat, Empty, Provenance, Meter } from '../../components/console/p12.jsx';
 import { getRegionColor } from '../../components/map/WorldMap.jsx';
-import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
+import { fmtNum, fmtPct, fmtUsd, prettyEngineText } from '../../utils/formatters.js';
+import { portGeoRegion } from '../../utils/geoRegion.js';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
 
 const EM = '—';
 
@@ -36,7 +38,7 @@ export default function DemandIntelligence({
 
   // Iteration state
   const rawIterationResults = rawData.iteration_results || [];
-  const defaultIter = rawData.final_selected_iteration ?? rawData.iteration_selection?.selected_iteration ?? 0;
+  const defaultIter = selectedIterationOf(optState) ?? 0;
   const [selectedIter, setSelectedIter] = useState(defaultIter);
 
   // Active iteration data
@@ -55,23 +57,23 @@ export default function DemandIntelligence({
 
   const satisfiedDemand = currentIterData
     ? (iterMetrics.total_satisfied_demand ?? iterMetrics.satisfied_demand ?? summaryMetrics.satisfied_demand)
-    : (summaryMetrics.satisfied_demand ?? optState.global?.satisfiedDemand ?? 964949);
+    : (summaryMetrics.satisfied_demand ?? optState.global?.satisfiedDemand ?? null);
 
   const unservedDemand = currentIterData
     ? (iterMetrics.total_unserved_demand ?? iterMetrics.unserved_demand ?? summaryMetrics.unserved_demand)
-    : (summaryMetrics.unserved_demand ?? optState.global?.unserved ?? 930281);
+    : (summaryMetrics.unserved_demand ?? optState.global?.unserved ?? null);
 
   const weeklyDemand = (satisfiedDemand != null && unservedDemand != null)
     ? (satisfiedDemand + unservedDemand)
-    : (summaryMetrics.total_weekly_demand ?? optState.global?.weeklyDemand ?? 1895230);
+    : (summaryMetrics.total_weekly_demand ?? optState.global?.weeklyDemand ?? null);
 
   const coveragePct = currentIterData
     ? (iterMetrics.global_demand_weighted_coverage ?? iterMetrics.average_regional_coverage ?? summaryMetrics.coverage)
-    : (summaryMetrics.global_demand_weighted_coverage ?? summaryMetrics.coverage ?? optState.global?.coverage ?? 50.9);
+    : (summaryMetrics.global_demand_weighted_coverage ?? summaryMetrics.coverage ?? optState.global?.coverage ?? null);
 
   const servicesDeployed = currentIterData
     ? (iterMetrics.services_deployed ?? iterMetrics.total_services ?? (currentIterData.selected_services || []).length)
-    : (summaryMetrics.total_services ?? (rawData.selected_services || []).length ?? 551);
+    : (summaryMetrics.total_services ?? (rawData.selected_services || []).length);
 
   // Selected services for active iteration
   const activeServices = useMemo(() => {
@@ -88,8 +90,7 @@ export default function DemandIntelligence({
     const legMap = {};
     activeServices.forEach((s) => {
       const ports = s.ports || [];
-      const svcRegion = s.region || 'Asia';
-      const svcLoad = s.load || 1000;
+      const svcLoad = Number(s.load) || 0;
 
       for (let i = 0; i < ports.length - 1; i++) {
         const from = ports[i];
@@ -104,7 +105,13 @@ export default function DemandIntelligence({
             to,
             lift: 0,
             totalLoad: 0,
-            region: svcRegion,
+            // Region of the leg itself, from its two ports (not the service's agent label).
+            region: (() => {
+              const a = portGeoRegion(from);
+              const b = portGeoRegion(to);
+              if (!a || !b) return a || b || 'Unknown';
+              return a === b ? a : a + ' → ' + b;
+            })(),
             profit: 0,
           };
         }
@@ -169,7 +176,7 @@ export default function DemandIntelligence({
     const problemAnalysis = rawData.problem_analysis || '';
 
     // Overall Synthesis
-    const overallNotes = decisions.notes || feedback.rerun_reason || iterSelection.reasoning || null;
+    const overallNotes = prettyEngineText(decisions.notes || feedback.rerun_reason || iterSelection.reasoning || null);
     const coverageAssessment = llmSelection.objective_assessment?.coverage || (
       feedback.average_regional_coverage != null
         ? `Regional average coverage ${Number(feedback.average_regional_coverage).toFixed(1)}% vs 70.0% target. Global demand-weighted coverage is ${Number(feedback.global_demand_weighted_coverage || coveragePct).toFixed(1)}%.`
@@ -191,8 +198,11 @@ export default function DemandIntelligence({
       priorities,
       evaluationReasons,
       problemAnalysis,
-      model: rawData.llm_runtime_metrics?.model || decisionOutput.llm_actuation?.model || 'nvidia/nemotron-3-ultra-550b',
-      provider: decisionOutput.llm_actuation?.provider || 'openrouter',
+      // What the run recorded; models_used / providers_used are { name: calls } maps.
+      model: rawData.llm_runtime_metrics?.model || decisionOutput.llm_actuation?.model
+        || Object.keys(rawData.llm_runtime_aggregate?.models_used || {}).join(', ') || '—',
+      provider: decisionOutput.llm_actuation?.provider
+        || Object.keys(rawData.llm_runtime_aggregate?.providers_used || {}).join(', ') || '—',
     };
   }, [currentIterData, rawData, regionalDemandList, coveragePct, servicesDeployed, summaryMetrics.weekly_profit]);
 
@@ -215,7 +225,7 @@ export default function DemandIntelligence({
       {rawIterationResults.length > 0 && (
         <div className="flex items-center justify-between p-2 rounded bg-black/60 border border-white/10 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <span className="text-[8.5px] text-slate-400 font-bold uppercase tracking-widest mr-1">
+            <span className="text-[12px] text-slate-400 font-bold uppercase tracking-widest mr-1">
               OPTIMIZER ITERATION:
             </span>
             {rawIterationResults.map((it) => {
@@ -229,7 +239,7 @@ export default function DemandIntelligence({
                   key={it.iteration}
                   type="button"
                   onClick={() => setSelectedIter(it.iteration)}
-                  className={`px-3 py-1 text-[9px] font-bold tracking-wider uppercase rounded transition-all flex items-center gap-1.5 border ${
+                  className={`px-3 py-1 text-[12px] font-bold tracking-wider uppercase rounded transition-all flex items-center gap-1.5 border ${
                     isActive
                       ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(0,212,255,0.25)]'
                       : 'bg-white/[0.02] border-white/5 text-slate-400 hover:text-white hover:bg-white/5'
@@ -238,17 +248,17 @@ export default function DemandIntelligence({
                   <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-cyan-400' : 'bg-slate-600'}`} />
                   <span>ITER {String(it.iteration).padStart(2, '0')}</span>
                   {isBest && (
-                    <span className="text-[7.5px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <span className="text-[12px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                       SELECTED
                     </span>
                   )}
-                  <span className="text-[8px] opacity-75 font-normal">({fmtPct(itCov)})</span>
+                  <span className="text-[12px] opacity-75 font-normal">({fmtPct(itCov)})</span>
                 </button>
               );
             })}
           </div>
 
-          <span className="text-[8px] text-slate-400 uppercase tracking-wider">
+          <span className="text-[12px] text-slate-400 uppercase tracking-wider">
             {servicesDeployed} SERVICES · {fmtUsd(iterMetrics.total_profit ?? summaryMetrics.weekly_profit)}/WK
           </span>
         </div>
@@ -319,8 +329,8 @@ export default function DemandIntelligence({
                 <div className="cx-rows" style={{ maxHeight: 290, overflowY: 'auto' }}>
                   {/* Table Header */}
                   <div
-                    className="cx-row sticky top-0 bg-[#060c14] z-10 font-bold text-[8px] tracking-wider text-slate-400 border-b border-white/10"
-                    style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 80px', padding: '6px 10px' }}
+                    className="cx-row sticky top-0 bg-[#060c14] z-10 font-bold text-[12px] tracking-wider text-slate-400 border-b border-white/10"
+                    style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) 56px 100px minmax(120px, 190px)', padding: '6px 10px' }}
                   >
                     <div>CORRIDOR</div>
                     <div style={{ textAlign: 'center' }}>LIFT</div>
@@ -334,10 +344,10 @@ export default function DemandIntelligence({
                     return (
                       <div
                         key={c.id}
-                        className="cx-row text-[9px] hover:bg-white/[0.03] transition-colors"
+                        className="cx-row text-[12px] hover:bg-white/[0.03] transition-colors"
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '1fr 70px 100px 80px',
+                          gridTemplateColumns: 'minmax(140px, 1fr) 56px 100px minmax(120px, 190px)',
                           padding: '5.5px 10px',
                         }}
                       >
@@ -360,7 +370,7 @@ export default function DemandIntelligence({
                         {/* Region */}
                         <div className="text-right">
                           <span
-                            className="text-[7.5px] px-1 py-0.5 rounded font-semibold uppercase"
+                            className="text-[12px] px-1 py-0.5 rounded font-semibold uppercase whitespace-nowrap"
                             style={{ background: `${rColor}20`, color: rColor }}
                           >
                             {c.region}
@@ -401,14 +411,14 @@ export default function DemandIntelligence({
                       <div className="flex justify-between items-center mb-1">
                         <div className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full" style={{ background: r.color }} />
-                          <span className="font-bold text-[10px] text-white uppercase tracking-wider">{r.name}</span>
-                          <span className="text-[8px] text-slate-400">({r.services} svcs)</span>
+                          <span className="font-bold text-[12px] text-white uppercase tracking-wider">{r.name}</span>
+                          <span className="text-[12px] text-slate-400">({r.services} svcs)</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-bold" style={{ color: r.color }}>
+                          <span className="text-[12px] font-bold" style={{ color: r.color }}>
                             {fmtPct(r.coverage)} COV
                           </span>
-                          <span className="text-[8.5px] font-semibold text-emerald-400">
+                          <span className="text-[12px] font-semibold text-emerald-400">
                             {fmtUsd(r.profit)}
                           </span>
                         </div>
@@ -423,17 +433,17 @@ export default function DemandIntelligence({
                       </div>
 
                       {/* Demand / Served / Unserved Strip */}
-                      <div className="grid grid-cols-3 gap-1 text-[8.5px]">
+                      <div className="grid grid-cols-3 gap-1 text-[12px]">
                         <div>
-                          <span className="text-slate-500">DEMAND: </span>
+                          <span className="text-slate-400">DEMAND: </span>
                           <span className="text-slate-200 font-semibold">{fmtNum(r.demand)}</span>
                         </div>
                         <div className="text-center">
-                          <span className="text-slate-500">SERVED: </span>
+                          <span className="text-slate-400">SERVED: </span>
                           <span className="text-emerald-400 font-semibold">{fmtNum(r.satisfied)}</span>
                         </div>
                         <div className="text-right">
-                          <span className="text-slate-500">UNSERVED: </span>
+                          <span className="text-slate-400">UNSERVED: </span>
                           <span className="text-amber-300 font-semibold">{fmtNum(r.unserved)}</span>
                         </div>
                       </div>
@@ -450,7 +460,7 @@ export default function DemandIntelligence({
       <InstrumentPanel
         title="LLM Demand Reasoning"
         right={
-          <span className="text-cyan-400 font-bold text-[8.5px]">
+          <span className="text-cyan-400 font-bold text-[12px]">
             ● OBSERVED · {llmReasoning.model}
           </span>
         }
@@ -465,18 +475,18 @@ export default function DemandIntelligence({
             />
           </div>
         ) : (
-          <div className="space-y-3 text-[9px] leading-relaxed">
+          <div className="space-y-3 text-[12px] leading-relaxed">
             {/* Overall Demand Summary */}
             <div className="p-2.5 rounded bg-white/[0.02] border border-white/5">
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                <span className="text-[8.5px] font-bold text-cyan-300 uppercase tracking-widest">
+                <span className="text-[12px] font-bold text-cyan-300 uppercase tracking-widest">
                   OVERALL DEMAND &amp; COVERAGE SYNTHESIS
                 </span>
               </div>
               <div className="text-slate-200 leading-normal">
                 {llmReasoning.overallNotes ||
-                  `The optimizer observed a global weekly demand of ${fmtNum(weeklyDemand)} TEU across ${sm.ports || 47} ports, satisfying ${fmtNum(satisfiedDemand)} TEU (${fmtPct(coveragePct)} demand-weighted coverage) with ${fmtNum(unservedDemand)} TEU residual unserved demand.`}
+                  `The optimizer observed a global weekly demand of ${fmtNum(weeklyDemand)} TEU across ${sm.ports != null ? sm.ports : 'the'} ports, satisfying ${fmtNum(satisfiedDemand)} TEU (${fmtPct(coveragePct)} demand-weighted coverage) with ${fmtNum(unservedDemand)} TEU residual unserved demand.`}
               </div>
 
               {llmReasoning.coverageAssessment && (
@@ -489,19 +499,19 @@ export default function DemandIntelligence({
 
             {/* Regional Agent Reasoning Breakdown */}
             <div>
-              <div className="text-[8px] text-slate-400 uppercase tracking-widest font-bold mb-2">
+              <div className="text-[12px] text-slate-400 uppercase tracking-widest font-bold mb-2">
                 REGIONAL AGENT DEMAND EXPLANATIONS:
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 {regionalDemandList.map((r) => (
                   <div
                     key={r.id}
-                    className="p-2 rounded bg-black/40 border border-white/5 text-[8.5px]"
+                    className="p-2 rounded bg-black/40 border border-white/5 text-[12px]"
                     style={{ borderLeft: `2.5px solid ${r.color}` }}
                   >
                     <div className="flex justify-between items-center mb-1">
                       <span className="font-bold text-white uppercase">{r.name}</span>
-                      <span className="text-[7.5px] px-1 py-0.2 rounded font-semibold uppercase" style={{ background: `${r.color}20`, color: r.color }}>
+                      <span className="text-[12px] px-1 py-0.2 rounded font-semibold uppercase" style={{ background: `${r.color}20`, color: r.color }}>
                         {fmtPct(r.coverage)}
                       </span>
                     </div>
@@ -510,11 +520,11 @@ export default function DemandIntelligence({
                         {r.explanation}
                       </p>
                     ) : (
-                      <p className="text-slate-500 italic">● Regional LLM reasoning not observed</p>
+                      <p className="text-slate-400 italic">● Regional LLM reasoning not observed</p>
                     )}
                     {r.strategy && (
-                      <div className="mt-1 text-[7.5px] text-slate-400">
-                        <span className="text-slate-500">Strategy:</span> <span className="text-cyan-300">{r.strategy}</span>
+                      <div className="mt-1 text-[12px] text-slate-400">
+                        <span className="text-slate-400">Strategy:</span> <span className="text-cyan-300">{r.strategy}</span>
                       </div>
                     )}
                   </div>

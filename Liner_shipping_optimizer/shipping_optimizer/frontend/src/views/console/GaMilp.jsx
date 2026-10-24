@@ -19,6 +19,7 @@ import { useOptimizationState } from '../../hooks/useOptimizationState.js';
 import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Stat, Provenance } from '../../components/console/p12.jsx';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
 
 const h = createElement;
 const F = Fragment;
@@ -95,7 +96,7 @@ function ConvergenceChart({ values, palette, height = 130, selectedIter = null, 
     return h('div', {
       style: {
         height, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)',
+        fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)',
       },
     }, 'NO DATA RECORDED');
   }
@@ -193,7 +194,7 @@ function ConvergenceChart({ values, palette, height = 130, selectedIter = null, 
         y: above ? p.y - 7 : p.y + 14,
         textAnchor: 'middle',
         fontFamily: 'monospace',
-        fontSize: 8.5,
+        fontSize: 12,
         fill: palette.line,
         opacity: 0.95,
         fontWeight: 600,
@@ -207,7 +208,7 @@ function ConvergenceChart({ values, palette, height = 130, selectedIter = null, 
         y: H - 4,
         textAnchor: 'middle',
         fontFamily: 'monospace',
-        fontSize: 8,
+        fontSize: 12,
         fill: 'rgba(255,255,255,0.4)',
       }, 'ITER ' + String(p.i).padStart(2, '0'))
     ),
@@ -220,7 +221,7 @@ function ConvergenceChart({ values, palette, height = 130, selectedIter = null, 
         y: yPos + 3,
         textAnchor: 'end',
         fontFamily: 'monospace',
-        fontSize: 7.5,
+        fontSize: 12,
         fill: 'rgba(255,255,255,0.35)',
       }, yFormat(tick));
     }),
@@ -273,7 +274,7 @@ function AnalyticalBlock({
         h('span', {
           style: {
             fontFamily: 'var(--cx-mono)',
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 700,
             color: palette.line,
             textTransform: 'uppercase',
@@ -283,7 +284,7 @@ function AnalyticalBlock({
         h('span', {
           style: {
             fontFamily: 'var(--cx-mono)',
-            fontSize: 8.5,
+            fontSize: 12,
             color: 'var(--cx-text-faint)',
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
@@ -318,7 +319,7 @@ function AnalyticalBlock({
         h('div', {
           style: {
             fontFamily: 'var(--cx-mono)',
-            fontSize: 8,
+            fontSize: 12,
             color: 'var(--cx-text-faint)',
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
@@ -334,7 +335,7 @@ function AnalyticalBlock({
               justifyContent: 'space-between',
               alignItems: 'center',
               fontFamily: 'var(--cx-mono)',
-              fontSize: 9.5,
+              fontSize: 12,
               padding: '2px 0',
               borderBottom: i < values.length - 1 ? '1px dashed rgba(255,255,255,0.05)' : 'none',
             },
@@ -369,38 +370,38 @@ function AnalyticalBlock({
       h('div', null,
         h('div', {
           style: {
-            fontFamily: 'var(--cx-mono)', fontSize: 8,
+            fontFamily: 'var(--cx-mono)', fontSize: 12,
             color: 'var(--cx-text-faint)', textTransform: 'uppercase',
             letterSpacing: '0.1em', marginBottom: 2,
           },
         }, 'FIRST'),
         h('div', {
-          style: { fontFamily: 'var(--cx-mono)', fontSize: 11, fontWeight: 600, color: 'var(--cx-text)' },
+          style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: 'var(--cx-text)' },
         }, firstVal != null ? formatter(firstVal) : EM),
       ),
       h('div', null,
         h('div', {
           style: {
-            fontFamily: 'var(--cx-mono)', fontSize: 8,
+            fontFamily: 'var(--cx-mono)', fontSize: 12,
             color: 'var(--cx-text-faint)', textTransform: 'uppercase',
             letterSpacing: '0.1em', marginBottom: 2,
           },
         }, 'LAST'),
         h('div', {
-          style: { fontFamily: 'var(--cx-mono)', fontSize: 11, fontWeight: 600, color: palette.line },
+          style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600, color: palette.line },
         }, lastVal != null ? formatter(lastVal) : EM),
       ),
       h('div', null,
         h('div', {
           style: {
-            fontFamily: 'var(--cx-mono)', fontSize: 8,
+            fontFamily: 'var(--cx-mono)', fontSize: 12,
             color: 'var(--cx-text-faint)', textTransform: 'uppercase',
             letterSpacing: '0.1em', marginBottom: 2,
           },
         }, 'DELTA'),
         h('div', {
           style: {
-            fontFamily: 'var(--cx-mono)', fontSize: 11, fontWeight: 600,
+            fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 600,
             color: deltaColor(deltaVal),
           },
         }, deltaVal != null ? (deltaFormatter ? deltaFormatter(deltaVal) : fmtDelta(deltaVal, deltaUnit)) : EM),
@@ -420,10 +421,10 @@ export default function GaMilp(props) {
   const scorecards = optState.scorecards || [];
 
   const iterSelMeta = gbl.iteration_selection || {};
-  const pipelineSelectedIter = gbl.selected_iteration ?? 0;
+  const pipelineSelectedIter = selectedIterationOf(optState) ?? 0;
   const iterCount = scorecards.length > 0 ? scorecards.length : rawIters.length;
   const overallTone = iterCount > 0 ? 'available' : 'no_data';
-  const runId = gbl.run_id || 'N/A';
+  const runId = gbl.run_id || '—';
   const globalRuntime = gbl.health_status?.runtime_seconds ?? gbl.runtime ?? null;
 
   // Selected iteration data

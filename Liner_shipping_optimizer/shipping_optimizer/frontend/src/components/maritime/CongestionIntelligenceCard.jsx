@@ -102,7 +102,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <PulseDot color="#64748b" />
-            <div className="text-xs font-mono text-white/40 uppercase tracking-widest">
+            <div className="text-xs font-mono text-white/60 uppercase tracking-widest">
               Congestion Intelligence
             </div>
           </div>
@@ -116,7 +116,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
             DISABLED
           </div>
         </div>
-        <div className="text-xs text-white/30 font-mono">
+        <div className="text-xs text-white/60 font-mono">
           Set <code>MARITIME_CONGESTION_ENABLED=1</code> to opt in. The
           congestion layer is OFF by default. Phase 6 stops at the
           intelligence foundation; it does NOT touch the optimizer.
@@ -153,7 +153,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <PulseDot color={color} />
-          <div className="text-xs font-mono text-white/40 uppercase tracking-widest">
+          <div className="text-xs font-mono text-white/60 uppercase tracking-widest">
             Congestion Intelligence
           </div>
         </div>
@@ -198,7 +198,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
 
       <div className="grid grid-cols-5 gap-3 mb-3">
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Max Score
           </div>
           <div
@@ -208,14 +208,14 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
             {maxScore ? maxScore.toFixed(2) : "—"}
           </div>
           <div
-            className="text-[10px] font-mono"
+            className="text-[12px] font-mono"
             style={{ color: levelColor }}
           >
             {LEVEL_LABEL[level] || "—"}
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Avg Score
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -223,7 +223,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Confidence
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -231,7 +231,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Entities
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -239,7 +239,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             Freshness
           </div>
           <div className="text-sm text-white/80 font-mono">
@@ -250,7 +250,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
 
       <div className="grid grid-cols-4 gap-3 mb-3">
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             LOW
           </div>
           <div className="text-sm font-mono" style={{ color: LEVEL_COLOR.low }}>
@@ -258,7 +258,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             MODERATE
           </div>
           <div className="text-sm font-mono" style={{ color: LEVEL_COLOR.moderate }}>
@@ -266,7 +266,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             HIGH
           </div>
           <div className="text-sm font-mono" style={{ color: LEVEL_COLOR.high }}>
@@ -274,7 +274,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           </div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+          <div className="text-[12px] font-mono text-white/60 uppercase tracking-widest">
             SEVERE
           </div>
           <div className="text-sm font-mono" style={{ color: LEVEL_COLOR.severe }}>
@@ -284,15 +284,15 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
       </div>
 
       <div
-        className="text-[11px] font-mono text-white/40 leading-relaxed pt-3"
+        className="text-[12px] font-mono text-white/60 leading-relaxed pt-3"
         style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
       >
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-white/30">Inputs:</span>
+          <span className="text-white/60">Inputs:</span>
           {(status.inputs_present || []).map((s) => (
             <span
               key={s}
-              className="text-[9px] px-1 rounded"
+              className="text-[12px] px-1 rounded"
               style={{
                 background: "rgba(16,185,129,0.12)",
                 color: "#10b981",
@@ -304,7 +304,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
           {(status.inputs_missing || []).map((s) => (
             <span
               key={s}
-              className="text-[9px] px-1 rounded"
+              className="text-[12px] px-1 rounded"
               style={{
                 background: "rgba(255,255,255,0.05)",
                 color: "#94a3b8",
@@ -314,7 +314,7 @@ export default function CongestionIntelligenceCard({ status, summary, hotspots }
             </span>
           ))}
         </div>
-        <div className="text-white/30">
+        <div className="text-white/60">
           Score weights: traffic · traffic_change · port_pressure ·
           weather_risk. Quality / freshness only ever reduce confidence,
           never inflate the score.

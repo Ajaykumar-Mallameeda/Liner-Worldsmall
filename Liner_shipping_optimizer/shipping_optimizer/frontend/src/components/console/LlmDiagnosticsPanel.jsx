@@ -108,7 +108,7 @@ export default function LlmDiagnosticsPanel({ llmAggregate, llmMetrics }) {
     statusTone === 'ACTIVE' ? 'text-emerald-400' :
     statusTone === 'PARTIAL' ? 'text-cyan-400' :
     statusTone === 'FALLBACK' ? 'text-amber-400' :
-    'text-slate-500';
+    'text-slate-400';
 
   const providersCount = Array.isArray(agg.providers_used)
     ? agg.providers_used.length
@@ -122,11 +122,11 @@ export default function LlmDiagnosticsPanel({ llmAggregate, llmMetrics }) {
   const actuationText = actuationObservedCount > 0 ? `OBSERVED · ${actuationObservedCount} CALLS` : 'NOT OBSERVED';
 
   return (
-    <div className="p-2 font-mono text-[9px] leading-tight flex flex-col justify-between h-full select-none">
+    <div className="p-2 font-mono text-[12px] leading-tight flex flex-col justify-between h-full select-none">
       {/* ── Status Header ── */}
       <div className="flex justify-between items-center pb-1.5 border-b border-white/5 mb-1.5">
-        <span className="text-slate-400 uppercase tracking-widest text-[8px] font-semibold">LLM SUBSYSTEM</span>
-        <span className={`font-bold text-[8.5px] uppercase tracking-wider ${statusColor}`}>
+        <span className="text-slate-400 uppercase tracking-widest text-[12px] font-semibold">LLM SUBSYSTEM</span>
+        <span className={`font-bold text-[12px] uppercase tracking-wider ${statusColor}`}>
           ● {statusTone}
         </span>
       </div>
@@ -134,21 +134,21 @@ export default function LlmDiagnosticsPanel({ llmAggregate, llmMetrics }) {
       {/* ── Headline Metrics ── */}
       <div className="grid grid-cols-3 gap-1 pb-1.5 border-b border-white/5 mb-1.5 text-center">
         <div className="bg-white/[0.02] p-1 border border-white/5">
-          <div className="text-[7px] text-slate-400 uppercase tracking-wider">TOTAL CALLS</div>
-          <div className="text-[11px] font-bold text-slate-100 mt-0.5">{totalCalls}</div>
+          <div className="text-[12px] text-slate-400 uppercase tracking-wider">TOTAL CALLS</div>
+          <div className="text-[12px] font-bold text-slate-100 mt-0.5">{totalCalls}</div>
         </div>
         <div className="bg-white/[0.02] p-1 border border-white/5">
-          <div className="text-[7px] text-slate-400 uppercase tracking-wider">AI SUCCESS</div>
-          <div className="text-[11px] font-bold text-emerald-400 mt-0.5">{successes}</div>
+          <div className="text-[12px] text-slate-400 uppercase tracking-wider">AI SUCCESS</div>
+          <div className="text-[12px] font-bold text-emerald-400 mt-0.5">{successes}</div>
         </div>
         <div className="bg-white/[0.02] p-1 border border-white/5">
-          <div className="text-[7px] text-slate-400 uppercase tracking-wider">FALLBACK</div>
-          <div className="text-[11px] font-bold text-amber-400 mt-0.5">{fallbacks}</div>
+          <div className="text-[12px] text-slate-400 uppercase tracking-wider">FALLBACK</div>
+          <div className="text-[12px] font-bold text-amber-400 mt-0.5">{fallbacks}</div>
         </div>
       </div>
 
       {/* ── Agent Breakdown ── */}
-      <div className="space-y-1 pb-1.5 border-b border-white/5 mb-1.5 text-[8.5px]">
+      <div className="space-y-1 pb-1.5 border-b border-white/5 mb-1.5 text-[12px]">
         <div className="flex justify-between items-baseline">
           <span className="text-slate-400">COORDINATOR</span>
           <span className="font-semibold text-slate-200">
@@ -176,7 +176,7 @@ export default function LlmDiagnosticsPanel({ llmAggregate, llmMetrics }) {
       </div>
 
       {/* ── Providers & Cache Telemetry ── */}
-      <div className="space-y-0.5 text-[8px]">
+      <div className="space-y-0.5 text-[12px]">
         <div className="flex justify-between items-baseline">
           <span className="text-slate-400">PROVIDERS / MODELS</span>
           <span className="font-semibold text-slate-300">{providersCount} / {modelsCount}</span>

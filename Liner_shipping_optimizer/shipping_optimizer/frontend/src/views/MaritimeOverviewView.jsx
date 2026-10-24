@@ -210,7 +210,7 @@ export default function MaritimeOverviewView() {
         subtitle="Cross-source maritime intelligence status. Every layer is read from the local snapshot store; the dashboard never reaches an external provider."
         right={
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-mono uppercase tracking-widest text-white/30">
+            <span className="text-[12px] font-mono uppercase tracking-widest text-white/60">
               overall
             </span>
             <MaritimeStatusBadge value={overallState} pulse={overallState === 'live'} size="md" />
@@ -223,7 +223,7 @@ export default function MaritimeOverviewView() {
         title="Evaluation"
         density="compact"
         right={
-          <span className="text-[9px] font-mono text-white/30">
+          <span className="text-[12px] font-mono text-white/60">
             poll {POLL_INTERVAL_MS / 1000}s
           </span>
         }
@@ -262,7 +262,7 @@ export default function MaritimeOverviewView() {
           subtitle="Fleet-level roll-up from the local snapshot store. Empty cells render as — when the underlying data is absent (the dashboard never invents a value)."
           density="compact"
           right={
-            <span className="text-[9px] font-mono text-white/30">
+            <span className="text-[12px] font-mono text-white/60">
               poll {TELEMETRY_POLL_INTERVAL_MS / 1000}s
             </span>
           }
@@ -305,11 +305,11 @@ export default function MaritimeOverviewView() {
             />
           </div>
           {providers.length > 0 && (
-            <div className="mt-3 pt-2 grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] font-mono"
+            <div className="mt-3 pt-2 grid grid-cols-2 md:grid-cols-3 gap-2 text-[12px] font-mono"
                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
               {providers.map((p) => (
                 <div key={p.dataset} className="flex items-center justify-between gap-2 min-w-0">
-                  <span className="text-white/40 truncate">{p.dataset}</span>
+                  <span className="text-white/60 truncate">{p.dataset}</span>
                   <span className="text-white/70 truncate">{p.provider} · {p.state}</span>
                 </div>
               ))}
@@ -358,7 +358,7 @@ export default function MaritimeOverviewView() {
               />
             );
           })}
-          <span className="text-[10px] font-mono text-white/30 ml-auto">
+          <span className="text-[12px] font-mono text-white/60 ml-auto">
             {effectiveFilter === FILTER_ALL
               ? 'rendering all sources'
               : `rendering ${SOURCE_LABELS[effectiveFilter]?.source || effectiveFilter} only`}
@@ -445,7 +445,7 @@ export default function MaritimeOverviewView() {
       >
         <div className="flex flex-col gap-2">
           {visibleResilienceKeys.length === 0 ? (
-            <div className="text-[11px] text-white/35 font-mono">
+            <div className="text-[12px] text-white/35 font-mono">
               No resilience rows for the active filter.
             </div>
           ) : (
@@ -485,7 +485,7 @@ export default function MaritimeOverviewView() {
           title="Maritime Intelligence · DISABLED"
           density="compact"
         >
-          <div className="text-[11px] text-white/35 font-mono leading-relaxed">
+          <div className="text-[12px] text-white/35 font-mono leading-relaxed">
             The maritime intelligence layer is disabled. The dashboard reads
             only the local snapshot store — no external provider is ever
             contacted. To enable, set
@@ -500,7 +500,7 @@ export default function MaritimeOverviewView() {
         </IntelligencePanel>
       )}
 
-      <div className="text-[11px] text-white/30 font-mono leading-relaxed max-w-3xl">
+      <div className="text-[12px] text-white/60 font-mono leading-relaxed max-w-3xl">
         Phase 9 maritime command center. The endpoints
         <code className="mx-1">/api/maritime/overview</code> and
         <code className="mx-1">/api/maritime/telemetry</code> aggregate the

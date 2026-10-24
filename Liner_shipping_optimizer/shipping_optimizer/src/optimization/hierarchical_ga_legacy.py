@@ -1,5 +1,5 @@
 """LEGACY COPY (verbatim) of the pre-network-model implementation, kept for reference.
-Not imported by the pipeline. Superseded by src/network/* (see reports/overnight_tasks_2_to_4).
+Not imported by the pipeline. Superseded by src/network/*.
 """
 import logging
 import time
@@ -154,7 +154,7 @@ class HierarchicalGA:
             logger.warning("no_services_after_filter")
             return {"services": [], "frequencies": [], "coverage_estimate": 0.0}
 
-        # ── Level 1: service selection ─────────────────────────────────
+        # service selection ─────────────────────────────────
         service_ga   = ServiceGA(self.problem, **self._sga_kwargs)
         seed_services = seed_chromosome.get("services") if seed_chromosome else None
         best_services = service_ga.run(seed_solution=seed_services)
@@ -164,7 +164,7 @@ class HierarchicalGA:
             if CONFIG.verbose_runtime_logs:
                 logger.warning("ga_runtime_budget_near | elapsed=%.2fs", elapsed)
 
-        # ── Level 2: frequency optimisation ───────────────────────────
+        # frequency optimisation ───────────────────────────
         freq_ga   = FrequencyGA(self.problem, best_services, **self._fga_kwargs)
         best_freq = freq_ga.run()
         import math
@@ -224,7 +224,7 @@ class HierarchicalGA:
             "coverage_estimate": coverage_estimate,
             #flag set True when GA output is too weak to warrant MILP
             "skip_milp":         coverage_estimate < 30.0,
-            # Adaptive-budget telemetry (Phase A/B/C)
+            # Adaptive-budget telemetry
             "service_ga_telemetry":    getattr(service_ga, "_telemetry", None),
             "frequency_ga_telemetry":  getattr(freq_ga,   "_telemetry", None),
             "ga_total_elapsed_sec":    round(ga_total_elapsed, 4),

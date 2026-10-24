@@ -23,7 +23,7 @@ export default function MaritimeSectionHeader({
     <div className="flex items-start justify-between gap-4 mb-1">
       <div className="min-w-0">
         <div
-          className="text-[10px] font-mono uppercase tracking-widest text-white/40"
+          className="text-[12px] font-mono uppercase tracking-widest text-white/60"
           style={{ letterSpacing: '0.18em' }}
         >
           {eyebrow}
@@ -34,7 +34,7 @@ export default function MaritimeSectionHeader({
           {title}
         </h1>
         {subtitle && (
-          <div className="text-xs text-white/40 font-mono mt-1 max-w-3xl">
+          <div className="text-xs text-white/60 font-mono mt-1 max-w-3xl">
             {subtitle}
           </div>
         )}

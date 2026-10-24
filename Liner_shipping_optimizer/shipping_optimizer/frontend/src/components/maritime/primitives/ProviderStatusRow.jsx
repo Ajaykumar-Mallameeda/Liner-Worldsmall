@@ -36,7 +36,7 @@ export default function ProviderStatusRow({
             {label || name || '—'}
           </div>
           {coverage && (
-            <div className="text-white/40 text-[10px] font-mono mt-0.5 truncate">
+            <div className="text-white/60 text-[12px] font-mono mt-0.5 truncate">
               {coverage}
             </div>
           )}
@@ -44,7 +44,7 @@ export default function ProviderStatusRow({
         <div className="flex items-center gap-2 flex-shrink-0">
           {commercialSafe === false && (
             <span
-              className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+              className="text-[12px] font-mono px-1.5 py-0.5 rounded"
               style={{
                 background: 'rgba(245,158,11,0.15)',
                 color: '#f59e0b',
@@ -57,7 +57,7 @@ export default function ProviderStatusRow({
           )}
           {commercialSafe === true && (
             <span
-              className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+              className="text-[12px] font-mono px-1.5 py-0.5 rounded"
               style={{
                 background: 'rgba(16,185,129,0.12)',
                 color: '#10b981',
@@ -73,7 +73,7 @@ export default function ProviderStatusRow({
       </div>
       {(license || attribution) && (
         <div
-          className="mt-1.5 pt-1.5 text-[10px] font-mono text-white/35 leading-relaxed"
+          className="mt-1.5 pt-1.5 text-[12px] font-mono text-white/35 leading-relaxed"
           style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
         >
           {license && (

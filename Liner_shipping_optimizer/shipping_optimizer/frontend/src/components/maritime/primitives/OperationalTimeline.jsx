@@ -82,7 +82,7 @@ export default function OperationalTimeline({
 
   if (!Array.isArray(events) || events.length === 0) {
     return (
-      <div className="text-[11px] text-white/35 font-mono">
+      <div className="text-[12px] text-white/35 font-mono">
         {emptyMessage}
       </div>
     );
@@ -133,7 +133,7 @@ export default function OperationalTimeline({
               style={{ cursor: hasDetails ? 'pointer' : 'default' }}
             >
               <span
-                className="font-mono uppercase tracking-widest text-[9px]"
+                className="font-mono uppercase tracking-widest text-[12px]"
                 style={{ color: lineColor, minWidth: 50 }}
               >
                 {SEVERITY_LABEL[sev]}
@@ -144,30 +144,30 @@ export default function OperationalTimeline({
                   {event.title || event.description || 'event'}
                 </div>
                 {event.description && event.title && (
-                  <div className="text-[10px] font-mono text-white/45 truncate">
+                  <div className="text-[12px] font-mono text-white/45 truncate">
                     {event.description}
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {event.source && (
-                  <span className="text-[9px] font-mono text-white/35 uppercase tracking-widest">
+                  <span className="text-[12px] font-mono text-white/35 uppercase tracking-widest">
                     {event.source}
                   </span>
                 )}
-                <span className="text-[10px] font-mono text-white/40 tabular-nums">
+                <span className="text-[12px] font-mono text-white/60 tabular-nums">
                   {fmtTimestamp(event.timestamp)}
                 </span>
               </div>
             </button>
             {open && hasDetails && (
               <div
-                className="px-3 pb-2 pt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] font-mono"
+                className="px-3 pb-2 pt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] font-mono"
                 style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
               >
                 {Object.entries(event.details).map(([k, v]) => (
                   <div key={k} className="contents">
-                    <div className="text-white/40">{k}</div>
+                    <div className="text-white/60">{k}</div>
                     <div
                       className="text-white/70 text-right truncate"
                       title={typeof v === 'string' ? v : undefined}
@@ -182,7 +182,7 @@ export default function OperationalTimeline({
         );
       })}
       {sorted.length > maxInitial && (
-        <li className="text-[10px] font-mono text-white/30 mt-1">
+        <li className="text-[12px] font-mono text-white/60 mt-1">
           showing {maxInitial} of {sorted.length} events (newest first)
         </li>
       )}

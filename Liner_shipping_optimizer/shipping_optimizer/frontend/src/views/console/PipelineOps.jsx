@@ -14,6 +14,7 @@ import { useOptimizationState } from '../../hooks/useOptimizationState.js';
 import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Pill, Kv, Stat, Empty, Tag, Dot, Provenance } from '../../components/console/p12.jsx';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
 const h = createElement;
 const F = Fragment;
 
@@ -38,7 +39,7 @@ function fmtUsd(v) {
 
 const STAGE_ORDER = [
   { id: 'inputs',                label: 'Inputs',                 desc: 'ports, demand, vessel registry loaded' },
-  { id: 'regional_decomposition',label: 'Regional decomposition', desc: '5-region split, region per port' },
+  { id: 'regional_decomposition',label: 'Regional decomposition', desc: 'ports split across regional agents' },
   { id: 'service_generation',    label: 'Service generation',     desc: 'candidates, vessel class + ports' },
   { id: 'ga',                    label: 'GA optimization',        desc: 'evolutionary selection per region' },
   { id: 'milp',                  label: 'MILP solve',             desc: 'deterministic final pass' },
@@ -51,13 +52,14 @@ function statusFor(stage, optState) {
   const sm = optState.global || {};
   const iters = optState.iterations || [];
   const regions = optState.regions || {};
+  const sel = selectedIterationOf(optState);
   switch (stage) {
     case 'inputs':                 return { tone: sm.weeklyDemand != null ? 'completed' : 'unavailable', note: sm.weeklyDemand != null ? ('demand ' + fmtNum(sm.weeklyDemand) + ' TEU/wk') : 'no demand on record' };
     case 'regional_decomposition': return { tone: Object.keys(regions).length > 0 ? 'completed' : 'unavailable', note: Object.keys(regions).length > 0 ? (Object.keys(regions).length + ' regions') : 'no regions' };
     case 'service_generation':     return { tone: (sm.selected_services || []).length > 0 ? 'completed' : 'unavailable', note: (sm.selected_services || []).length > 0 ? ((sm.selected_services || []).length + ' selected') : 'no selected services' };
     case 'ga':                     return { tone: iters.length > 0 ? 'completed' : 'unavailable', note: iters.length > 0 ? (iters.length + ' iterations') : 'no iteration audit' };
     case 'milp':                   return { tone: iters.length > 0 ? 'completed' : 'unavailable', note: iters.length > 0 ? ('final pass: iter ' + String(iters[iters.length - 1].iter).padStart(2, '0')) : 'no MILP' };
-    case 'iteration_selection':    return { tone: sm.iter != null ? 'selected' : 'unavailable', note: sm.iter != null ? ('selected iter ' + String(sm.iter).padStart(2, '0')) : 'no selection' };
+    case 'iteration_selection':    return { tone: sel != null ? 'selected' : 'unavailable', note: sel != null ? ('selected iter ' + String(sel).padStart(2, '0')) : 'no selection' };
     case 'validation':             return { tone: sm.coverage != null ? 'completed' : 'unavailable', note: sm.coverage != null ? ('coverage ' + Number(sm.coverage).toFixed(1) + '%') : 'no validation' };
     case 'final_decision':         return { tone: sm.weeklyProfit != null ? 'selected' : 'unavailable', note: sm.weeklyProfit != null ? (fmtUsd(sm.weeklyProfit) + '/wk') : 'no decision' };
     default: return { tone: 'unavailable', note: '' };
@@ -128,13 +130,13 @@ export default function PipelineOps(props) {
         h('div', { className: 'cx-rows' },
           stageRows.map(function(r, i) {
             return h('div', { key: r.id, className: 'cx-row', style: { padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 10 } },
-              h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, color: 'var(--cx-text-faint)', minWidth: 18 } }, String(i + 1).padStart(2, '0')),
+              h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', minWidth: 18 } }, String(i + 1).padStart(2, '0')),
               h('span', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 200 } },
                 h(Dot, { tone: r.tone }),
-                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.14em' } }, r.label)
+                h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.14em' } }, r.label)
               ),
-              h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, color: 'var(--cx-text-dim)', flex: 1 } }, r.desc),
-              h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, color: 'var(--cx-text)' } }, r.note),
+              h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', flex: 1 } }, r.desc),
+              h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)' } }, r.note),
               h('span', { style: { minWidth: 88, textAlign: 'right' } },
                 h(Tag, { variant: r.tone === 'selected' ? 'purple' : (r.tone === 'completed' ? 'good' : (r.tone === 'unavailable' ? 'warn' : 'accent')) }, r.tone)
               )

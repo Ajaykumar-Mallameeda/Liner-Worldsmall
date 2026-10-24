@@ -32,7 +32,7 @@ export default function RouteTable({ optimizationState }) {
   const pageList = filtered.slice(page * perPage, (page + 1) * perPage);
 
   const SortHeader = ({ k, label }) => (
-    <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider cursor-pointer select-none"
+    <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider cursor-pointer select-none"
       onClick={() => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('desc'); } }}
       aria-sort={sortKey === k ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
       {label} {sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : '▽'}
@@ -40,7 +40,7 @@ export default function RouteTable({ optimizationState }) {
   );
 
   if (!services.length) {
-    return <div className="text-white/40 font-mono italic text-center py-8">Route data not available</div>;
+    return <div className="text-white/60 font-mono italic text-center py-8">Route data not available</div>;
   }
 
   const regions = [...new Set(services.map(s => s.region).filter(Boolean))];
@@ -57,7 +57,7 @@ export default function RouteTable({ optimizationState }) {
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl p-3 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
             <div className="text-lg font-bold font-mono" style={{ color }}>{value}</div>
-            <div className="text-[10px] text-white/40 font-mono">{label}</div>
+            <div className="text-[12px] text-white/60 font-mono">{label}</div>
           </div>
         ))}
       </div>
@@ -80,14 +80,14 @@ export default function RouteTable({ optimizationState }) {
         <table className="w-full">
           <thead><tr style={{ background: "rgba(255,255,255,0.03)" }}>
             <SortHeader k="id" label="Route ID" />
-            <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Ports</th>
+            <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Ports</th>
             <SortHeader k="load" label="Load" />
             <SortHeader k="capacity" label="Capacity" />
-            <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Util</th>
+            <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Util</th>
             <SortHeader k="profit" label="Profit" />
             <SortHeader k="margin" label="Margin" />
-            <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Class</th>
-            <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Region</th>
+            <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Class</th>
+            <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Region</th>
           </tr></thead>
           <tbody>
             {pageList.map((s, i) => (
@@ -96,19 +96,19 @@ export default function RouteTable({ optimizationState }) {
                 className="transition-colors cursor-pointer"
                 style={{ borderTop: "1px solid rgba(255,255,255,0.04)", background: selectedService?.id === s.id ? 'rgba(0,212,255,0.06)' : undefined }}
                 tabIndex={0} role="row" aria-label={`Route ${s.id}`}>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-cyan-400">{s.id}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.ports?.join(' → ')}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.load)} TEU</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.capacity)} TEU</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (serviceLegLoadFactor(s) ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-cyan-400">{s.id}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/60">{s.ports?.join(' → ')}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/80">{fmtNum(s.load)} TEU</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/80">{fmtNum(s.capacity)} TEU</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono" style={{ color: (serviceLegLoadFactor(s) ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>
                   {fmtPct(serviceLegLoadFactor(s), 0)}
                 </td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-emerald-400">{fmtOr(s.weekly_profit, (v) => `$${(v / 1000).toFixed(0)}K`)}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (s.margin_pct ?? 0) > 50 ? '#10b981' : (s.margin_pct ?? 0) > 0 ? '#f59e0b' : '#ef4444' }}>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-emerald-400">{fmtOr(s.weekly_profit, (v) => `$${(v / 1000).toFixed(0)}K`)}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono" style={{ color: (s.margin_pct ?? 0) > 50 ? '#10b981' : (s.margin_pct ?? 0) > 0 ? '#f59e0b' : '#ef4444' }}>
                   {fmtOr(s.margin_pct, (v) => `${v.toFixed(1)}%`)}
                 </td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.vessel_class}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.region}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/60">{s.vessel_class}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/60">{s.region}</td>
               </tr>
             ))}
           </tbody>
@@ -116,13 +116,13 @@ export default function RouteTable({ optimizationState }) {
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-3 py-2 border-t border-white/5">
-          <span className="text-[10px] text-white/30 font-mono">{filtered.length} routes total</span>
+          <span className="text-[12px] text-white/60 font-mono">{filtered.length} routes total</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-              className="px-2 py-1 text-[10px] font-mono rounded disabled:opacity-30 bg-white/5 text-white/60" aria-label="Previous page">◀</button>
-            <span className="text-[10px] text-white/50 font-mono">{page + 1} / {totalPages || 1}</span>
+              className="px-2 py-1 text-[12px] font-mono rounded disabled:opacity-30 bg-white/5 text-white/60" aria-label="Previous page">◀</button>
+            <span className="text-[12px] text-white/50 font-mono">{page + 1} / {totalPages || 1}</span>
             <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-              className="px-2 py-1 text-[10px] font-mono rounded disabled:opacity-30 bg-white/5 text-white/60" aria-label="Next page">▶</button>
+              className="px-2 py-1 text-[12px] font-mono rounded disabled:opacity-30 bg-white/5 text-white/60" aria-label="Next page">▶</button>
           </div>
         </div>
       </div>
@@ -132,7 +132,7 @@ export default function RouteTable({ optimizationState }) {
         <div className="rounded-xl p-5" style={{ background: "rgba(0,212,255,0.04)", border: "1px solid rgba(0,212,255,0.2)" }}>
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs font-mono font-bold text-cyan-400">{selectedService.id}</div>
-            <button onClick={() => setSelectedService(null)} className="text-[10px] text-white/30 font-mono hover:text-white/60" aria-label="Close detail">✕</button>
+            <button onClick={() => setSelectedService(null)} className="text-[12px] text-white/60 font-mono hover:text-white/60" aria-label="Close detail">✕</button>
           </div>
           <div className="grid grid-cols-4 gap-3">
             {[
@@ -148,7 +148,7 @@ export default function RouteTable({ optimizationState }) {
               { label: 'Port Calls', value: `${selectedService.ports?.length || 0} ports`, color: '#ec4899' },
             ].map(({ label, value, color }) => (
               <div key={label} className="rounded-lg p-2" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
-                <div className="text-[9px] text-white/40 font-mono uppercase tracking-wider">{label}</div>
+                <div className="text-[12px] text-white/60 font-mono uppercase tracking-wider">{label}</div>
                 <div className="text-xs font-mono font-bold mt-0.5" style={{ color }}>{value}</div>
               </div>
             ))}

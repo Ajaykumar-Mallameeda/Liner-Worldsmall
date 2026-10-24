@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Shipping Optimizer API")
 
+# Read-only run catalog: current run + frozen 30-seed benchmark (backend/run_catalog.py)
+from backend.run_catalog import router as run_catalog_router
+app.include_router(run_catalog_router)
+
 # Mount static data directory
 repo_root_data = Path(__file__).resolve().parent.parent / "data"
 if repo_root_data.exists():
@@ -28,7 +32,7 @@ if repo_root_data.exists():
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -2743,7 +2747,8 @@ if __name__ == "__main__":
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
-        port=8000,
+        # API_PORT overrides 8000 (some Windows hosts reserve 7961-8060 for Hyper-V)
+        port=int(os.environ.get("API_PORT", "8000")),
         reload=True,
         log_level="info"
     )

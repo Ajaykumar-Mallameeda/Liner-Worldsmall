@@ -1,5 +1,7 @@
 
+import argparse
 import json
+import os
 import sys
 import time
 import re
@@ -15,6 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data.network_loader import NetworkLoader
 from src.agents.orchestrator_agent import OrchestratorAgent
 from src.optimization.data import Problem, Port, Service, Demand
+from src.data.dataset_registry import (DEFAULT_DATASET, DatasetError, DatasetNotAvailableError, DatasetSpec,
+                                       UnknownDatasetError, list_datasets, menu_choices, resolve_dataset,
+                                       sha256_file)
+from src.data.problem_json import ProblemJsonError, load_problem_json, problem_differences
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +100,31 @@ def warn_if(condition: bool, label: str):
     if condition:
         _WARN += 1
         print(f"  {warn(label)}")
+
+
+# Economic OUTCOME checks (profit > 0, services > 0 ...). WorldSmall is the reference case of the accepted C3
+# configuration: there they remain hard assertions, exactly as before. For every other dataset the outcome is a
+# RESULT to report, not a pass/fail criterion (a regional or synthetic network may genuinely be unprofitable);
+# integrity checks (ledger, units, feasibility, accounting) are never routed through here.
+_OUTCOME_STRICT = True
+_OUTCOME_NOTES: List[Dict[str, str]] = []
+
+
+def assert_outcome(condition: bool, label: str, detail: str = "") -> bool:
+    if _OUTCOME_STRICT:
+        return assert_true(condition, label, detail)
+    if condition:
+        print(f"  {ok(label)}  {C.DIM}[outcome]{C.RESET}")
+    else:
+        _OUTCOME_NOTES.append({"outcome_not_met": label, "detail": detail})
+        print(f"  {warn('OUTCOME NOT MET (reported, not asserted for this dataset): ' + label)}")
+        if detail:
+            print(f"      {C.DIM}{detail}{C.RESET}")
+    return bool(condition)
+
+
+def assert_outcome_gt(value, threshold, label: str) -> bool:
+    return assert_outcome(value > threshold, label, f"Expected > {threshold:,}  |  Got: {value:,}")
 
 
 def is_finite_number(v) -> bool:
@@ -190,6 +221,171 @@ def load_problem(filename: str, demand_scale: int = None) -> Problem:
 # is the documented FFE -> TEU factor performed inside NetworkLoader.
 
 WORLDSMALL_DIR = Path(__file__).parent.parent / "data" / "raw" / "WorldSmall"
+
+# ---------------------------------------------------------------------------
+# Dataset selection (WorldSmall | baltic | WAF | World-500 | World-1000)
+# ---------------------------------------------------------------------------
+# One selected dataset -> one explicit source package (data/raw/<dataset>) -> one validated canonical JSON
+# (data/datasets/<id>_json.json) -> one isolated execution -> one isolated output directory.
+# The selection changes WHICH inputs are loaded and where outputs are written; it never changes the solver,
+# the economics or the C3 flags. Nothing falls back to WorldSmall: an unknown name, a missing source file or a
+# missing / invalid JSON stops the run with a clear error.
+
+class DatasetIntegrityError(RuntimeError):
+    """The selected dataset's canonical JSON does not reproduce its own CSV package."""
+
+
+def interactive_session() -> bool:
+    """True only for a human at a terminal: never under pytest, CI, a pipe or a subprocess with redirected stdio."""
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("CI"):
+        return False
+    try:
+        return bool(sys.stdin and sys.stdin.isatty() and sys.stdout and sys.stdout.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
+def prompt_for_dataset(input_fn=input, out=print) -> DatasetSpec:
+    """Numbered menu; re-asks on an invalid answer, aborts on EOF (never defaults silently)."""
+    choices = menu_choices()
+    out("\nSelect the dataset to run:")
+    for num, spec in choices.items():
+        out(f"  {num}. {spec.label}   [{spec.raw_dir.name}]")
+    while True:
+        try:
+            answer = input_fn("Dataset number or name: ").strip()
+        except EOFError:
+            raise SystemExit("no dataset selected (input closed)")
+        if answer in choices:
+            return choices[answer]
+        try:
+            return resolve_dataset(answer)
+        except UnknownDatasetError as exc:
+            out(f"  {exc}")
+
+
+def select_dataset(dataset=None, *, interactive=None, input_fn=input, out=print) -> DatasetSpec:
+    """Resolve the dataset of this run.
+
+    ``dataset`` given            -> that dataset (``UnknownDatasetError`` if not registered)
+    nothing given, a terminal    -> numbered menu
+    nothing given, no terminal   -> WorldSmall (the pre-existing behaviour of this test)
+    """
+    if dataset is not None:
+        return resolve_dataset(dataset)
+    if interactive is None:
+        interactive = interactive_session()
+    return prompt_for_dataset(input_fn, out) if interactive else resolve_dataset(None)
+
+
+def output_locations(spec: DatasetSpec, output_dir=None) -> Dict[str, Any]:
+    """Where a run of ``spec`` writes. WorldSmall keeps its pre-existing artifact locations (unchanged default
+    behaviour); every other dataset writes only below ``reports/dataset_runs/<dataset>/``. An explicit
+    ``output_dir`` (campaign runs, one directory per dataset and seed) takes precedence for every dataset and
+    never touches the frontend copies or the repository root artifacts."""
+    root = Path(__file__).parent.parent
+    run_dir = Path(output_dir) if output_dir is not None else spec.output_dir
+    if output_dir is not None:
+        return {"dir": run_dir, "pipeline_output": run_dir / "pipeline_output.json",
+                "frontend_public": None, "frontend_dist": None,
+                "run_dir": run_dir, "run_metadata": run_dir / "run_metadata.json"}
+    if spec.legacy_outputs:
+        return {"dir": root, "pipeline_output": root / "pipeline_output.json",
+                "frontend_public": root / "frontend" / "public" / "pipeline_output.json",
+                "frontend_dist": root / "frontend" / "dist" / "pipeline_output.json",
+                "run_dir": run_dir, "run_metadata": run_dir / "run_metadata.json"}
+    return {"dir": run_dir, "pipeline_output": run_dir / "pipeline_output.json",
+            "frontend_public": None, "frontend_dist": None,
+            "run_dir": run_dir, "run_metadata": run_dir / "run_metadata.json"}
+
+
+def load_selected_problem(spec: DatasetSpec, source: str = "json"):
+    """(Problem, load_info) of the selected dataset.
+
+    ``source="json"`` (default): the dataset's canonical problem file is loaded from its explicit path and then
+    proven identical to the Problem its own CSV package yields through the production loader (every port,
+    demand, distance, canal flag, draft limit and fleet field, in order). ``source="csv"`` loads the package
+    directly (the original WorldSmall path). Either way only ``spec``'s own files are read.
+    """
+    t0 = time.perf_counter()
+    spec.require_inputs()
+    loader = NetworkLoader(dataset=spec)
+    net = loader.load_network()
+    fleet = loader.load_fleet()
+    csv_problem = Problem(ports=net["ports"], services=[], demands=net["demands"],
+                          distance_matrix=net["distance_matrix"], fleet=fleet)
+    info: Dict[str, Any] = {"source": source, "csv_load_sec": round(time.perf_counter() - t0, 2)}
+    if source == "csv":
+        problem = csv_problem
+    elif source == "json":
+        t1 = time.perf_counter()
+        problem, meta = load_problem_json(spec)
+        diffs = problem_differences(csv_problem, problem)
+        if diffs:
+            raise DatasetIntegrityError(
+                f"{spec.key}: canonical JSON {spec.json_path} does not reproduce its CSV package: {diffs}")
+        info.update({"json": meta, "json_load_and_equivalence_sec": round(time.perf_counter() - t1, 2)})
+    else:
+        raise ValueError(f"source must be 'json' or 'csv', got {source!r}")
+    problem.dataset_key = spec.key          # identity travels with the problem (read by the independent oracle)
+    info["load_sec"] = round(time.perf_counter() - t0, 2)
+    info["counts"] = {"ports": len(problem.ports), "demand_records": len(problem.demands),
+                      "directed_distance_pairs": sum(len(r) for r in problem.distance_matrix.values()),
+                      "fleet_classes": len(problem.fleet.classes), "vessels": problem.fleet.total_vessels}
+    return problem, info
+
+
+def print_dataset_header(spec: DatasetSpec) -> Dict[str, Any]:
+    """Selected dataset, resolved input paths and SHA-256 of every input and of the JSON, at run start."""
+    d = spec.describe(with_hashes=True)
+    print(ok(f"Selected dataset: {spec.key}  ({spec.label}; {spec.kind})"))
+    print(ok(f"Source package : {spec.raw_dir}"))
+    for role, rec in d["inputs"].items():
+        print(f"  {C.DIM}{role:<11}{C.RESET}{rec['path']}  sha256={rec.get('sha256', 'MISSING')[:16]}")
+    print(ok(f"Canonical JSON : {d['json']['path']}  sha256={d['json'].get('sha256', 'MISSING')[:16]}"))
+    print(ok(f"Output dir     : {output_locations(spec)['dir']}"))
+    return d
+
+
+def section_dataset_data_contract(problem: "Problem", spec: DatasetSpec) -> Dict[str, Any]:
+    """Data contract of a non-WorldSmall dataset: what was loaded must equal the counts and totals recorded in the
+    dataset's manifest at build time (the WorldSmall constants below are not applicable)."""
+    print_section_header(f"W . {spec.key.upper()} DATA CONTRACT (from data/datasets manifest)")
+    man_path = spec.manifest_path
+    assert_true(man_path.is_file(), "dataset manifest present", f"{man_path}")
+    man = json.loads(man_path.read_text(encoding="utf-8"))
+    cnt, tot = man["counts"], man["totals"]
+    fleet, demands = problem.fleet, problem.demands
+    pairs = sum(len(v) for v in problem.distance_matrix.values())
+    port_ids = {p.id for p in problem.ports}
+    assert_true(man["dataset"] == spec.key, "manifest declares this dataset", f"{man['dataset']!r}")
+    assert_true(len(problem.ports) == cnt["ports"], f"Ports == {cnt['ports']} (manifest)", f"Got {len(problem.ports)}")
+    assert_true(len(demands) == cnt["demand_records"], f"Demand rows == {cnt['demand_records']} (manifest)",
+                f"Got {len(demands)}")
+    assert_true(not [d for d in demands if d.origin not in port_ids or d.destination not in port_ids],
+                "No invalid port references in demands")
+    total_teu = sum(d.weekly_teu for d in demands)
+    assert_true(abs(total_teu - tot["weekly_demand_teu"]) <= 1e-6 * max(1.0, total_teu),
+                "Weekly demand TEU == manifest total", f"{total_teu:,.1f} vs {tot['weekly_demand_teu']:,.1f}")
+    assert_true(fleet is not None and fleet.total_vessels == cnt["vessels_total"],
+                f"Fleet total == {cnt['vessels_total']} vessels (manifest)",
+                f"Got {None if fleet is None else fleet.total_vessels}")
+    for cls_name, qty in cnt["vessels_by_class"].items():
+        assert_true(fleet.quantity_of(cls_name) == qty, f"Fleet[{cls_name}] == {qty}", f"Got {fleet.quantity_of(cls_name)}")
+    assert_true(pairs == cnt["directed_distance_pairs"], f"Directed distance pairs == {cnt['directed_distance_pairs']}",
+                f"Got {pairs}")
+    n = len(port_ids)
+    assert_true(pairs == n * (n - 1), "Every directed port pair has a distance (no fallback)", f"{pairs} of {n * (n - 1)}")
+    assert_true(all(v > 0 for r in problem.distance_matrix.values() for v in r.values()), "All distance values are positive")
+    assert_true(len(problem.services) == 0, "Problem starts with services=[] (generated at runtime)")
+    print_kv("Ports / demand rows", f"{len(problem.ports)} / {len(demands)}")
+    print_kv("Weekly demand", f"{total_teu:,.0f} TEU  ({total_teu / 2:,.0f} FFE)")
+    print_kv("Fleet", f"{fleet.total_vessels} vessels  {cnt['vessels_by_class']}")
+    print_kv("Directed pairs", f"{pairs:,}")
+    print(f"\n  {sep()}")
+    return {"num_ports": len(problem.ports), "num_lanes": len(demands), "total_demand": total_teu,
+            "raw_ffe": total_teu / 2.0, "teu_ratio": 2.0, "fleet_total": fleet.total_vessels, "distance_pairs": pairs}
+
 
 # Authoritative WorldSmall contract (source-verified in P4).
 WS_EXPECTED_PORTS          = 47
@@ -774,7 +970,7 @@ def section_regional_results(result: Dict, stats: Dict):
         warn_if(profit <= 0,
                 f"[{region}] Weekly profit ${profit:,.0f} is non-positive "
                 f"(region-level loss; network profitability asserted separately)")
-        assert_gt(svcs,   0, f"[{region}] Services selected > 0")
+        assert_outcome_gt(svcs, 0, f"[{region}] Services selected > 0")
         assert_range(cov, 0, 100, f"[{region}] Coverage in [0, 100]%")
         # Tolerance must be based on |profit| -- when profit is negative the
         # original `profit * 0.01 + 1` becomes negative, making the assertion
@@ -914,8 +1110,8 @@ def section_global_metrics(result: Dict, stats: Dict):
     print(f"\n  {sep()}")
 
     # Assertions
-    assert_gt(weekly_profit,  0,   "Global weekly profit > 0")
-    assert_gt(total_services, 0,   "Total services deployed > 0")
+    assert_outcome_gt(weekly_profit,  0,   "Global weekly profit > 0")
+    assert_outcome_gt(total_services, 0,   "Total services deployed > 0")
     assert_range(coverage,    0, 100, "Global coverage in [0, 100]%")
     # Use |profit| for tolerance (same fix as regional assertions)
     assert_true(
@@ -927,8 +1123,8 @@ def section_global_metrics(result: Dict, stats: Dict):
     # (would require >50% margin). The correct network-health test is positive
     # profit AND positive margin. We already assert profit > 0 above; here we
     # assert margin is positive (i.e. revenue > cost, which means profit > 0).
-    assert_gt(profit_margin, 0,
-              "Network is profitable (profit margin > 0)")
+    assert_outcome_gt(profit_margin, 0,
+                      "Network is profitable (profit margin > 0)")
 
     warn_if(coverage < 15,       f"Global coverage {coverage:.1f}% < 15% -- very low")
     warn_if(profit_margin < 20,  f"Profit margin {profit_margin:.1f}% < 20% -- low")
@@ -975,9 +1171,9 @@ def section_economic_kpi_summary(result: Dict, stats: Dict, economic_stats: Dict
     print(f"\n  {sep()}")
 
     # Assertions
-    assert_gt(weekly_profit, 0, "Weekly profit > 0")
-    assert_gt(annual_profit, 0, "Annual profit > 0")
-    assert_gt(profit_margin, 0, "Profit margin > 0")
+    assert_outcome_gt(weekly_profit, 0, "Weekly profit > 0")
+    assert_outcome_gt(annual_profit, 0, "Annual profit > 0")
+    assert_outcome_gt(profit_margin, 0, "Profit margin > 0")
 
     return {
         "weekly_profit": weekly_profit,
@@ -1578,13 +1774,13 @@ def section_global_economic_summary(result: Dict, stats: Dict):
     print(f"\n  {sep()}")
 
     # Assertions: every KPI must be visible (no None, no negative)
-    assert_true(revenue > 0,  "Revenue is visible and > 0")
+    assert_outcome(revenue > 0,  "Revenue is visible and > 0")
     assert_true(fuel >= 0,    "Fuel cost is visible (>= 0)")
     assert_true(port_cost >= 0, "Port cost is visible (>= 0)")
     assert_true(transship >= 0, "Transshipment cost is visible (>= 0)")
     assert_true(operating >= 0, "Vessel cost is visible (>= 0)")
-    assert_true(total_cost > 0, "Total cost is visible and > 0")
-    assert_gt(profit, 0, "Weekly profit > 0")
+    assert_outcome(total_cost > 0, "Total cost is visible and > 0")
+    assert_outcome_gt(profit, 0, "Weekly profit > 0")
     # revenue == profit + total_cost (since revenue = profit + cost by
     # definition in aggregate_results)
     assert_true(
@@ -2115,11 +2311,13 @@ def _num0(v) -> float:
 _RAW_CANAL_CACHE: Dict[str, Any] = {}
 
 
-def _raw_canal_and_leg_draft():
-    """(is_panama, is_suez) and leg draft limit per directed pair, read straight from the raw dist_dense.csv."""
-    if "v" not in _RAW_CANAL_CACHE:
+def _raw_canal_and_leg_draft(dataset=None):
+    """(is_panama, is_suez) and leg draft limit per directed pair, read straight from the raw dist_dense.csv of
+    the dataset being run (``None`` = WorldSmall, the legacy callers); cached per dataset, never across datasets."""
+    spec_ = resolve_dataset(dataset)
+    if spec_.key not in _RAW_CANAL_CACHE:
         import csv as _csv
-        path = Path(__file__).parent.parent / "data" / "raw" / "WorldSmall" / "dist_dense.csv"
+        path = spec_.input_paths()["distance"]
         flags, drafts = {}, {}
         with open(path, newline="", encoding="utf-8-sig") as fh:
             for r in _csv.DictReader(fh, delimiter="\t"):
@@ -2129,8 +2327,8 @@ def _raw_canal_and_leg_draft():
                     flags[k] = (pan, sue)
                 if (r.get("Draft") or "").strip():
                     drafts[k] = float(r["Draft"])
-        _RAW_CANAL_CACHE["v"] = (flags, drafts)
-    return _RAW_CANAL_CACHE["v"]
+        _RAW_CANAL_CACHE[spec_.key] = (flags, drafts)
+    return _RAW_CANAL_CACHE[spec_.key]
 
 
 def _independent_fuel_price(fp: Dict, rotation) -> Tuple[float, str, Any]:
@@ -2239,7 +2437,7 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
         port_fixed += f * sum(_num0(getattr(ports.get(p), "port_call_cost", 0.0)) for p in rot)
         # canal fees and draft feasibility, recomputed from the RAW dist_dense.csv (not from the loader's flags):
         # fee = traversals of the closed rotation x class fee, once per weekly departure; draft: class <= port / leg
-        raw_flags, raw_draft = _raw_canal_and_leg_draft()
+        raw_flags, raw_draft = _raw_canal_and_leg_draft(getattr(problem, "dataset_key", None))
         cdraft = float(getattr(cls, "draft", 0.0) or 0.0)
         low_ports = [p for p in rot if 0 < _num0(getattr(ports.get(p), "draft", 0.0)) < cdraft - 1e-9]
         if cdraft > 0 and low_ports:
@@ -2280,6 +2478,7 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
     revenue = handling = transship = port_var = 0.0
     served: Dict[Any, float] = {}
     leg_load: Dict[Any, float] = {}
+    flow_transit: List[Tuple[float, float, int]] = []      # (transit days, TEU, segments) of every routed flow
     for fl in plan["flows"]:
         od = (fl["origin"], fl["destination"])
         teu = float(fl["teu"])
@@ -2337,6 +2536,7 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
             transship += teu * _num0(getattr(h, "transshipment_cost", 0.0))
             pass
         served[od] = served.get(od, 0.0) + teu
+        flow_transit.append((transit, teu, len(segs)))
 
     for (sid, leg), load in leg_load.items():
         sv = out["services"][sid]
@@ -2357,7 +2557,7 @@ def _recompute_network(plan: Dict, problem: "Problem", assumptions: Dict,
         "total_operating_cost": cost, "operating_profit": revenue - cost,
         "total_demand": total_demand, "served": served_teu,
         "coverage_pct": served_teu / total_demand * 100.0 if total_demand else 0.0,
-        "leg_load": leg_load, "max_transfers": max_transfers,
+        "leg_load": leg_load, "max_transfers": max_transfers, "flow_transit": flow_transit,
     })
     return out
 
@@ -2390,8 +2590,8 @@ def section_network_ledger_validation(result: Dict, problem: "Problem") -> Dict[
 
     plan = led.get("plan") or {}
     assumptions = led.get("assumptions") or {}
-    assert_true(bool(plan.get("services")) and "flows" in plan,
-                "network_ledger carries the plan (services + flows) needed for recomputation")
+    assert_outcome(bool(plan.get("services")) and "flows" in plan,
+                   "network_ledger carries the plan (services + flows) needed for recomputation")
     needed = ("port_stay_hours", "transshipment_min_hours", "transfer_wait_days", "bunker_price_usd_per_t")
     assert_true(all(k in assumptions for k in needed),
                 "time/price assumptions are stated in the output", f"keys={sorted(assumptions)}")
@@ -2639,6 +2839,44 @@ def section_network_ledger_validation(result: Dict, problem: "Problem") -> Dict[
         assert_true(_close(tot_un, led["demand_teu_per_week"]["unserved"], abs_tol=1.0),
                     "unserved TEU by reason adds up to the unserved demand",
                     f"{tot_un:,.1f} vs {led['demand_teu_per_week']['unserved']:,.1f}")
+        # extended metrics (contribution margin, TEU vessel utilisation, transit time, transshipment): recomputed here
+        # from the raw flows and ledger charges, sharing nothing with src/network
+        ext = sr.get("extended_metrics") or {}
+        assert_true(bool(ext), "strategy report carries the extended metrics block", f"{sorted(sr)}")
+        if ext:
+            cmb, trb, tsb, utb = (ext[k] for k in ("contribution_margin", "transit_time_days", "transshipment",
+                                                   "vessel_utilisation_teu"))
+            rc_var = rc["handling_cost"] + rc["transshipment_cost"] + rc["port_variable_cost"]
+            assert_true(_close(cmb["contribution_margin_usd"], rc["revenue"] - rc_var, abs_tol=5.0),
+                        "contribution margin == recomputed revenue - handling - transshipment - port variable",
+                        f"{cmb['contribution_margin_usd']:,.1f} vs {rc['revenue'] - rc_var:,.1f}")
+            assert_true(rc["served"] <= 0 or _close(cmb["contribution_margin_per_teu_usd"] * rc["served"],
+                                                    rc["revenue"] - rc_var, abs_tol=5.0),
+                        "contribution margin per TEU x served TEU == contribution margin",
+                        f"{cmb['contribution_margin_per_teu_usd']}")
+            assert_true(_close(cmb["contribution_margin_usd"] - svc_cost, w["operating_profit"], abs_tol=5.0),
+                        "contribution margin - fixed service cost == operating profit",
+                        f"{cmb['contribution_margin_usd'] - svc_cost:,.1f} vs {w['operating_profit']:,.1f}")
+            ft = rc["flow_transit"]
+            trans_rc = sum(t_ for _d, t_, n_ in ft if n_ > 1)
+            assert_true(_close(tsb["teu"], trans_rc, abs_tol=0.5),
+                        "TEU routed through transshipments == recomputed TEU of flows with a transfer",
+                        f"{tsb['teu']:,.1f} vs {trans_rc:,.1f}")
+            assert_true(_close(tsb["transfer_moves_teu"], sum(t_ * (n_ - 1) for _d, t_, n_ in ft), abs_tol=0.5),
+                        "transfer moves == sum of TEU x transfers of the recomputed flows")
+            if ft:
+                tw = sum(t_ for _d, t_, _n in ft)
+                assert_true(_close(trb["min"], min(d_ for d_, _t, _n in ft), abs_tol=1e-6)
+                            and _close(trb["max"], max(d_ for d_, _t, _n in ft), abs_tol=1e-6)
+                            and _close(trb["mean"], sum(d_ * t_ for d_, t_, _n in ft) / tw, abs_tol=1e-6),
+                            "transit time min / max / TEU-weighted mean == recomputed from the raw flows",
+                            f"{trb['min']}, {trb['mean']}, {trb['max']}")
+            if utb["services"]:
+                eps_ = 1e-9
+                assert_true(-eps_ <= utb["min"] <= utb["average"] + eps_ and utb["average"] <= utb["max"] + eps_
+                            and utb["max"] <= 1.0 + eps_,
+                            "TEU vessel utilisation: 0 <= min <= average <= max <= 1",
+                            f"{utb['min']}, {utb['average']}, {utb['max']}")
         print_kv("Served TEU by strategy",
                  ", ".join(f"{k}={v['served_teu']:,.0f}" for k, v in bs.items()))
         print_kv("Unserved by reason (TEU)",
@@ -2707,6 +2945,66 @@ def section_network_ledger_validation(result: Dict, problem: "Problem") -> Dict[
         print_kv("Class variants", f"{aug['added']} candidate(s) added; {aug.get('variants_positive_standalone')} "
                  f"with positive stand-alone profit of {aug.get('variants_feasible')} feasible")
     return {"verified": True, "recomputed": rc}
+
+
+def section_c3_configuration_and_reference(result: Dict, spec: DatasetSpec = None) -> None:
+    """N2. The plan reports the C3 flags as applied, and its headline numbers are shown next to the frozen C3
+    reference (20 seeds).  One end-to-end run is ONE seed: it is expected to lie inside the 20-seed range
+    but not to equal the mean, so the comparison is reported (a warning outside the range), never asserted."""
+    print_section_header("N2 . C3 CONFIGURATION AND FROZEN-REFERENCE COMPARISON")
+    led = result.get("network_ledger") or {}
+    opt = led.get("optimality") or {}
+    form = opt.get("formulation") or {}
+    lsr = opt.get("local_search") or {}
+    trunk = led.get("trunk_candidates") or {}
+    assert_true(all(_C3_env == v for _C3_env, v in ((os.environ.get(k), v) for k, v in C3_CONFIGURATION.items())),
+                "the C3 flags are in force for this run", f"{ {k: os.environ.get(k) for k in C3_CONFIGURATION} }")
+    assert_true(bool(form.get("vub_requested")) and bool(form.get("vub_applied")),
+                "C3: the vessel-upper-bound inequality was requested and added to the model that was solved", f"{form!r}")
+    assert_true(bool(lsr.get("enabled")), "C3: the local search was enabled", f"{lsr!r}")
+    assert_true(trunk.get("requested_per_class") == int(C3_CONFIGURATION["LINER_TRUNK_CANDIDATES"])
+                and trunk.get("max_ports") == int(C3_CONFIGURATION["LINER_TRUNK_MAX_PORTS"])
+                and trunk.get("diverse") is True and "pool_unique" in trunk,
+                "C3: the trunk-candidate generator ran with 12 per class, <= 10 ports, diverse selection",
+                f"requested={trunk.get('requested_per_class')} max_ports={trunk.get('max_ports')} "
+                f"diverse={trunk.get('diverse')} added={trunk.get('added')}")
+    assert_true(float(os.environ.get("GLOBAL_STAGE_TIME_LIMIT_SEC", "120") or 120.0) <= 120.0,
+                "the 120 s global-stage budget is preserved")
+    assert_true(str(opt.get("solver_backend", "")).lower() == "cbc",
+                "the solver backend is still PuLP/CBC", f"{opt.get('solver_backend')!r}")
+    sc = form.get("support_cap")
+    if sc:
+        print_kv("Support cap", f"{sc}")
+    w = led.get("weekly_usd") or {}
+    d = led.get("demand_teu_per_week") or {}
+    fb = led.get("fleet_by_class") or {}
+    used = sum(int(v.get("used", 0)) for v in fb.values())
+    owned = sum(int(v.get("available", 0)) for v in fb.values())
+    run = {"profit_M": float(w.get("operating_profit", 0.0)) / 1e6, "revenue_M": float(w.get("revenue", 0.0)) / 1e6,
+           "coverage_pct": float(d.get("coverage_pct", 0.0)), "services": (led.get("services") or {}).get("operated"),
+           "assigned": used, "owned": owned}
+    print_kv("This run: profit", f"{run['profit_M']:.2f} M USD/week   (revenue {run['revenue_M']:.2f} M)")
+    print_kv("This run: coverage", f"{run['coverage_pct']:.1f} %   services {run['services']}   vessels assigned {used}/{owned}")
+    print_kv("MILP status", f"{led.get('status')}  ({opt.get('solve_conclusion')})")
+    if spec is not None and spec.key != DEFAULT_DATASET:
+        print(f"  {C.DIM}The frozen C3 reference (20 seeds) describes WorldSmall only; it is not a threshold or "
+              f"a comparison for {spec.key}. This run's numbers are reported as results.{C.RESET}")
+        return
+    if not C3_FREEZE_FILE.exists():
+        print(f"  {warn('frozen C3 reference file not found: ' + str(C3_FREEZE_FILE))}")
+        return
+    ref = json.loads(C3_FREEZE_FILE.read_text(encoding="utf-8"))
+    sm = ref["summary"]
+    pr, cv, sv, va = sm["profit_usd_wk"], sm["coverage_pct"], sm["services"], sm["vessels_assigned"]
+    print(f"\n  {C.BOLD}Frozen C3 reference ({pr['n']} seeds, all feasible, ledger-verified){C.RESET}")
+    print_kv("Profit mean (median)", f"{pr['mean'] / 1e6:.2f} M ({pr['median'] / 1e6:.2f})   range {pr['min'] / 1e6:.1f} .. {pr['max'] / 1e6:.1f} M USD/week")
+    print_kv("Coverage mean", f"{cv['mean']:.1f} %   range {cv['min']:.1f} .. {cv['max']:.1f}")
+    print_kv("Services mean", f"{sv['mean']:.1f}   range {sv['min']:.0f} .. {sv['max']:.0f}")
+    print_kv("Vessels assigned mean", f"{va['mean']:.1f} of 263   range {va['min']:.0f} .. {va['max']:.0f}")
+    warn_if(not (pr["min"] / 1e6 <= run["profit_M"] <= pr["max"] / 1e6),
+            f"this run's profit {run['profit_M']:.2f} M lies inside the frozen C3 20-seed range "
+            f"{pr['min'] / 1e6:.1f}..{pr['max'] / 1e6:.1f} M")
+    print_kv("This run vs the frozen mean", f"{run['profit_M'] - pr['mean'] / 1e6:+.2f} M")
 
 
 def section_decision_layer_economics(result: Dict, ledger_check: Dict[str, Any]) -> None:
@@ -2883,16 +3181,78 @@ def section_candidate_pool_and_classes(result: Dict, problem: "Problem", ledger_
 
 
 
-def test_orchestrator():
-    global _PASS, _FAIL, _WARN
+# -- C3: the working optimiser configuration (class-mismatch / continuation campaigns) ------------------------
+# C3 = MILP vessel-upper-bound inequality + local search + 12 trunk candidates per under-subscribed class
+# (diverse, <= 10 ports) + the integer problem keeps at most 105 of the LP-support services.  Solver stays
+# PuLP/CBC (single thread) with the 120 s global-stage budget; none of these flags changes either.
+# Frozen reference: reports/continuation_20261015/ws1_provenance/C3_baseline_freeze.json (20 seeds).
+C3_CONFIGURATION = {
+    "LINER_MILP_VUB": "1",
+    "LINER_LOCAL_SEARCH": "1",
+    "LINER_TRUNK_CANDIDATES": "12",
+    "LINER_TRUNK_DIVERSE": "1",
+    "LINER_TRUNK_MAX_PORTS": "10",
+    "LINER_MILP_SUPPORT_CAP": "105",
+}
+C3_FREEZE_FILE = (Path(__file__).parent.parent / "reports" / "continuation_20261015" / "ws1_provenance"
+                  / "C3_baseline_freeze.json")
+
+
+def apply_c3_configuration() -> Dict[str, str]:
+    """Force the C3 flags into the process environment (a stray shell value must not change the run)."""
+    for k, v in C3_CONFIGURATION.items():
+        os.environ[k] = v
+    return dict(C3_CONFIGURATION)
+
+
+_MODEL_RECORDS: List[Dict[str, Any]] = []
+
+
+def run_orchestrator_test(spec: DatasetSpec = None, source: str = "json", output_dir=None):
+    """Run the pipeline test; records the size and timing of every global MILP solve of the run.
+
+    The recorder only observes: it wraps ``solve_network`` (as imported by ``src.network.plan``), copies the size
+    fields of the returned solution and returns that same object. Nothing about the solve changes.
+    """
+    import src.network.plan as _plan
+    original = _plan.solve_network
+    _MODEL_RECORDS.clear()
+
+    def recording(*args, **kwargs):
+        sol = original(*args, **kwargs)
+        _MODEL_RECORDS.append({f: getattr(sol, f, None) for f in (
+            "status", "solver_status", "n_variables", "n_constraints", "runtime_sec", "integer_phase_sec",
+            "integer_phase_budget_sec", "relaxation_bound", "mip_gap")})
+        return sol
+
+    _plan.solve_network = recording
+    try:
+        return _run_orchestrator_test_impl(spec, source, output_dir)
+    finally:
+        _plan.solve_network = original
+
+
+def _run_orchestrator_test_impl(spec: DatasetSpec = None, source: str = "json", output_dir=None):
+    """Run the full pipeline test on ONE explicitly selected dataset (``None`` = WorldSmall).
+
+    All state of the run is local to this call: the assertion counters and the outcome policy are reset here, the
+    dataset travels with the Problem, the outputs go to the dataset's own directory.
+    """
+    global _PASS, _FAIL, _WARN, _OUTCOME_STRICT
+    spec = resolve_dataset(spec)
+    _PASS = _FAIL = _WARN = 0
+    _OUTCOME_NOTES.clear()
+    _OUTCOME_STRICT = (spec.key == DEFAULT_DATASET)      # reference case: outcome checks stay hard assertions
 
     print(f"\n{C.BOLD}{'=' * 70}{C.RESET}")
-    print(f"{C.BOLD}  LINER SHIPPING OPTIMIZER - WORLDSMALL FULL PIPELINE TEST {C.RESET}")
+    print(f"{C.BOLD}  LINER SHIPPING OPTIMIZER - {spec.key.upper()} FULL PIPELINE TEST {C.RESET}")
     print(f"{C.BOLD}{'=' * 70}{C.RESET}")
 
     # -- Initialise ---------------------------------------------------------
     print(hdr("0 . INITIALISATION"))
     print(f"  {sep()}")
+    c3_flags = apply_c3_configuration()
+    print(ok("C3 configuration applied: " + " ".join(f"{k}={v}" for k, v in c3_flags.items())))
     orchestrator = OrchestratorAgent()
     print(ok("OrchestratorAgent created"))
     print(ok(f"Regional agents: {[a.name for a in orchestrator.regional_agents]}"))
@@ -2903,13 +3263,14 @@ def test_orchestrator():
     # carries the source-derived Fleet (263 vessels). The legacy JSON path is
     # deliberately not used: it carries no fleet, which would silently fall
     # back to the legacy fleet_size=300.
-    print(ok(f"WorldSmall dir: {WORLDSMALL_DIR}"))
-    problem = load_worldsmall_problem()
-    print(ok("WorldSmall loaded via production CSV loaders "
-             "(ports, demands, distances, fleet)"))
+    dataset_header = print_dataset_header(spec)
+    problem, load_info = load_selected_problem(spec, source)
+    print(ok(f"{spec.key} loaded from {'its canonical JSON (proven identical to its CSV package)' if source == 'json' else 'its CSV package'} "
+             f"in {load_info['load_sec']} s: {load_info['counts']}"))
 
-    # -- WorldSmall data contract (ports/demands/scaling/fleet/distances) ----
-    ws_contract = section_worldsmall_data_contract(problem)
+    # -- data contract (ports/demands/scaling/fleet/distances) ----
+    ws_contract = (section_worldsmall_data_contract(problem) if spec.key == DEFAULT_DATASET
+                   else section_dataset_data_contract(problem, spec))
 
     # -- Economic data sections -------------------------------------------------
     economic_stats = section_economic_data_loading(problem)
@@ -2955,6 +3316,8 @@ def test_orchestrator():
 
     # -- N: independent recomputation of the network plan from raw data ---------
     ledger_check = section_network_ledger_validation(result, problem)
+    # -- N2: the plan was produced under C3 and is compared with the frozen C3 reference ------------------
+    section_c3_configuration_and_reference(result, spec)
     # -- O: decision layer reports the same economics as the ledger (F-15) --------
     section_decision_layer_economics(result, ledger_check)
     # -- P: candidate pool composition and class use (Tasks 9 / 10) ----------------
@@ -2987,7 +3350,7 @@ def test_orchestrator():
     section_duplicate_id_audit(result)
 
     # -- Phase T0 -- System Truth Validation & Certification ----------------
-    t0_results = run_truth_certification(result, problem)
+    t0_results = run_truth_certification(result, problem, out_dir=output_locations(spec, output_dir)['dir'])
 
     # -- Final summary -------------------------------------------------------
     print_final_summary(stats, result["summary_metrics"], regional_results, result)
@@ -3024,28 +3387,57 @@ def test_orchestrator():
         "score": round(pct, 1)
     }
 
-    output_dir = Path(__file__).parent.parent
-    output_file = output_dir / "pipeline_output.json"
-    public_file = output_dir / "frontend" / "public" / "pipeline_output.json"
-    dist_file = output_dir / "frontend" / "dist" / "pipeline_output.json"
+    # -- dataset identity of THIS run travels with every output -----------------------------------------------
+    outs = output_locations(spec, output_dir)
+    output_file, public_file, dist_file = outs["pipeline_output"], outs["frontend_public"], outs["frontend_dist"]
+    dataset_run = {
+        "dataset": spec.key, "label": spec.label, "kind": spec.kind, "problem_source": source,
+        "input_files": dataset_header["inputs"], "problem_json": dataset_header["json"],
+        "json_schema_version": (load_info.get("json") or {}).get("schema_version"),
+        "json_build_id": (load_info.get("json") or {}).get("build_id"),
+        "counts": load_info["counts"],
+        "output_dir": str(outs["dir"]), "c3_flags": c3_flags,
+        "solver": {"backend": os.environ.get("NETWORK_MILP_BACKEND") or "cbc",
+                   "global_stage_time_limit_sec": os.environ.get("GLOBAL_STAGE_TIME_LIMIT_SEC", "120"),
+                   "pulp": __import__("pulp").__version__, "cbc": "2.10.3 (bundled with PuLP)",
+                   "python": sys.version.split()[0]},
+        "seed": {"LINER_SEED": os.environ.get("LINER_SEED"), "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED")},
+        "timing_sec": {"problem_load": load_info["load_sec"], "pipeline": round(elapsed, 1)},
+        "outcome_policy": "reference case: outcome checks asserted" if _OUTCOME_STRICT
+                          else "outcomes reported, not asserted (integrity checks asserted)",
+        "outcome_notes": list(_OUTCOME_NOTES),
+        "global_milp_calls": list(_MODEL_RECORDS),
+    }
+    # The frozen top-level key set of pipeline_output.json is not extended: the dataset identity of the run lives in
+    # the runner-added ``test_scorecard`` block (already part of the sanctioned contract), under ``dataset_run``.
+    result["test_scorecard"]["dataset_run"] = dataset_run
 
     save_ok = True
     try:
         # serialise FIRST: a result that cannot be serialised must never leave a truncated artifact behind
         # (decision phase: the former streaming json.dump left a partial file when it raised mid-write)
         _payload = json.dumps(result, indent=2)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             f.write(_payload)
         try:
-            if public_file.parent.exists():
+            if public_file is not None and public_file.parent.exists():
                 with open(public_file, 'w') as f:
                     f.write(_payload)
-            if dist_file.parent.exists():
+            if dist_file is not None and dist_file.parent.exists():
                 with open(dist_file, 'w') as f:
                     f.write(_payload)
         except Exception:
             pass
         save_msg = f"[SUCCESS] PIPELINE OUTPUT SAVED TO: {output_file}"
+        try:   # run record next to the dataset's outputs (also written for WorldSmall, below reports/dataset_runs)
+            outs["run_dir"].mkdir(parents=True, exist_ok=True)
+            with open(outs["run_metadata"], 'w') as f:
+                json.dump({"dataset_run": dataset_run, "test_scorecard": result["test_scorecard"],
+                           "status": result.get("status"), "pipeline_output": str(output_file),
+                           "pipeline_output_sha256": sha256_file(output_file)}, f, indent=2)
+        except Exception as meta_exc:
+            print(f"  {warn('run_metadata.json not written: ' + str(meta_exc))}")
     except Exception as e:
         save_ok = False
         save_msg = f"[ERROR] FAILED TO SAVE OUTPUT: {e}"
@@ -3078,7 +3470,7 @@ def test_orchestrator():
     print(f"{'='*70}")
 
     # Generate P2 Diagnostic Report
-    generate_p2_diagnostic_report(result, stats, {**economic_stats, **revenue_stats})
+    generate_p2_diagnostic_report(result, stats, {**economic_stats, **revenue_stats}, out_dir=outs['dir'])
 
 # New objective function summary section
 def section_objective_function_summary(result: Dict, problem: Problem):
@@ -3105,10 +3497,11 @@ def section_objective_function_summary(result: Dict, problem: Problem):
     print(f"  {sep()}")
 
 # Generate P2 Diagnostic Report
-def generate_p2_diagnostic_report(result: Dict, stats: Dict, economic_stats: Dict):
-    """Generate the P2 diagnostic validation report"""
+def generate_p2_diagnostic_report(result: Dict, stats: Dict, economic_stats: Dict, out_dir=None):
+    """Generate the P2 diagnostic validation report (``out_dir``: the dataset's output directory)"""
 
-    output_dir = Path(__file__).parent.parent
+    output_dir = Path(out_dir) if out_dir is not None else Path(__file__).parent.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
     report_file = output_dir / "P2_DIAGNOSTIC_RUNTIME_VALIDATION_REPORT.md"
 
     # Extract key metrics
@@ -3139,6 +3532,8 @@ def generate_p2_diagnostic_report(result: Dict, stats: Dict, economic_stats: Dic
 
     # Write report
     report_content = f"""# P2 DIAGNOSTIC RUNTIME VALIDATION REPORT
+
+Dataset: {((result.get("test_scorecard") or {}).get("dataset_run") or {}).get("dataset", "WorldSmall")}
 
 ## 1. FUEL COST TRACE FINDINGS
 
@@ -3193,9 +3588,9 @@ def generate_p2_diagnostic_report(result: Dict, stats: Dict, economic_stats: Dic
 
 | Vessel Class | Service Count | TEU Deployed | Avg Utilization % | Avg Weekly Profit |
 |--------------|---------------|--------------|-------------------|-------------------|
-| Post_panamax | {total_services // 2} | {total_services * 2500} | 75.0% | ${weekly_profit / (total_services // 2) if total_services > 0 else 0:,.0f} |
-| Super_panamax | {total_services // 4} | {total_services * 4000} | 80.0% | ${weekly_profit / (total_services // 4) if total_services > 0 else 0:,.0f} |
-| Panamax_2400 | {total_services // 6} | {total_services * 1200} | 70.0% | ${weekly_profit / (total_services // 6) if total_services > 0 else 0:,.0f} |
+| Post_panamax | {total_services // 2} | {total_services * 2500} | 75.0% | ${weekly_profit / max(1, total_services // 2) if total_services > 0 else 0:,.0f} |
+| Super_panamax | {total_services // 4} | {total_services * 4000} | 80.0% | ${weekly_profit / max(1, total_services // 4) if total_services > 0 else 0:,.0f} |
+| Panamax_2400 | {total_services // 6} | {total_services * 1200} | 70.0% | ${weekly_profit / max(1, total_services // 6) if total_services > 0 else 0:,.0f} |
 
 ## 6. TOP 5 PROFITABLE SERVICES
 
@@ -4883,7 +5278,7 @@ def generate_system_truth_report(result: Dict, problem: Problem,
                                   inventory: Dict, pathways: Dict,
                                   influence: Dict, shared_ctx: Dict,
                                   coordination: Dict, dead_detector: Dict,
-                                  scorecard: Dict):
+                                  scorecard: Dict, out_dir=None):
     """Generate SYSTEM_TRUTH_REPORT.md -- the certification deliverable."""
     print_section_header("T0.8 . SYSTEM TRUTH REPORT GENERATION")
 
@@ -5009,6 +5404,8 @@ def generate_system_truth_report(result: Dict, problem: Problem,
     path_d_s = _safe("PASS" if pathways.get("D",{}).get("pass") else "FAIL")
 
     report = f"""# SYSTEM TRUTH REPORT - AI Vessel Routing Optimizer
+
+Dataset: {((result.get("test_scorecard") or {}).get("dataset_run") or {}).get("dataset", "WorldSmall")}
 
 
 ## 1 - ORIGINAL ARCHITECTURE
@@ -5243,7 +5640,8 @@ The system {"**CAN be truthfully certified**" if cert_ready else "**requires add
 """
 
     # -- Write report file ------------------------------------------------
-    output_dir = Path(__file__).parent.parent
+    output_dir = Path(out_dir) if out_dir is not None else Path(__file__).parent.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
     report_file = output_dir / "SYSTEM_TRUTH_REPORT.md"
 
     try:
@@ -5262,7 +5660,7 @@ The system {"**CAN be truthfully certified**" if cert_ready else "**requires add
 # T0 Integration into Main Test Pipeline
 # ===========================================================================
 
-def run_truth_certification(result: Dict, problem: Problem):
+def run_truth_certification(result: Dict, problem: Problem, out_dir=None):
     """Run all T0 truth validation & certification sections."""
     global _PASS, _FAIL, _WARN
 
@@ -5300,7 +5698,7 @@ def run_truth_certification(result: Dict, problem: Problem):
         result, problem,
         inventory, pathways, influence,
         shared_ctx, coordination, dead_detector,
-        scorecard,
+        scorecard, out_dir=out_dir,
     )
 
     # T0 Scorecard
@@ -5328,8 +5726,69 @@ def run_truth_certification(result: Dict, problem: Problem):
 
 # ===========================================================================
 # Run directly
+def test_orchestrator():
+    """pytest entry point: WorldSmall, unless ``LINER_DATASET`` explicitly names another registered dataset
+    (an unknown name fails; there is never a prompt under pytest)."""
+    run_orchestrator_test(resolve_dataset(os.environ.get("LINER_DATASET") or None))
+
+
+def _parse_cli(argv):
+    ap = argparse.ArgumentParser(
+        description="Full pipeline test of the accepted C3 configuration on one selected dataset.")
+    ap.add_argument("--dataset", help="WorldSmall | baltic | WAF | World-500 | World-1000 (names are case-insensitive); "
+                                      "without it a terminal gets a numbered menu, anything else runs WorldSmall")
+    ap.add_argument("--datasets", nargs="+", metavar="NAME", help="batch: run these datasets one after the other "
+                    "(each in its own process); 'all' = every registered dataset")
+    ap.add_argument("--source", choices=("json", "csv"), default="json",
+                    help="json (default): canonical JSON, proven identical to the CSV package; csv: CSV package only")
+    ap.add_argument("--seed", type=int, default=None, help="sets LINER_SEED for this run (recorded in the output)")
+    ap.add_argument("--output-dir", type=Path, default=None,
+                    help="write every output of this run below this directory (batch: <dir>/<dataset>); the "
+                         "repository-root and frontend artifacts are then not touched")
+    ap.add_argument("--non-interactive", action="store_true", help="never show the menu")
+    ap.add_argument("--list", action="store_true", help="list the datasets and their paths, then exit")
+    return ap.parse_args(argv)
+
+
+def _run_batch(names, args) -> int:
+    """Datasets run strictly one after the other, each in a fresh process (no state can leak between them)."""
+    keys = [s.key for s in list_datasets()] if names == ["all"] else [resolve_dataset(n).key for n in names]
+    codes = {}
+    for key in keys:
+        cmd = [sys.executable, str(Path(__file__).resolve()), "--dataset", key, "--non-interactive",
+               "--source", args.source] + (["--seed", str(args.seed)] if args.seed is not None else [])               + (["--output-dir", str(Path(args.output_dir) / key)] if args.output_dir is not None else [])
+        print(f"\n{'=' * 70}\n  BATCH: {key}\n{'=' * 70}", flush=True)
+        env = dict(os.environ)
+        env.setdefault("PYTHONHASHSEED", "0")
+        codes[key] = subprocess.call(cmd, env=env)
+    print("\nBATCH SUMMARY: " + ", ".join(f"{k}: {'ok' if c == 0 else f'exit {c}'}" for k, c in codes.items()))
+    return 0 if all(c == 0 for c in codes.values()) else 1
+
+
+def main(argv=None) -> int:
+    args = _parse_cli(argv)
+    if args.list:
+        for s in list_datasets():
+            print(f"{s.key:<11} {s.kind:<14} raw={s.raw_dir}  json={s.json_path}  out={output_locations(s)['dir']}")
+        return 0
+    try:
+        if args.datasets:
+            return _run_batch(args.datasets, args)
+        spec = select_dataset(args.dataset, interactive=False if args.non_interactive else None)
+        if args.seed is not None:
+            os.environ["LINER_SEED"] = str(args.seed)
+        run_orchestrator_test(spec, args.source, args.output_dir)
+        return 0
+    except (DatasetError, ProblemJsonError, DatasetIntegrityError, FileNotFoundError) as exc:
+        print(f"{C.RED}DATASET ERROR:{C.RESET} {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    test_orchestrator()    # If multiple iterations ran, verify the feedback decision was recorded
+    raise SystemExit(main())
+
+    # (original trailing notes, kept for reference; unreachable)
+    # If multiple iterations ran, verify the feedback decision was recorded
     # in each audit entry. Note: needs_rerun may be False for ALL entries --
     # the orchestrator stops early once MIN_ITERATIONS is met AND convergence
     # is reached; it does not require at least one needs_rerun=True.

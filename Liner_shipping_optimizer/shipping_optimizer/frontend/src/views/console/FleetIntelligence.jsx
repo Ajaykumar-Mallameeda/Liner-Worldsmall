@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useState, createElement, Fragment } from 'react';
 import { useOptimizationState } from '../../hooks/useOptimizationState.js';
+import { matchesAgent, sameAgent, toggleAgentFocus, useAgentFocus } from '../../services/focusStore.js';
 import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Pill, Kv, Stat, Empty, Provenance } from '../../components/console/p12.jsx';
@@ -73,11 +74,16 @@ export default function FleetIntelligence(props) {
     return function() { cancelled = true; };
   }, []);
 
-  const selectedServices = (runtimeProp && runtimeProp.selected_services) ||
+  const [agentFocus] = useAgentFocus();
+  const allSelected = (runtimeProp && runtimeProp.selected_services) ||
     sm.selected_services ||
     (optState && optState.selectedServices) ||
     [];
-  const totalSelected = selectedServices.length || sm.totalServices || 0;
+  // Agent cross-filter (header chip / coverage chart / rows below): fleet figures cover that agent only.
+  const selectedServices = useMemo(function() {
+    return agentFocus ? allSelected.filter(function(s) { return matchesAgent(s, agentFocus); }) : allSelected;
+  }, [allSelected, agentFocus]);
+  const totalSelected = agentFocus ? selectedServices.length : (selectedServices.length || sm.totalServices || 0);
   const fleetState = (maritimeOverview && maritimeOverview.fleet) || (telemetry && telemetry.fleet) || null;
 
   // Derive vessel-class mix
@@ -85,7 +91,7 @@ export default function FleetIntelligence(props) {
     const map = {};
     for (let i = 0; i < selectedServices.length; i++) {
       const s = selectedServices[i];
-      const cls = s.vessel_class || 'Standard';
+      const cls = s.vessel_class || 'unspecified';
       if (!map[cls]) {
         map[cls] = { count: 0, capacity: 0, load: 0, profit: 0, carriedLegs: 0, offeredLegs: 0, hasLegs: false };
       }
@@ -133,7 +139,7 @@ export default function FleetIntelligence(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -151,7 +157,7 @@ export default function FleetIntelligence(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -174,7 +180,7 @@ export default function FleetIntelligence(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -197,7 +203,7 @@ export default function FleetIntelligence(props) {
               h('div', {
                 style: {
                   display: 'flex', justifyContent: 'space-between',
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                   paddingTop: 4, marginTop: 4,
                 },
@@ -228,14 +234,14 @@ export default function FleetIntelligence(props) {
                       const pct = totalSelected > 0 ? (st.count / totalSelected) * 100 : 0;
                       return h('div', { key: c, className: 'cx-row', style: { display: 'block', padding: '8px 10px', flex: 1 } },
                         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 } },
-                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em' } }, c),
-                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, st.count + ' services · ' + fmtUsd(st.profit))
+                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)', textTransform: 'uppercase', letterSpacing: '0.1em' } }, c),
+                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, st.count + ' services · ' + fmtUsd(st.profit))
                         ),
                         h('div', { style: { display: 'flex', gap: 12, alignItems: 'center' } },
                           h('div', { style: { flex: 1, height: 4, background: 'var(--cx-edge)', position: 'relative' } },
                             h('div', { style: { position: 'absolute', left: 0, top: 0, bottom: 0, width: pct + '%', background: 'var(--cx-cyan)' } })
                           ),
-                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, color: 'var(--cx-text-dim)', minWidth: 36, textAlign: 'right' } }, pct.toFixed(0) + '%')
+                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', minWidth: 36, textAlign: 'right' } }, pct.toFixed(0) + '%')
                         ),
                         h('div', { className: 'p12-kv-grid', style: { marginTop: 6 } },
                           h(Kv, { k: 'capacity', v: fmtNum(st.capacity) }),
@@ -248,7 +254,7 @@ export default function FleetIntelligence(props) {
                   h('div', {
                     style: {
                       display: 'flex', justifyContent: 'space-between',
-                      fontFamily: 'var(--cx-mono)', fontSize: 8,
+                      fontFamily: 'var(--cx-mono)', fontSize: 12,
                       color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                       padding: '6px 10px', background: 'rgba(0,0,0,0.1)',
                     },
@@ -261,8 +267,8 @@ export default function FleetIntelligence(props) {
         ),
         h('div', { className: 'cx-span-6' },
           h(InstrumentPanel, {
-            title: 'Regional Fleet',
-            right: 'real evidence: regional_results[].services_selected + weekly_profit',
+            title: 'Fleet By Regional Agent',
+            right: 'agent ledger: regional_results[]',
             bodyPadding: 'flush',
             style: { height: '100%', display: 'flex', flexDirection: 'column' },
           },
@@ -272,16 +278,33 @@ export default function FleetIntelligence(props) {
                   h('div', { className: 'flex-1 flex flex-col justify-between' },
                     Object.entries(regions).map(function(entry) {
                       const id = entry[0], r = entry[1];
-                      return h('div', { key: id, className: 'cx-row', style: { display: 'block', padding: '8px 10px', flex: 1 } },
+                      const agentLabel = r.region || r.name || id;
+                      const isFocus = sameAgent(agentFocus, agentLabel);
+                      const toggle = function() { toggleAgentFocus(agentLabel); };
+                      return h('div', {
+                        key: id, className: 'cx-row', role: 'button', tabIndex: 0, 'aria-pressed': !!isFocus,
+                        title: isFocus ? 'Clear the agent filter' : 'Filter every view to this agent',
+                        onClick: toggle,
+                        onKeyDown: function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } },
+                        style: { display: 'block', padding: '8px 10px', flex: 1, cursor: 'pointer', opacity: agentFocus && !isFocus ? 0.55 : 1, boxShadow: isFocus ? 'inset 3px 0 0 var(--viz-1)' : 'none', background: isFocus ? 'rgba(57,135,229,0.10)' : undefined },
+                      },
                         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 } },
-                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 11, letterSpacing: '0.14em', color: regionColor(id), textTransform: 'uppercase' } }, r.name || id),
-                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } }, 'region')
+                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, letterSpacing: '0.14em', color: regionColor(id), textTransform: 'uppercase' } }, r.name || id),
+                          h('span', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, 'agent')
                         ),
                         h('div', { className: 'p12-kv-grid' },
                           h(Kv, { k: 'services', v: fmtNum(r.services) }),
-                          h(Kv, { k: 'P&L', v: fmtUsd(r.profit) }),
+                          h(Kv, { k: 'agent P&L', v: fmtUsd(r.profit) }),
                           h(Kv, { k: 'coverage', v: r.coverage != null ? (Number(r.coverage).toFixed(1) + '%') : EM }),
                           h(Kv, { k: 'ports', v: fmtNum(r.ports) })
+                        ),
+                        // Coverage against the same 70% target as the Command Center's agent chart.
+                        r.coverage != null && h('span', {
+                          className: 'ibar ibar-cov', role: 'img',
+                          'aria-label': `coverage ${Number(r.coverage).toFixed(1)}% against the 70% target`,
+                        },
+                          h('span', { className: 'pos', style: { width: Math.max(2, Math.min(100, Number(r.coverage))) + '%' } }),
+                          h('span', { className: 'tick', style: { left: '70%' } })
                         )
                       );
                     })
@@ -289,13 +312,13 @@ export default function FleetIntelligence(props) {
                   h('div', {
                     style: {
                       display: 'flex', justifyContent: 'space-between',
-                      fontFamily: 'var(--cx-mono)', fontSize: 8,
+                      fontFamily: 'var(--cx-mono)', fontSize: 12,
                       color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                       padding: '6px 10px', background: 'rgba(0,0,0,0.1)',
                     },
                   },
-                    h('span', null, `Total: ${Object.keys(regions).length} Regional Fleets`),
-                    h('span', { style: { color: 'var(--cx-cyan-2)' } }, `${fmtNum(totalSelected)} Vessels Deployed`),
+                    h('span', null, `${Object.keys(regions).length} regional agents · P&L before the global merge · bar = coverage, tick = 70% target`),
+                    h('span', { style: { color: 'var(--cx-cyan-2)' } }, `${fmtNum(totalSelected)} services selected`),
                   )
                 )
           )

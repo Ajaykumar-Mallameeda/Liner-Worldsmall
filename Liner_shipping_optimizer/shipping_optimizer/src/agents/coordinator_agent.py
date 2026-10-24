@@ -22,8 +22,8 @@ MAX_CONFLICTS_ALLOWED  = 0      # any overlap triggers resolution pass
 MAX_RERUN_ITERATIONS   = 3      # hard cap passed in from orchestrator
 # Margin on revenue (all-in cost basis) below which the evaluation does not award
 # the efficiency point. 15 % is the "Moderate" verdict floor already used by the
-# orchestrator/regional summaries.  It is an ADVISORY verdict band (owner decision,
-# Task 14): the canonical definition and its classifier live in
+# orchestrator/regional summaries.  It is an ADVISORY verdict band (owner decision,):
+# the canonical definition and its classifier live in
 # ``src.network.metrics`` (``MARGIN_TARGET_PCT``, ``classify_margin``); the name is
 # re-exported here because callers import it from this module.  The band does not
 # drive reruns, iteration selection, feasibility, accounting status or solver status.
@@ -300,7 +300,7 @@ class CoordinatorAgent(BaseAgent):
         transshipment), ``profit_margin_pct`` is profit / revenue, both from the
         verified ledger when one is supplied.  The vessel-hire component is kept
         under its own name (``vessel_hire_cost``) - it used to be reported here as
-        ``total_cost`` (F-15).
+        ``total_cost``.
         """
         if not regional_solutions:
             return {

@@ -47,7 +47,7 @@ export default function IntelligencePanel({
       {(title || right) && (
         <div className="flex items-center justify-between gap-3 mb-2.5">
           {title && (
-            <div className="text-[10px] font-mono uppercase tracking-widest text-white/40">
+            <div className="text-[12px] font-mono uppercase tracking-widest text-white/60">
               {title}
             </div>
           )}

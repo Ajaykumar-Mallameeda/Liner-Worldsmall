@@ -32,6 +32,11 @@ import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import {
   Pill, Kv, Stat, Empty, Tag, Dot, Provenance,
 } from '../../components/console/p12.jsx';
+import InspectBanner from '../../components/console/InspectBanner.jsx';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
+import { hubGeography } from '../../utils/geoRegion.js';
+import { prettyEngineText } from '../../utils/formatters.js';
+import { agentKey, setAgentFocus, useAgentFocus } from '../../services/focusStore.js';
 
 const h = createElement;
 const F = Fragment;
@@ -136,7 +141,7 @@ function SectionLabel({ children }) {
   return h('div', {
     style: {
       fontFamily: 'var(--cx-mono)',
-      fontSize: 9,
+      fontSize: 12,
       color: 'var(--cx-text-faint)',
       textTransform: 'uppercase',
       letterSpacing: '0.14em',
@@ -150,7 +155,7 @@ function FilterBtn({ label, active, color, onClick }) {
     onClick,
     style: {
       fontFamily: 'var(--cx-mono)',
-      fontSize: 10,
+      fontSize: 12,
       padding: '3px 10px',
       background: active ? (color || 'var(--cx-accent)') : 'var(--cx-panel-bg)',
       border: active
@@ -174,7 +179,7 @@ function IterBtn({ iterNum, selected, pareto, score, onSelect }) {
     title: `Score: ${score != null ? score.toFixed(3) : 'N/A'} | ${pareto ? 'Pareto-optimal' : 'Dominated'}`,
     style: {
       fontFamily: 'var(--cx-mono)',
-      fontSize: 10,
+      fontSize: 12,
       padding: '3px 10px',
       background: isSelected ? accent : 'var(--cx-panel-bg)',
       border: `1px solid ${accent}`,
@@ -189,7 +194,7 @@ function IterBtn({ iterNum, selected, pareto, score, onSelect }) {
   },
     h('span', null, `ITER ${String(iterNum).padStart(2, '0')}`),
     isSelected && h('span', {
-      style: { fontSize: 8, opacity: 0.8 },
+      style: { fontSize: 12, opacity: 0.8 },
     }, ' ★'),
   );
 }
@@ -202,7 +207,7 @@ function FunnelBar({ label, value, total, color }) {
         display: 'flex',
         justifyContent: 'space-between',
         fontFamily: 'var(--cx-mono)',
-        fontSize: 9,
+        fontSize: 12,
         color: 'var(--cx-text-faint)',
         marginBottom: 2,
       },
@@ -242,7 +247,7 @@ function DeltaRow({ label, value, unit, style: extraStyle }) {
       display: 'flex',
       justifyContent: 'space-between',
       fontFamily: 'var(--cx-mono)',
-      fontSize: 10,
+      fontSize: 12,
       padding: '2px 0',
       ...extraStyle,
     },
@@ -268,14 +273,15 @@ export default function RegionalAgents(props) {
   const llmMetrics   = optState.llm_runtime_metrics || {};
 
   // Selected iteration from pipeline (the optimizer's winning choice)
-  const pipelineSelectedIter = globalData.selected_iteration ?? 0;
+  const pipelineSelectedIter = selectedIterationOf(optState) ?? 0;
 
   // User's currently viewed iteration (starts at pipeline-selected)
   const [viewIter, setViewIter] = useState(null);
   const activeIter = viewIter != null ? viewIter : pipelineSelectedIter;
 
-  // Active region filter
-  const [regionFilter, setRegionFilter] = useState('all');
+  // Active region filter = the shared agent cross-filter, so choosing an agent here narrows every view.
+  const [agentFocus] = useAgentFocus();
+  const regionFilter = agentFocus ? agentKey(agentFocus) : 'all';
 
   // The regions for the active iteration: use iteration_regions_map if available,
   // else fall back to the top-level regional_results (which is the selected iter)
@@ -296,6 +302,11 @@ export default function RegionalAgents(props) {
       id.toLowerCase().replace(/\s+/g, '_') === regionFilter
     );
   }, [regionList, regionFilter]);
+  const setRegionFilter = (id) => {
+    if (id === 'all') { setAgentFocus(null); return; }
+    const hit = regionList.find(([rid]) => agentKey(rid) === id);
+    setAgentFocus(hit ? (hit[1].region || hit[1].name || hit[0]) : id);
+  };
 
   // Global summaries (always from the active iteration's region list)
   const totalServices = useMemo(() =>
@@ -306,7 +317,12 @@ export default function RegionalAgents(props) {
     regionList.reduce((a, [, r]) => a + (Number(r.weekly_profit) || 0), 0),
     [regionList]
   );
-  const globalCoverage = globalData.coverage;
+  // Demand-weighted coverage of the iteration being viewed (scorecard), not always the final run's.
+  const globalCoverage = useMemo(() => {
+    const sc = scorecards.find(s => s.iteration === activeIter);
+    if (sc && sc.global_demand_weighted_coverage != null) return sc.global_demand_weighted_coverage;
+    return activeIter === pipelineSelectedIter ? globalData.coverage : null;
+  }, [scorecards, activeIter, pipelineSelectedIter, globalData.coverage]);
 
   // Iteration counts
   const iterCount = useMemo(() => {
@@ -348,9 +364,7 @@ export default function RegionalAgents(props) {
   }, []);
 
   // ─── Derived run info for footer ───────────────────────────────────────
-  const runId = globalData.run_id || (optState.raw?.iterations_run != null
-    ? 'run-' + String(optState.raw.iterations_run).padStart(2, '0')
-    : NA);
+  const runId = globalData.run_id || optState.source?.label || NA;
   const evaluatedAt = globalData.evaluated_at || null;
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -369,6 +383,7 @@ export default function RegionalAgents(props) {
     }),
 
     h('div', { className: 'cx-page-body' },
+      h(InspectBanner, { inspecting: viewIter, selected: pipelineSelectedIter, onReset: () => setViewIter(null) }),
 
       // ── Global summary row ──────────────────────────────────────────────
       h('div', { className: 'cx-grid-12', style: { marginBottom: 16 } },
@@ -383,13 +398,15 @@ export default function RegionalAgents(props) {
           )
         ),
         h('div', { className: 'cx-span-3' },
-          h(InstrumentPanel, { title: 'Weekly P&L', right: '/ week' },
-            h(Stat, {
-              k: 'P&L',
-              v: fmtUsd(totalProfit),
-              variant: Number(totalProfit) >= 0 ? 'good' : 'warn',
-              sub: 'per week · iter ' + activeIter,
-            })
+          h(InstrumentPanel, { title: 'Regional P&L (sum)', right: '/ week' },
+            h('div', { title: 'Sum of the regional agents’ own P&L before the global merge. The network plan’s P&L (header, Command Center) is computed after shared services and transshipment are reconciled, so the two differ.' },
+              h(Stat, {
+                k: 'P&L',
+                v: fmtUsd(totalProfit),
+                variant: Number(totalProfit) >= 0 ? 'good' : 'warn',
+                sub: 'sum of agents · iter ' + activeIter,
+              })
+            )
           )
         ),
         h('div', { className: 'cx-span-3' },
@@ -397,7 +414,7 @@ export default function RegionalAgents(props) {
             h(Stat, {
               k: 'cov',
               v: globalCoverage != null ? fmtPct(globalCoverage) : EM,
-              sub: 'global weighted average',
+              sub: 'served TEU / total demand · iter ' + activeIter,
             })
           )
         ),
@@ -441,7 +458,7 @@ export default function RegionalAgents(props) {
           h('span', {
             style: {
               fontFamily: 'var(--cx-mono)',
-              fontSize: 9,
+              fontSize: 12,
               color: 'var(--cx-text-faint)',
               textTransform: 'uppercase',
               letterSpacing: '0.12em',
@@ -512,6 +529,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
 
   const hubList = (r.hubs || r.hub_ports || []).slice(0, 6);
   const extraHubs = Math.max(0, (r.hubs || r.hub_ports || []).length - 6);
+  const hubGeo = hubGeography(r.hubs || r.hub_ports || []);
 
   // Filtering funnel — all three fields exist in the real JSON
   const generated = r.generated ?? r.services_generated ?? null;
@@ -539,7 +557,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
         h('span', {
           style: {
             fontFamily: 'var(--cx-mono)',
-            fontSize: 9,
+            fontSize: 12,
             color: color,
             textTransform: 'uppercase',
             letterSpacing: '0.14em',
@@ -548,7 +566,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
         r.status && h('span', {
           style: {
             fontFamily: 'var(--cx-mono)',
-            fontSize: 8,
+            fontSize: 12,
             color: 'var(--cx-text-faint)',
             marginLeft: 4,
           },
@@ -556,6 +574,13 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
       ),
       bodyPadding: 'flush',
     },
+
+      // Agent names are engine cluster labels; say where the agent's hubs actually are.
+      hubGeo && h('div', {
+        className: 'cx-def',
+        title: 'Regional agents are clusters of ports. The agent name comes from the optimizer and does not always match where its hub ports are.',
+        style: { display: 'block', margin: '8px 12px 0', fontFamily: 'var(--cx-sans)', fontSize: 12, color: 'var(--cx-text-dim)', borderBottom: 0 },
+      }, 'Agent “' + (r.name || r.region || id) + '” · hubs in ' + hubGeo),
 
       // ── Core metrics ──
       h('div', { className: 'p12-kv-grid', style: { padding: '10px 12px 6px' } },
@@ -637,7 +662,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
             key: p,
             style: {
               fontFamily: 'var(--cx-mono)',
-              fontSize: 10,
+              fontSize: 12,
               padding: '2px 6px',
               background: 'var(--cx-panel-bg)',
               border: `1px solid ${color}44`,
@@ -648,7 +673,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
           extraHubs > 0 && h('span', {
             style: {
               fontFamily: 'var(--cx-mono)',
-              fontSize: 10,
+              fontSize: 12,
               padding: '2px 6px',
               color: 'var(--cx-text-faint)',
             },
@@ -667,7 +692,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
           borderTop: '1px solid var(--cx-edge-soft)',
           color: 'var(--cx-text-faint)',
           fontFamily: 'var(--cx-mono)',
-          fontSize: 9,
+          fontSize: 12,
           textAlign: 'left',
           cursor: 'pointer',
           letterSpacing: '0.1em',
@@ -707,7 +732,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
               h(Kv, { k: 'fallbacks', v: llm.fallback_uses != null ? String(llm.fallback_uses) : NA }),
             )
           : h('div', {
-              style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', marginBottom: 8 },
+              style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', marginBottom: 8 },
             }, 'NOT OBSERVED'),
 
         // Regional policy
@@ -724,7 +749,7 @@ function RegionalCard({ id, r, activeIter, pipelineSelectedIter, color }) {
         // Cost breakdown
         h(SectionLabel, null, 'Cost breakdown'),
         h('div', { className: 'p12-kv-grid' },
-          h(Kv, { k: 'operating cost', v: fmtUsd(r.operating_cost) }),
+          h(Kv, { k: 'vessel operating', v: fmtUsd(r.operating_cost) }),
           h(Kv, { k: 'total cost', v: fmtUsd(r.total_cost) }),
           h(Kv, { k: 'fuel cost', v: fmtUsd(r.fuel_cost ?? r.fuelCost) }),
           h(Kv, { k: 'port cost', v: fmtUsd(r.port_cost ?? r.portCost) }),
@@ -767,7 +792,7 @@ function IterationComparisonPanel({
                 gridTemplateColumns: '70px repeat(5, 1fr)',
                 gap: '2px 8px',
                 fontFamily: 'var(--cx-mono)',
-                fontSize: 9,
+                fontSize: 12,
               },
             },
               // Header
@@ -817,19 +842,19 @@ function IterationComparisonPanel({
                   h(DeltaRow, { label: 'Served TEU', value: deltaSatisfied, unit: ' TEU' }),
                 )
               : h('div', {
-                  style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' },
+                  style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' },
                 }, 'Baseline — no previous iteration'),
 
             // Selection intelligence
             h(Divider, null),
             h(SectionLabel, null, 'Selection intelligence'),
-            h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, lineHeight: 1.5 } },
+            h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, lineHeight: 1.5 } },
               h('div', {
                 style: { display: 'flex', justifyContent: 'space-between', marginBottom: 3 },
               },
                 h('span', { style: { color: 'var(--cx-text-faint)' } }, 'METHOD'),
                 h('span', { style: { color: 'var(--cx-text)', maxWidth: 120, textAlign: 'right' } },
-                  (iterSel.selection_method || 'N/A').replace(/_/g, ' ').toUpperCase()
+                  (iterSel.selection_method || '—').replace(/_/g, ' ').toUpperCase()
                 ),
               ),
               h('div', {
@@ -859,13 +884,13 @@ function IterationComparisonPanel({
           padding: '6px 12px 10px',
           borderTop: '1px solid var(--cx-edge-soft)',
           fontFamily: 'var(--cx-mono)',
-          fontSize: 9,
+          fontSize: 12,
           color: 'var(--cx-text-faint)',
           lineHeight: 1.6,
         },
       },
         h('span', { style: { color: 'var(--cx-text)', marginRight: 8 } }, 'SELECTION REASONING'),
-        h('span', null, iterSel.reasoning.slice(0, 280) + (iterSel.reasoning.length > 280 ? '…' : '')),
+        h('span', null, prettyEngineText(iterSel.reasoning).slice(0, 280) + (prettyEngineText(iterSel.reasoning).length > 280 ? '…' : '')),
       ),
     ),
   );

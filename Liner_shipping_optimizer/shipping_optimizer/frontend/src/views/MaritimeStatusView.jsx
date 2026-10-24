@@ -97,7 +97,7 @@ export default function MaritimeStatusView() {
         recordCount={status?.record_count}
       />
 
-      <div className="text-[11px] text-white/30 font-mono leading-relaxed max-w-2xl">
+      <div className="text-[12px] text-white/60 font-mono leading-relaxed max-w-2xl">
         This panel is the Phase 1 maritime operations surface. It shows
         the status of the EMODnet vessel-density data source. When
         maritime intelligence is disabled (default), the panel reports

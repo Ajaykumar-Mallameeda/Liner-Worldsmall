@@ -3,6 +3,8 @@
  * and WebSocket payloads. Components consume normalized schema only.
  */
 
+import { withGeoRegions } from '../utils/geoRegion.js';
+
 export const RUNTIME_TRUTH_URL = '/pipeline_output.json';
 
 const REGION_COLORS = {
@@ -184,6 +186,7 @@ export function normalizeGlobal(runtime, prev = {}) {
     regionalCoverage: sm.average_regional_coverage ?? dm.global_metrics?.average_regional_coverage ?? sm.coverage ?? prev.regionalCoverage ?? null,
     totalServices: sm.total_services ?? dm.global_metrics?.total_services ?? m.totalServices ?? (runtime.selected_services ? runtime.selected_services.length : (runtime.all_selected_services ? runtime.all_selected_services.length : (prev.totalServices ?? 0))),
     operatingCost: sm.operating_cost ?? dm.global_metrics?.operating_cost ?? m.operatingCost ?? prev.operatingCost ?? null,
+    totalCost: totCost ?? prev.totalCost ?? null,
     runtime: sm.total_runtime ?? sm.runtime_seconds ?? m.runtime ?? prev.runtime ?? 0,
     unserved: unservedDemand ?? 0,
     margin: computedMargin,
@@ -207,7 +210,10 @@ export function normalizeGlobal(runtime, prev = {}) {
     iteration_results: runtime.iteration_results || [],
     executive_summary: runtime.executive_summary ?? prev.executive_summary ?? '',
     status: runtime.status ?? (runtime.health_status?.status === 'healthy' ? 'complete' : null) ?? prev.status ?? 'complete',
-    run_id: runtime.run_id ?? runtime.orchestrator_run_id ?? (runtime.iterations_run != null ? ('run-' + String(runtime.iterations_run).padStart(2, '0')) : null) ?? prev.run_id ?? null,
+    // Only a run id the file itself carries; apiClient labels the run by dataset + seed otherwise.
+    run_id: runtime.run_id ?? runtime.orchestrator_run_id ?? prev.run_id ?? null,
+    run_id_from_file: runtime.run_id ?? runtime.orchestrator_run_id ?? null,
+    dataset: runtime.dataset_run?.dataset ?? null,
     selected_iteration: runtime.final_selected_iteration ?? its.selected_iteration ?? runtime.best_iteration ?? runtime.selected_iteration ?? prev.selected_iteration ?? 0,
     evaluated_at: runtime.evaluated_at ?? runtime.created_at ?? prev.evaluated_at ?? null,
     lastFetchedAt: Date.now(),
@@ -289,6 +295,11 @@ export function normalizeRuntime(runtime) {
   if (!runtime) {
     return { global: {}, regions: {}, iterations: [], corridors: [] };
   }
+
+  // Services: region = geography of the ports called; the engine's agent label moves to agent_region.
+  withGeoRegions(runtime.selected_services);
+  withGeoRegions(runtime.all_selected_services);
+  (runtime.iteration_results || []).forEach((r) => withGeoRegions(r && r.selected_services));
 
   // Extract iterations with fallback priority: iteration_results > iteration_audit > iterations
   const rawIters = runtime.iteration_results || runtime.iteration_audit || runtime.iterations || [];

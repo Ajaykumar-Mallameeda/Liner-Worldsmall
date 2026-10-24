@@ -432,7 +432,13 @@ def test_bunker_price_is_hardcoded():
 #: ``LINER_SEED`` is set (unset = the process-global generators, i.e. the behaviour the F-21/F-28
 #: findings describe).  Any other file that seeds or builds a generator is still a finding that must be
 #: re-derived.  Behaviour of the module itself: tests/test_rng_control.py.
-_SEEDING_ALLOWED = {"src/utils/rng.py"}
+_SEEDING_ALLOWED = {
+    "src/utils/rng.py",
+    # Multi-dataset campaign (2026-10-16): the synthetic-benchmark GENERATOR seeds on purpose - reproducing a
+    # dataset byte for byte from (generator version, seed) is its contract (tests/test_synthetic_datasets.py).
+    # It is data-generation tooling, separate from the optimizer, and never runs inside a pipeline run.
+    "scripts/multi_dataset/generate_synthetic.py",
+}
 
 
 def test_no_random_seeding_in_production_code():

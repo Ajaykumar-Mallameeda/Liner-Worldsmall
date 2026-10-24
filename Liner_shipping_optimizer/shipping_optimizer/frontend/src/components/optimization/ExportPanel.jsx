@@ -75,37 +75,37 @@ export default function ExportPanel({ optimizationState }) {
   return (
     <div className="space-y-5">
       <div className="rounded-xl p-5" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-4">Export Center</div>
+        <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-4">Export Center</div>
         <div className="grid grid-cols-2 gap-4">
           <button onClick={exportJSON} className="rounded-xl p-5 text-left transition-all hover:scale-[1.01]" style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.2)" }}>
             <div className="text-lg mb-1">📄</div>
             <div className="text-sm font-mono font-bold text-cyan-400">Export JSON</div>
-            <div className="text-[10px] text-white/40 font-mono mt-1">Complete optimization data · Metrics · Regions · Services</div>
+            <div className="text-[12px] text-white/60 font-mono mt-1">Complete optimization data · Metrics · Regions · Services</div>
           </button>
           <button onClick={exportCSV} className="rounded-xl p-5 text-left transition-all hover:scale-[1.01]" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)" }}>
             <div className="text-lg mb-1">📊</div>
             <div className="text-sm font-mono font-bold text-emerald-400">Export Routes CSV</div>
-            <div className="text-[10px] text-white/40 font-mono mt-1">{services.length} services · Sortable spreadsheet format</div>
+            <div className="text-[12px] text-white/60 font-mono mt-1">{services.length} services · Sortable spreadsheet format</div>
           </button>
           <button onClick={exportRegionalCSV} className="rounded-xl p-5 text-left transition-all hover:scale-[1.01]" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
             <div className="text-lg mb-1">🌍</div>
             <div className="text-sm font-mono font-bold text-amber-400">Export Regions CSV</div>
-            <div className="text-[10px] text-white/40 font-mono mt-1">{regions.length} regions · KPIs per region</div>
+            <div className="text-[12px] text-white/60 font-mono mt-1">{regions.length} regions · KPIs per region</div>
           </button>
           <button disabled className="rounded-xl p-5 text-left opacity-40" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="text-lg mb-1">📑</div>
             <div className="text-sm font-mono font-bold text-white/50">Export PDF Summary</div>
-            <div className="text-[10px] text-white/30 font-mono mt-1">Available in V2 · Executive-ready PDF reports</div>
+            <div className="text-[12px] text-white/60 font-mono mt-1">Available in V2 · Executive-ready PDF reports</div>
           </button>
         </div>
       </div>
 
       {/* Export preview */}
       <div className="rounded-xl p-5" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-4">Export Preview</div>
-        <div className="grid grid-cols-2 gap-4 text-[11px] font-mono">
+        <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-4">Export Preview</div>
+        <div className="grid grid-cols-2 gap-4 text-[12px] font-mono">
           <div>
-            <div className="text-white/30 uppercase tracking-wider text-[9px] mb-2">Metrics Snapshot</div>
+            <div className="text-white/60 uppercase tracking-wider text-[12px] mb-2">Metrics Snapshot</div>
             {[
               ['Weekly Profit', optimizationState.global.weeklyProfit],
               ['Coverage', fmtOr(optimizationState.global.coverage, (v) => `${v.toFixed(1)}%`)],
@@ -114,18 +114,18 @@ export default function ExportPanel({ optimizationState }) {
               ['Margin', fmtOr(optimizationState.global.margin, (v) => `${v.toFixed(1)}%`)],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between py-0.5 border-b border-white/5">
-                <span className="text-white/40">{k}</span><span className="text-white/70">{v}</span>
+                <span className="text-white/60">{k}</span><span className="text-white/70">{v}</span>
               </div>
             ))}
           </div>
           <div>
-            <div className="text-white/30 uppercase tracking-wider text-[9px] mb-2">File Summary</div>
+            <div className="text-white/60 uppercase tracking-wider text-[12px] mb-2">File Summary</div>
             <div className="text-white/50 leading-relaxed">
               <div>Routes: {services.length}</div>
               <div>Regions: {regions.length}</div>
               <div>Date: {new Date().toISOString().slice(0, 10)}</div>
               <div>Formats: JSON, CSV (×2)</div>
-              <div className="mt-2 text-[9px] text-white/30">Click any export button above to download</div>
+              <div className="mt-2 text-[12px] text-white/60">Click any export button above to download</div>
             </div>
           </div>
         </div>

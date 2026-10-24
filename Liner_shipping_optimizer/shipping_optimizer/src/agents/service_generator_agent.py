@@ -408,7 +408,7 @@ class ServiceGeneratorAgent(BaseAgent):
                   rec.get("cycle_time", 14), vessel=vessel)
         logger.info('heuristic_services_added | count=%s', report.accepted_by_section.get("heuristic", 0))
 
-        # ── F: demand-coherent multi-port closed rotations (Task 9) ─────
+        # ── F: demand-coherent multi-port closed rotations─────
         # Grown from the strongest OD opportunities, ride-feasible cargo only,
         # budgeted and de-duplicated against everything generated above. Disabled
         # with LINER_DEMAND_LOOP_BUDGET=0.
@@ -426,7 +426,7 @@ class ServiceGeneratorAgent(BaseAgent):
             logger.info('demand_loop_services_added | proposed=%s emitted=%s grown=%s seeds=%s',
                         len(proposals), emitted, dc_report.grown_candidates, dc_report.seeds_used)
 
-        # ── G: route-level operators and elitism (Task 21) ──────────────
+        # ── G: route-level operators and elitism ──────────────
         # Edits the rotations that matter (the previous iteration's operated rotations when
         # the orchestrator supplies them, else the pool's best stand-alone rotations) and
         # re-offers the elites; every variant is evaluated with the canonical service model.
@@ -592,7 +592,7 @@ class ServiceGeneratorAgent(BaseAgent):
             # the validated archetype parameters were handed to the generator (observability tag only)
             logger.info('archetype_params_applied | tag=%s params=%s', "AI_APPLIED", archetype_params)
 
-        # Phase L + M — actuation record.
+        # — actuation record.
         act = actuation_ledger.begin(f"service_generator_{self.name}")
         rec = llm_client.last_response
         if rec is not None:

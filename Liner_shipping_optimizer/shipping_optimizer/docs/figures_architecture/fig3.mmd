@@ -1,0 +1,22 @@
+flowchart LR
+  subgraph F["data/raw/WorldSmall (tab-separated)"]
+    P["ports.csv<br/>CostPerFULL, CostPerFULLTrnsf,<br/>PortCallCostFixed, PortCallCostPerFFE, Draft"]
+    D["Demand_WorldSmall_Fixed_Sep.csv<br/>FFEPerWeek, Revenue_1, TransitTime"]
+    X["dist_dense.csv<br/>Distance nm, IsPanama, IsSuez, Draft"]
+    FQ["fleet_WorldSmall.csv<br/>Quantity"]
+    FS["fleet_data.csv<br/>Capacity FFE, TC rate, speeds,<br/>bunker t/day, idle t/day, canal fees"]
+  end
+
+  NL["NetworkLoader<br/>schema + range validation<br/>dataset identity guard"]
+  CONV["Unit boundary - applied ONCE<br/>quantities x 2 (demand, capacity)<br/>per-FFE rates / 2 (revenue, port costs)<br/>blank canal fee = None"]
+  PJ["problem_json (canonical JSON)<br/>hash-identical to CSV-built Problem"]
+  PB["Problem<br/>ports, demands, services = empty,<br/>distance_matrix + canal_flags + edge_draft, fleet"]
+
+  P --> NL
+  D --> NL
+  X --> NL
+  FQ --> NL
+  FS --> NL
+  NL --> CONV --> PB
+  CONV --> PJ
+  PJ -. "proven identical at run start" .-> PB

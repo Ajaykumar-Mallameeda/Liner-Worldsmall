@@ -84,7 +84,7 @@ export default function MaritimeWeatherView() {
           <span
             className="mono-data"
             style={{
-              fontSize: 9,
+              fontSize: 12,
               color: 'var(--maritime-ink-faint)',
               textTransform: 'uppercase',
               letterSpacing: '0.18em',
@@ -121,7 +121,7 @@ export default function MaritimeWeatherView() {
               />
             ))}
             {!providers.length && (
-              <div className="text-[11px] font-mono text-white/30">
+              <div className="text-[12px] font-mono text-white/60">
                 No providers registered.
               </div>
             )}
@@ -134,7 +134,7 @@ export default function MaritimeWeatherView() {
           density="comfortable"
         >
           <div className="grid grid-cols-3 gap-2 mb-2">
-            <label className="text-[10px] font-mono text-white/30">
+            <label className="text-[12px] font-mono text-white/60">
               lat
               <input
                 type="number"
@@ -147,7 +147,7 @@ export default function MaritimeWeatherView() {
                 style={{ border: "1px solid rgba(255,255,255,0.1)" }}
               />
             </label>
-            <label className="text-[10px] font-mono text-white/30">
+            <label className="text-[12px] font-mono text-white/60">
               lon
               <input
                 type="number"
@@ -160,7 +160,7 @@ export default function MaritimeWeatherView() {
                 style={{ border: "1px solid rgba(255,255,255,0.1)" }}
               />
             </label>
-            <label className="text-[10px] font-mono text-white/30">
+            <label className="text-[12px] font-mono text-white/60">
               radius (km)
               <input
                 type="number"
@@ -190,10 +190,10 @@ export default function MaritimeWeatherView() {
               atResult.records.map((r, i) => (
                 <div
                   key={i}
-                  className="text-[11px] font-mono text-white/60 py-1"
+                  className="text-[12px] font-mono text-white/60 py-1"
                   style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                 >
-                  <div className="text-white/40">
+                  <div className="text-white/60">
                     {(r.latitude ?? "?").toFixed(2)}, {(r.longitude ?? "?").toFixed(2)} —{" "}
                     {r.valid_at || "?"}
                   </div>
@@ -205,7 +205,7 @@ export default function MaritimeWeatherView() {
                 </div>
               ))
             ) : (
-              <div className="text-[11px] font-mono text-white/30">
+              <div className="text-[12px] font-mono text-white/60">
                 {atResult ? "No observations near this coordinate." : "Run a query to see results."}
               </div>
             )}
@@ -222,10 +222,10 @@ export default function MaritimeWeatherView() {
               forecastResult.records.map((r, i) => (
                 <div
                   key={i}
-                  className="text-[11px] font-mono text-white/60 py-1"
+                  className="text-[12px] font-mono text-white/60 py-1"
                   style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                 >
-                  <div className="text-white/40">
+                  <div className="text-white/60">
                     {r.valid_at || "?"} — {(r.latitude ?? "?").toFixed(2)},{(r.longitude ?? "?").toFixed(2)}
                   </div>
                   <div>
@@ -236,7 +236,7 @@ export default function MaritimeWeatherView() {
                 </div>
               ))
             ) : (
-              <div className="text-[11px] font-mono text-white/30">
+              <div className="text-[12px] font-mono text-white/60">
                 No forecast records in window.
               </div>
             )}

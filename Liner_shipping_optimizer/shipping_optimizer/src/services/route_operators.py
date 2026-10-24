@@ -1,7 +1,7 @@
-"""Route-level operators and elitism for the candidate pool (Task 21).
+"""Route-level operators and elitism for the candidate pool.
 
 Why this exists
-    The candidate pool is built once per iteration from OD pairs (Tasks 9/10) and nothing in
+    The candidate pool is built once per iteration from OD pairs and nothing in
     the pipeline *edits a rotation* or *remembers* a rotation that the global stage found
     worth operating: the regional GA only switches existing candidates on and off.  A good
     structure found in one iteration is therefore not available to the next, and the pool
@@ -21,7 +21,7 @@ What this does (all behind ``LINER_ROUTE_OPERATORS`` / ``LINER_ELITISM``; off = 
                  remove   the port whose ride-feasible cargo is least
                  swap     exchange two ports (a different visiting order)
                  reclass  the same rotation on another vessel class of the fleet
-    selection  variants are ranked by the same complementarity-aware score as Task 9, a
+    selection  variants are ranked by the same complementarity-aware score as a
                rotation already in the pool (same cyclic order and class) is rejected, a
                near-duplicate (>= ``near_duplicate_jaccard`` port overlap AND the same class)
                of an already selected variant is rejected, and the number of variants is

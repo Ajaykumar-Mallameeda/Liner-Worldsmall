@@ -1,0 +1,34 @@
+sequenceDiagram
+  autonumber
+  participant O as Orchestrator
+  participant R as RegionalAgent x3
+  participant G as Global stage (reconcile)
+  participant L as Independent ledger
+  participant C as Coordinator
+  participant K as ConsensusEngine / SharedContext
+  participant S as IterationSelector
+
+  O->>O: split problem (3 regions, demand by origin)
+  par three regions in parallel
+    O->>R: process(regional Problem)
+    R->>R: generate candidates, filter, ServiceGA, FrequencyGA
+    R->>R: HubMILP with fixed frequencies
+    R-->>O: regional result + candidate pool + frequency hints
+  end
+  O->>G: pools, hints, region_of_od, 120 s budget
+  G->>G: union pools, trunk candidates (C3)
+  G->>G: service models, OD paths, LP relaxation, integer MILP
+  G->>G: local search (C3), flow re-optimisation, repair
+  G->>L: services, frequencies, routed flows only
+  L-->>G: revenue, cost items, profit, violations
+  G->>G: MILP profit equals ledger profit? (tolerance 1e-6)
+  G-->>O: network_ledger (verified flag) + regional split (sum = global)
+  O->>C: regional results + network_ledger
+  C-->>O: conflicts, evaluation, decisions, feedback (rerun?)
+  O->>K: coordinator weights + regional policies
+  K-->>O: validated weight adjustments
+  O->>O: snapshot iteration, apply feedback to Problem
+  Note over O: repeat until 3 iterations are complete
+  O->>S: three snapshots
+  S-->>O: selected iteration (Pareto + score)
+  O-->>O: final result from the selected snapshot only

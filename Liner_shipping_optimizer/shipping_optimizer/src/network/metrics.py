@@ -1,4 +1,4 @@
-"""Canonical network economics for the decision layer (F-15).
+"""Canonical network economics for the decision layer.
 
 The decision layer (coordinator evaluation, iteration scoring, the public
 ``decision_output.global_metrics``) used to read ``operating_cost`` from the
@@ -40,7 +40,7 @@ STATUS_VERIFIED = "verified"
 STATUS_UNVERIFIED = "unverified"
 STATUS_NOT_EVALUATED = "not_evaluated"
 
-#: Advisory profit-margin band (owner decision, Task 14).  The margin on revenue at
+#: Advisory profit-margin band (owner decision).  The margin on revenue at
 #: which a network is classified "at or above target".  It is a *verdict band*: it
 #: never changes physical feasibility, the accounting status, the solver status, a
 #: rerun decision or the choice of an iteration.

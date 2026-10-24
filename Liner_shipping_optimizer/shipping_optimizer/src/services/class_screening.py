@@ -77,7 +77,7 @@ class ClassScreeningConfig:
     # screen). It exists to reproduce the "offer every class" experiment; it is not
     # a production setting.
     economic_screen: bool = True
-    # Task 21: a rotation with no profitable class keeps the legacy (nearest-capacity) class -
+    # A rotation with no profitable class keeps the legacy (nearest-capacity) class -
     # unless that class cannot carry ANY cargo of the rotation inside the transit limits while
     # another class can: then the class that can is offered (best stand-alone result among
     # those).  Off = the Task 10 behaviour exactly.
@@ -384,7 +384,7 @@ class ClassScreener:
                         and not (legacy_eval.direct_ride_feasible_ods > 0
                                  and legacy_eval.best_frequency > 0) and carriers):
                     # the legacy class cannot carry anything of this rotation inside the
-                    # transit limits; a class that can is offered instead (Task 21)
+                    # transit limits; a class that can is offered instead 
                     e = max(carriers, key=lambda x: (x.standalone_profit_best, -x.capacity_teu))
                     e.selected_because = WHY_TIME_FEASIBLE
                     selected = [e]

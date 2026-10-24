@@ -37,7 +37,7 @@ MAX_TRANSFER_PAIRS     = 2000
 
 
 # --------------------------------------------------------------------
-# IP-3 (Phase 7) port-capacity override
+# IP-3 port-capacity override
 # --------------------------------------------------------------------
 # The override map is built locally (no ``maritime.optimizer_bridge``
 # import) to honor the network-isolation boundary: no
@@ -166,12 +166,12 @@ class RegionalAgent(BaseAgent):
         if filter_mode() == MODE_ECONOMIC:
             return self._filter_services_economic(problem, adaptive_budget, corridor_set)
         kept = []
-        # Demand-coherent rotations (Task 9) carry their own demand-based economic
+        # Demand-coherent rotations carry their own demand-based economic
         # evidence and their own budget; they neither pass through the crude
         # capacity x 150 USD margin test below nor use up slots of the legacy cap, so
         # enabling them can only ADD candidates.
         #
-        # Classes chosen by the per-rotation screening (Task 10) are NOT exempt: the
+        # Classes chosen by the per-rotation screening are NOT exempt: the
         # test below is what removes every Feeder_450 (450 x 0.5 x 150 = 33,750 < its
         # 35,000 weekly hire) whatever its economics, and exempting screened classes
         # was measured (5 seeds, tools/pool_experiment.py ``+noexempt``) to give no

@@ -1,4 +1,4 @@
-"""Strategy, utilisation and unserved-demand report of one verified network plan (Task 19).
+"""Strategy, utilisation and unserved-demand report of one verified network plan.
 
 Everything here is DERIVED from the final routed cargo of a ``PlanResult`` (the MILP solution
 and the independent ledger); nothing is a preassigned quota and nothing feeds back into the
@@ -298,6 +298,7 @@ def build_strategy_report(plan, *, fleet=None, distance_matrix=None, speed_facto
         r["share_of_total_demand_pct"] = (100.0 * r["teu"] / total_demand) if total_demand > 0 else 0.0
 
     n_trans = sum(S[g]["transfer_teu"] for g in STRATEGIES)
+    extended = _extended_metrics(S, service_rows, led, served_total, ledger_port, svc_cost_total)
     return {
         "available": True,
         "definition": "strategies are the realised structure of the routed cargo, not quotas; "
@@ -310,11 +311,81 @@ def build_strategy_report(plan, *, fleet=None, distance_matrix=None, speed_facto
         "by_strategy": by_strategy,
         "reconciliation": reconciliation,
         "utilisation": utilisation,
+        "extended_metrics": extended,
         "coverage_by_od": {"fully_served": ods_full, "partially_served": ods_part, "unserved": ods_none,
                            "total": ods_full + ods_part + ods_none},
         "unserved_by_reason": {k: dict(v) for k, v in sorted(unserved_by_reason.items())},
         "services": sorted(service_rows, key=lambda r: r["service"]),
     }
+
+
+def _extended_metrics(S, service_rows, led, served_total, ledger_port, svc_cost_total) -> Dict:
+    """Contribution margin, TEU vessel utilisation, transit time and transshipment volume of the routed plan.
+
+    Everything is derived from the flows and service rows the report already holds (no new model, no estimate);
+    the definitions are stated in the block so a reader of the JSON does not need this source."""
+    # ---- contribution margin: revenue less the cargo-volume costs; the service costs (vessel, fuel, port calls) are
+    # committed by the schedule whatever is carried, so  profit = contribution margin - service cost
+    cm = led.revenue - ledger_port
+    contribution = {
+        "definition": "revenue - cargo-variable costs (handling + transshipment + per-TEU port variable); "
+                      "vessel, fuel and port-call costs are the fixed service costs of the schedule",
+        "revenue_usd": led.revenue, "cargo_variable_cost_usd": ledger_port,
+        "contribution_margin_usd": cm,
+        "contribution_margin_per_teu_usd": (cm / served_total) if served_total > 0 else None,
+        "contribution_margin_pct_of_revenue": (100.0 * cm / led.revenue) if led.revenue > 0 else None,
+        "fixed_service_cost_usd": svc_cost_total,
+        "operating_profit_usd": cm - svc_cost_total,
+    }
+    # ---- TEU vessel utilisation: carried / offered TEU-legs of a service; every vessel of a service sails the same
+    # rotation, so each inherits the service's value
+    rows = [r for r in service_rows if r["load_factor"] is not None]
+    n_ves = sum(r["vessels"] for r in rows)
+    lf = [r["load_factor"] for r in rows]
+    offered = sum(r["offered_teu_legs"] for r in rows)
+    utilisation = {
+        "definition": "carried TEU-legs / offered TEU-legs of the service a vessel sails (vessels of one service share "
+                      "its value); average = network total carried / offered; min / max over services; "
+                      "leg_min / leg_max over the individual legs",
+        "average": (sum(r["carried_teu_legs"] for r in rows) / offered) if offered > 0 else None,
+        "average_service_unweighted": (sum(lf) / len(lf)) if lf else None,
+        "average_vessel_weighted": (sum(r["load_factor"] * r["vessels"] for r in rows) / n_ves) if n_ves else None,
+        "min": min(lf, default=None), "max": max(lf, default=None),
+        "leg_min": min((r["min_leg_load_factor"] for r in rows if r["min_leg_load_factor"] is not None), default=None),
+        "leg_max": max((r["max_leg_load_factor"] for r in rows if r["max_leg_load_factor"] is not None), default=None),
+        "services": len(rows), "vessels": n_ves,
+    }
+    # ---- transit time (days, door-to-door as the path model defines it: sailing + port stays + transfer dwell)
+    allt = [t for g in STRATEGIES for t in S[g]["transit"]]
+    direct_t = S["direct"]["transit"]
+    trans_t = [t for g in STRATEGIES if g != "direct" for t in S[g]["transit"]]
+
+    def wmean(pairs):
+        w = sum(x for _, x in pairs)
+        return (sum(v * x for v, x in pairs) / w) if w > 0 else None
+    transit = {
+        "definition": "days per routed flow (an origin-destination path): sailing + port stays + transfer dwell; "
+                      "mean is TEU-weighted, mean_per_flow is unweighted; min / max over flows",
+        "mean": wmean(allt), "mean_per_flow": (sum(v for v, _ in allt) / len(allt)) if allt else None,
+        "min": min((v for v, _ in allt), default=None), "max": max((v for v, _ in allt), default=None),
+        "p50": _wquantile(allt, 0.5), "p90": _wquantile(allt, 0.9),
+        "mean_direct": wmean(direct_t), "mean_transshipped": wmean(trans_t),
+        "flows": len(allt),
+    }
+    # ---- containers routed through a transshipment (any flow with at least one transfer)
+    trans_teu = sum(S[g]["teu"] for g in STRATEGIES if g != "direct")
+    transshipment = {
+        "definition": "TEU of flows that change service at least once; transfer_moves counts a container once per "
+                      "transfer (two transfers = two moves)",
+        "teu": trans_teu,
+        "share_of_served_teu_pct": (100.0 * trans_teu / served_total) if served_total > 0 else 0.0,
+        "flows": sum(S[g]["flows"] for g in STRATEGIES if g != "direct"),
+        "transfer_moves_teu": sum(S[g]["transfer_teu"] for g in STRATEGIES),
+        "teu_by_type": {g: S[g]["teu"] for g in STRATEGIES if g != "direct"},
+        "direct_teu": S["direct"]["teu"],
+    }
+    return {"contribution_margin": contribution, "vessel_utilisation_teu": utilisation,
+            "transit_time_days": transit, "transshipment": transshipment}
 
 
 def _unserved_reason(di, d, remainder, paths, models, freq, leg_load, free_vessels,

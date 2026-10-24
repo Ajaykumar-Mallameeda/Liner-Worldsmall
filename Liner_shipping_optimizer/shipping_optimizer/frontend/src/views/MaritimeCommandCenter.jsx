@@ -229,7 +229,7 @@ export default function MaritimeCommandCenter() {
             <span
               className="mono-data"
               style={{
-                fontSize: 9,
+                fontSize: 12,
                 color: 'var(--maritime-ink-faint)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.18em',
@@ -530,7 +530,7 @@ export default function MaritimeCommandCenter() {
         >
           <div
             className="grid grid-cols-1 md:grid-cols-3 gap-2 mono-data"
-            style={{ fontSize: 10 }}
+            style={{ fontSize: 12 }}
           >
             {providers.map((p) => (
               <div

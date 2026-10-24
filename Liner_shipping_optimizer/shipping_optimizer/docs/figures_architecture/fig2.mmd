@@ -1,0 +1,64 @@
+flowchart TB
+  subgraph UI["L7 Presentation and service"]
+    FE["React 18 + Vite dashboard<br/>runtimeAdapter, map, regions, console"]
+    BE["FastAPI backend<br/>REST /api/*, WebSocket /ws"]
+  end
+
+  subgraph ORC["L6 Orchestration - OrchestratorAgent"]
+    AN["Problem analysis (LLM text)"]
+    CL["PortClustering k-means, k = 3"]
+    SP["RegionalSplitter, demand by origin"]
+    LOOP["Feedback loop, exactly 3 iterations"]
+    SEL["IterationSelector<br/>Pareto + deterministic score"]
+  end
+
+  subgraph REG["L5 Regional stage x3 parallel"]
+    RA["RegionalAgent"]
+  end
+
+  subgraph GLB["L4 Global reconciliation"]
+    RC["reconcile: union of pools,<br/>one NetworkPlanner solve"]
+  end
+
+  subgraph DEC["Decision layer"]
+    CO["CoordinatorAgent"]
+    CE["ConsensusEngine + validators"]
+    SC["SharedContext"]
+  end
+
+  subgraph NET["L3 Canonical economics and network model"]
+    EC["economics: ServiceModel"]
+    PA["paths: OD paths"]
+    MI["network_milp: CBC"]
+    PO["local search, flow re-opt, repair"]
+    LG["ledger: independent recomputation"]
+  end
+
+  subgraph DAT["L1-L2 Data"]
+    LD["NetworkLoader: unit boundary FFE to TEU"]
+    RAW["data/raw/WorldSmall"]
+  end
+
+  subgraph LLM["Cross-cutting: LLM subsystem"]
+    RT["ProviderRouter"]
+    PR["OpenRouter / Groq / Cerebras / Google"]
+  end
+
+  RAW --> LD --> AN
+  FE <--> BE
+  BE <--> LOOP
+  AN --> CL --> SP --> LOOP
+  LOOP --> RA
+  RA -->|candidate pools, hints| RC
+  RC --> EC --> PA --> MI --> PO --> LG
+  LG -->|verified network_ledger| RC
+  RC -->|verified, additive regional numbers| CO
+  CO --> CE --> SC
+  SC -->|weights, priorities| LOOP
+  LOOP --> SEL
+  SEL -->|pipeline_output.json| BE
+  AN -.-> RT
+  RA -.-> RT
+  CO -.-> RT
+  SEL -.-> RT
+  RT --> PR

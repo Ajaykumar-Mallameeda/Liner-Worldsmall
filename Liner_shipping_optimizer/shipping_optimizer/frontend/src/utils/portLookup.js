@@ -5,6 +5,7 @@
  */
 
 import portCoords from '../assets/port_coordinates.json';
+import { ensurePortData, datasetPortName, datasetPortCoords } from './portRegistry.js';
 
 const PORT_NAMES = {
   CNSHA: 'Shanghai',
@@ -133,22 +134,29 @@ const PORT_NAMES = {
   PHMNL: 'Manila',
 };
 
+// Names and coordinates from the dataset's own ports.csv (utils/portRegistry.js) win over the tables here.
+/** Fetch /data/raw/<dir>/ports.csv once per dataset directory and register its ports. */
+export const ensurePortNames = ensurePortData;
+
 export function getPortName(portCode) {
-  if (!portCode) return 'Unknown Port';
+  if (!portCode) return 'Unknown port';
   const code = String(portCode).toUpperCase().trim();
-  return PORT_NAMES[code] || `Port ${code}`;
+  return datasetPortName(code) || PORT_NAMES[code] || code;
 }
 
 export function getPortFullLabel(portCode) {
   if (!portCode) return '—';
   const code = String(portCode).toUpperCase().trim();
-  const name = PORT_NAMES[code];
+  const name = datasetPortName(code) || PORT_NAMES[code];
   return name ? `${name} (${code})` : code;
 }
 
+/** [lon, lat] of a port, or null when neither the dataset nor the static table has it. */
 export function getPortCoordinates(portCode) {
   if (!portCode) return null;
   const code = String(portCode).toUpperCase().trim();
+  const fromDataset = datasetPortCoords(code);
+  if (fromDataset) return fromDataset;
   if (portCoords[code]) {
     // portCoords is [lat, lng] -> convert to [lng, lat]
     return [portCoords[code][1], portCoords[code][0]];

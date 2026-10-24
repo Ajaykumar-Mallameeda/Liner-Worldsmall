@@ -98,18 +98,8 @@ def _mark_covered(ev, D, ports, cls) -> None:
 
 def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_class: int,
                              max_ports: int = DEFAULT_MAX_PORTS, deadline: Optional[float] = None,
-                             id_prefix: str = "tk", diverse: bool = False,
-                             classes: Optional[Sequence[str]] = None, port_filter: Optional[set] = None,
-                             seed_groups: Optional[Tuple[set, set]] = None,
-                             collect_rejected: Optional[List[Dict]] = None) -> Tuple[List, Dict]:
-    """Return (new candidates, report).  Never raises for an unattainable rotation: it is counted in the report.
-
-    Optional restrictions (used by ``trunk_lanes``; all default None = the original behaviour, unchanged):
-      ``classes``      explicit target classes instead of the under-subscription rule;
-      ``port_filter``  rotations may only call at these ports (in addition to the class draft rule);
-      ``seed_groups``  (A, B): every seed OD has one end in A and the other in B, so the rotation joins the two groups;
-      ``collect_rejected``  a list that receives every grown rotation rejected for a non-positive stand-alone profit (the
-                       input of ``dual_screen``; it changes nothing about what is returned)."""
+                             id_prefix: str = "tk", diverse: bool = False) -> Tuple[List, Dict]:
+    """Return (new candidates, report).  Never raises for an unattainable rotation: it is counted in the report."""
     from src.network.plan import Candidate
     from src.services.demand_coherent import DemandCoherentConfig, _canonical, _Demand, _Evaluator
 
@@ -121,11 +111,8 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
     fleet = problem.fleet
     inventory = {c.vessel_class: int(c.quantity) for c in fleet.classes}
     count = Counter(c.vessel_class for c in candidates)
-    if classes is not None:
-        targets = [c.vessel_class for c in fleet.classes if c.vessel_class in set(classes) and inventory[c.vessel_class] > 0]
-    else:
-        targets = [c.vessel_class for c in fleet.classes
-                   if inventory[c.vessel_class] > 0 and count.get(c.vessel_class, 0) / inventory[c.vessel_class] < PRESSURE_RATIO]
+    targets = [c.vessel_class for c in fleet.classes
+               if inventory[c.vessel_class] > 0 and count.get(c.vessel_class, 0) / inventory[c.vessel_class] < PRESSURE_RATIO]
     rep["target_classes"] = {k: {"candidates": count.get(k, 0), "inventory": inventory[k]} for k in sorted(targets)}
     if not targets:
         rep["reason"] = "no under-subscribed class"
@@ -148,22 +135,8 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
         cls = fleet.get_class(cname)
         cdraft = float(getattr(cls, "draft", 0.0) or 0.0)
         elig = {p for p in lookup if p in known and float(getattr(lookup[p], "draft", 0.0) or 0.0) + 1e-9 >= cdraft}
-        draft_eligible = len(elig)
-        if port_filter is not None:
-            elig &= set(port_filter)
-
-        def _cross(k):
-            if seed_groups is None:
-                return True
-            a_, b_ = seed_groups
-            return (k[0] in a_ and k[1] in b_) or (k[0] in b_ and k[1] in a_)
-
-        seeds = sorted((k for k in D.teu if k[0] in elig and k[1] in elig and k[0] < k[1] and _cross(k)),
+        seeds = sorted((k for k in D.teu if k[0] in elig and k[1] in elig and k[0] < k[1]),
                        key=lambda k: (-D.opportunity(k), k))[:SEED_PAIRS]
-        crep = {"draft_eligible_ports": draft_eligible, "eligible_ports": len(elig), "seed_pairs": len(seeds),
-                "grown_rotations": 0, "rejected_nonpositive_standalone": 0, "rejected_existing_in_pool": 0,
-                "rejected_near_duplicate": 0, "rejected_by_cap": 0, "retained": 0}
-        rep.setdefault("per_class", {})[cname] = crep
         grown: Dict[Tuple[str, ...], Dict] = {}
         for sd in seeds:
             if deadline is not None and time.perf_counter() > deadline:
@@ -204,27 +177,16 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
             if diverse and cur is not None and len(ports) >= 3 and cur["standalone"] > 0.0:
                 _mark_covered(ev, D, ports, cls)
         chosen: List[Dict] = []
-        crep["grown_rotations"] = len(grown)
         for g in sorted(grown.values(), key=lambda g: (-(g["marg"] if diverse else g["m"]["standalone"]), tuple(g["ports"]))):
-            if g["m"]["standalone"] <= 0.0:
-                crep["rejected_nonpositive_standalone"] += 1
-                if collect_rejected is not None:
-                    collect_rejected.append({"ports": list(g["ports"]), "vessel_class": cname,
-                                             "standalone": float(g["m"]["standalone"]), "source": id_prefix})
-                continue
-            if len(chosen) >= per_class:
-                crep["rejected_by_cap"] += 1
+            if g["m"]["standalone"] <= 0.0 or len(chosen) >= per_class:
                 continue
             key = _canonical(g["ports"])
             if (key, cname) in existing:
-                crep["rejected_existing_in_pool"] += 1
                 continue
             pset = set(g["ports"])
             if any(len(pset & set(s["ports"])) / len(pset | set(s["ports"])) >= NEAR_DUPLICATE_JACCARD for s in chosen):
-                crep["rejected_near_duplicate"] += 1
                 continue
             chosen.append(g)
-        crep["retained"] = len(chosen)
         for g in chosen:
             m = g["m"]
             rep["additions"].append({

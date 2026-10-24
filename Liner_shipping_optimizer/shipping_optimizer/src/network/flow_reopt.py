@@ -1,9 +1,9 @@
-"""Flow re-optimisation of a fixed network over the FULL valid path set (Task 20).
+"""Flow re-optimisation of a fixed network over the FULL valid path set.
 
 Why
     The global MILP chooses services, frequencies, vessels and cargo flows jointly, but only
     over the ``max_paths_per_od`` paths per OD that ``paths.py`` keeps (10 of ~53,000 valid
-    paths on WorldSmall).  Measured on recorded plans (reports/tasks_19_20_21): holding the
+    paths on WorldSmall).  Measured on recorded plans (reports): holding the
     plan's services, frequencies and vessels fixed, re-routing the cargo over ALL valid paths
     adds 1.4 - 2.3 M USD/week and about one point of coverage, because capacity that is
     already paid for is out of reach of cargo whose usable paths were cut.
@@ -169,7 +169,7 @@ def reoptimize_flows(models, demands, paths: Dict[int, List], sol, build_all_pat
 
 
 # =====================================================================================
-# Repair of a plan that violates the approved profit floor (Task 20)
+# Repair of a plan that violates the approved profit floor
 # =====================================================================================
 def repair_profit_floor(models, demands, paths: Dict[int, List], sol, build_all_paths,
                         *, floor_usd: float = 0.0, max_rounds: int = 6, trials_per_round: int = 6,

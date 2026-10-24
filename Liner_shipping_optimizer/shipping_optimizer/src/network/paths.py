@@ -32,7 +32,7 @@ the model's size grows with the number of paths (``PathConfig``):
                     model, not a benefit, so this order carries no economic information.
     ``hybrid``      (Task 20) the ``fastest`` rule for all but ``hybrid_cost_slots`` of the
                     slots, which go to the cheapest remaining paths (cost-aware rule).
-    ``cost_aware``  (Task 20) the paths whose *cost of carrying one TEU* is lowest: the
+    ``cost_aware``  the paths whose *cost of carrying one TEU* is lowest: the
                     per-TEU port charges plus the share of the weekly cost of the capacity
                     the path occupies (full-load slot cost, canonical service model).  A
                     reuse penalty keeps the retained set from consisting of near-duplicates
@@ -94,11 +94,11 @@ class PathConfig:
     hybrid_cost_slots: int = 3
     #: after the global MILP, re-route the cargo of the (fixed) network over the full valid
     #: path set (``src/network/flow_reopt.py``): same services, frequencies and vessels.
-    #: Default ON (Task 20): never lowers profit or coverage, ledger-verified
+    #: Default ON: never lowers profit or coverage, ledger-verified
     reoptimize_flows: bool = True
     #: when the plan's profit is below the approved floor (0), switch off the worst services
     #: and re-route (``flow_reopt.repair_profit_floor``); a plan at or above the floor is untouched.
-    #: Default ON (Task 20)
+    #: Default ON 
     repair_profit_floor: bool = True
     #: two-transfer paths are enumerated only for an OD with fewer than this many valid
     #: direct / one-transfer paths ("where needed"); 1 = only ODs with none
@@ -528,7 +528,7 @@ def build_paths(
             else:
                 stats.od_without_path_no_connection += 1
 
-    # ---- pass 2: budgets and selection ------------------------------------------------
+    # budgets and selection ------------------------------------------------
     caps: Dict[int, int] = {}
     if cfg.budget == BUDGET_ADAPTIVE and per_od:
         total = sum(min(max_paths_per_od, len(a) + len(b) + len(c)) for a, b, c in per_od.values())

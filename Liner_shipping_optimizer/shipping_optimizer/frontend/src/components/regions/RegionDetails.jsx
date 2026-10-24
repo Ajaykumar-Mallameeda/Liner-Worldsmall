@@ -18,7 +18,7 @@ export default function RegionDetails({ optimizationState }) {
   if (regions.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-white/40">No regional data available</div>
+        <div className="text-white/60">No regional data available</div>
       </div>
     );
   }
@@ -44,14 +44,14 @@ export default function RegionDetails({ optimizationState }) {
                 { label: "Uncovered TEU", value: fmtNum(sel.uncovered ?? sel.unservedDemand ?? 0), color: "#ef4444" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-lg p-4" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
-                  <div className="text-xs text-white/40 mb-1 font-mono">{label}</div>
+                  <div className="text-xs text-white/60 mb-1 font-mono">{label}</div>
                   <div className="text-xl font-bold font-mono" style={{ color }}>{value}</div>
                 </div>
               ))}
             </div>
 
             <div className="mb-6">
-              <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-3">Cost Breakdown</div>
+              <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-3">Cost Breakdown</div>
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: "Base Operating Cost", value: fmt(sel.operating_cost || sel.cost), color: "#f59e0b" },
@@ -59,7 +59,7 @@ export default function RegionDetails({ optimizationState }) {
                   { label: "Total Weekly Cost", value: fmt(sel.cost), color: "#ef4444" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div className="text-[10px] text-white/40 mb-1 font-mono uppercase tracking-wider">{label}</div>
+                    <div className="text-[12px] text-white/60 mb-1 font-mono uppercase tracking-wider">{label}</div>
                     <div className="text-lg font-bold font-mono text-white/80">{value}</div>
                   </div>
                 ))}
@@ -67,7 +67,7 @@ export default function RegionDetails({ optimizationState }) {
             </div>
 
             <div className="mb-5">
-              <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-3">Service Funnel</div>
+              <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-3">Service Funnel</div>
               {(() => {
                 const gen = sel.generated || 1;
                 const fltPct = ((sel.filtered / gen) * 100).toFixed(0);
@@ -113,7 +113,7 @@ export default function RegionDetails({ optimizationState }) {
             </div>
 
             <div className="mb-5">
-              <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-3">Hub Ports</div>
+              <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-3">Hub Ports</div>
               <div className="flex flex-wrap gap-2">
                 {sel.hubs.map(h => (
                   <div key={h} className="px-3 py-1.5 rounded-lg text-sm font-mono" style={{ background: `${sel.color}15`, color: sel.color, border: `1px solid ${sel.color}33` }}>
@@ -124,7 +124,7 @@ export default function RegionDetails({ optimizationState }) {
             </div>
 
             <div className="rounded-lg p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-3">Optimization Strategy</div>
+              <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-3">Optimization Strategy</div>
               {sel.strategy ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 mb-2">
@@ -135,7 +135,7 @@ export default function RegionDetails({ optimizationState }) {
                     <div className="space-y-1.5">
                       {parseStrategyReasons(sel.strategy).map((reason, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className="text-[10px] font-mono mt-0.5 flex-shrink-0" style={{ color: sel.color }}>R{i+1}</span>
+                          <span className="text-[12px] font-mono mt-0.5 flex-shrink-0" style={{ color: sel.color }}>R{i+1}</span>
                           <span className="text-xs text-white/60 font-mono leading-relaxed">{reason}</span>
                         </div>
                       ))}
@@ -145,11 +145,11 @@ export default function RegionDetails({ optimizationState }) {
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-white/40 font-mono italic">Strategy from optimizer not available</div>
+                <div className="text-sm text-white/60 font-mono italic">Strategy from optimizer not available</div>
               )}
               {sel.explanation && (
                 <div className="mt-3 pt-3 border-t border-white/5">
-                  <div className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-1">Region Report</div>
+                  <div className="text-[12px] text-white/60 font-mono uppercase tracking-widest mb-1">Region Report</div>
                   <p className="text-xs text-white/50 font-mono leading-relaxed">{sel.explanation.slice(0, 200)}{sel.explanation.length > 200 ? "..." : ""}</p>
                 </div>
               )}

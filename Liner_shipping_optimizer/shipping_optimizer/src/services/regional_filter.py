@@ -1,4 +1,4 @@
-"""Regional candidate filter: economics instead of a hard-coded guess (Task 16).
+"""Regional candidate filter: economics instead of a hard-coded guess.
 
 What the legacy ``RegionalAgent._filter_services`` does
     1. keeps a candidate only if it covers a demand corridor of the region (kept here);
@@ -58,7 +58,7 @@ MODE_AUTO = "auto"
 R_KEPT = "kept"
 R_LOOP_EXEMPT = "demand_loop_exempt"
 #: candidate sections that carry their own evidence and budget and so neither pass through
-#: the corridor/cap test nor use up its slots: Task 9 demand-coherent loops and the Task 21
+#: the corridor/cap test nor use up its slots:demand-coherent loops and the 
 #: route-operator variants / elites (all absent unless their switch is on)
 EXEMPT_SECTIONS = ("demand_loop", "elite", "route_operator")
 R_NO_CORRIDOR = "no_corridor"

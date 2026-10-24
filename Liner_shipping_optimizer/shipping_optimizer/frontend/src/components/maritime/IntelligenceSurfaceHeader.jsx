@@ -52,7 +52,7 @@ export default function IntelligenceSurfaceHeader({
             <span
               className="mono-data"
               style={{
-                fontSize: 9,
+                fontSize: 12,
                 color: 'var(--maritime-ink-faint)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.18em',
@@ -72,7 +72,7 @@ export default function IntelligenceSurfaceHeader({
         <div
           className="mt-3 flex items-center gap-3 mono-data"
           style={{
-            fontSize: 10,
+            fontSize: 12,
             color: 'var(--maritime-ink-soft)',
           }}
         >

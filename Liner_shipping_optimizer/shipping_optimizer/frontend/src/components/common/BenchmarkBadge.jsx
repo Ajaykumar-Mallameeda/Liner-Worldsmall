@@ -11,13 +11,13 @@ export default function BenchmarkBadge({ value, benchmark, compact }) {
   const isMet = value >= benchmark.target;
   if (compact) {
     return (
-      <span className="text-[10px] font-mono" style={{ color: isMet ? "#10b981" : "#ef4444" }}>
+      <span className="text-[12px] font-mono" style={{ color: isMet ? "#10b981" : "#ef4444" }}>
         {isMet ? "✓" : "▼"}
       </span>
     );
   }
   return (
-    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono ml-2"
+    <span className="text-[12px] px-1.5 py-0.5 rounded font-mono ml-2"
       style={{ background: isMet ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)", color: isMet ? "#10b981" : "#ef4444" }}>
       {isMet ? "● On Target" : "▼ Below Target"}
     </span>

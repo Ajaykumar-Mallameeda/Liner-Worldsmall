@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiClient } from '../../services/apiClient.js';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
 
 function fmtNum(v) {
   if (v == null) return '—';
@@ -38,13 +39,16 @@ export default function SystemRail({ maritimeOverview, runtime: runtimeProp }) {
   const iterCount = runtime?.iterations?.length || 0;
   const lastIter = iterCount > 0 ? runtime.iterations[iterCount - 1] : null;
   const status = String(sm.status || '').toLowerCase();
+  const sel = selectedIterationOf(runtime);
+  const selIterObj = sel != null ? (runtime?.iterations || []).find((it) => Number(it.iter) === Number(sel)) : null;
+  const selScore = selIterObj && selIterObj.score != null && Number.isFinite(Number(selIterObj.score)) ? Number(selIterObj.score) : null;
 
   const dots = {
     orchestrator: status === 'complete' ? 'green' : status === 'running' ? 'cyan' : 'slate',
     regional: (runtime?.regions && Object.keys(runtime.regions).length > 0) ? 'green' : 'dim',
     ga: lastIter && Number(lastIter.score || 0) > 0 ? 'green' : 'dim',
-    milp: sm.selected_iteration != null || sm.decision_output ? 'green' : 'dim',
-    selection: sm.selected_iteration != null ? 'green' : 'dim',
+    milp: iterCount > 0 ? 'green' : 'dim',
+    selection: sel != null ? 'green' : 'dim',
     decision: sm.selected_services && sm.selected_services.length > 0 ? 'green' : 'dim',
   };
 
@@ -67,17 +71,17 @@ export default function SystemRail({ maritimeOverview, runtime: runtimeProp }) {
       </span>
       <span className="seg">
         <span className={`dot ${dots.ga}`} />
-        <span className="v">GA: {lastIter && Number(lastIter.score || 0) > 0
-          ? `iter ${String(lastIter.iter).padStart(2, '0')} · score ${Number(lastIter.score).toFixed(3)}`
+        <span className="v">GA: {iterCount > 0
+          ? `${iterCount} iter${iterCount === 1 ? '' : 's'}${selScore != null ? ` · selected score ${selScore.toFixed(3)}` : ''}`
           : '—'}</span>
       </span>
       <span className="seg">
         <span className={`dot ${dots.milp}`} />
-        <span className="v">MILP: {sm.selected_iteration != null ? `solved iter ${String(sm.selected_iteration).padStart(2, '0')}` : '—'}</span>
+        <span className="v">MILP: {iterCount > 0 ? `${iterCount} solves` : '—'}</span>
       </span>
       <span className="seg">
         <span className={`dot ${dots.selection}`} />
-        <span className="v">SELECTION: {sm.selected_iteration != null ? `iter ${String(sm.selected_iteration).padStart(2, '0')}` : '—'}</span>
+        <span className="v">SELECTION: {sel != null ? `iter ${String(sel).padStart(2, '0')}` : '—'}</span>
       </span>
       <span className="seg">
         <span className={`dot ${dots.decision}`} />

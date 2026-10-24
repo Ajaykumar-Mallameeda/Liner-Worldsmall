@@ -13,6 +13,9 @@ import { useOptimizationState } from '../../hooks/useOptimizationState.js';
 import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Kv, Stat, DecisionChain, Provenance } from '../../components/console/p12.jsx';
+import InspectBanner from '../../components/console/InspectBanner.jsx';
+import { fmtConfidence } from '../../utils/formatters.js';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
 
 const h = createElement;
 const F = Fragment;
@@ -56,18 +59,18 @@ function fmtSec(v) {
 function fmtDelta(v, unit = '', dec = 1) {
   if (v == null) return EM;
   const n = Number(v);
-  return (n >= 0 ? '+' : '') + n.toFixed(dec) + unit;
+  return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(dec) + unit;
 }
 
 function fmtDeltaUsd(v) {
   if (v == null) return EM;
   const n = Number(v);
-  const sign = n >= 0 ? '+' : '';
   const abs = Math.abs(n);
-  return abs >= 1e9 ? sign + '$' + (n / 1e9).toFixed(2) + 'B'
-       : abs >= 1e6 ? sign + '$' + (n / 1e6).toFixed(1) + 'M'
-       : abs >= 1e3 ? sign + '$' + (n / 1e3).toFixed(0) + 'K'
-       : sign + '$' + Math.round(n);
+  const s = n >= 0 ? '+' : '−';
+  return abs >= 1e9 ? s + '$' + (abs / 1e9).toFixed(2) + 'B'
+       : abs >= 1e6 ? s + '$' + (abs / 1e6).toFixed(1) + 'M'
+       : abs >= 1e3 ? s + '$' + (abs / 1e3).toFixed(0) + 'K'
+       : s + '$' + Math.round(abs);
 }
 
 function deltaColor(v) {
@@ -79,7 +82,7 @@ function SLabel({ children, style: extra }) {
   return h('div', {
     style: {
       fontFamily: 'var(--cx-mono)',
-      fontSize: 9,
+      fontSize: 12,
       color: 'var(--cx-text-faint)',
       textTransform: 'uppercase',
       letterSpacing: '0.14em',
@@ -99,7 +102,7 @@ function KvRow({ label, value, tone, sub }) {
       padding: '4.5px 0',
       borderBottom: '1px solid rgba(255,255,255,0.05)',
       fontFamily: 'var(--cx-mono)',
-      fontSize: 9.5,
+      fontSize: 12,
     },
   },
     h('span', {
@@ -136,21 +139,21 @@ function KvRow({ label, value, tone, sub }) {
       sub && h('span', {
         style: {
           color: 'var(--cx-text-faint)',
-          fontSize: 8,
+          fontSize: 12,
         },
       }, sub),
     ),
   );
 }
 
-function DRow({ label, value, unit = '', isUsd = false, style: ex }) {
+function DRow({ label, value, unit = '', isUsd = false, dec = 1, style: ex }) {
   if (value == null) return null;
-  const formatted = isUsd ? fmtDeltaUsd(value) : fmtDelta(value, unit);
+  const formatted = isUsd ? fmtDeltaUsd(value) : fmtDelta(value, unit, dec);
   const color = deltaColor(value);
   return h('div', {
     style: {
       display: 'flex', justifyContent: 'space-between',
-      fontFamily: 'var(--cx-mono)', fontSize: 10, padding: '3px 0', ...ex,
+      fontFamily: 'var(--cx-mono)', fontSize: 12, padding: '3px 0', ...ex,
     },
   },
     h('span', { style: { color: 'var(--cx-text-faint)' } }, label),
@@ -164,7 +167,7 @@ function WeightBar({ label, value, color }) {
     h('div', {
       style: {
         display: 'flex', justifyContent: 'space-between',
-        fontFamily: 'var(--cx-mono)', fontSize: 9,
+        fontFamily: 'var(--cx-mono)', fontSize: 12,
         color: 'var(--cx-text-faint)', marginBottom: 2,
       },
     },
@@ -192,7 +195,7 @@ function WeightDelta({ label, prev, curr }) {
   const color = deltaColor(delta);
   return h('div', {
     style: {
-      fontFamily: 'var(--cx-mono)', fontSize: 9,
+      fontFamily: 'var(--cx-mono)', fontSize: 12,
       padding: '3px 0',
       borderBottom: '1px solid var(--cx-edge-soft)',
     },
@@ -213,7 +216,7 @@ function WeightDelta({ label, prev, curr }) {
 
 const CHAIN = [
   { id: 'orchestrator',        label: '00', name: 'Orchestrator',        desc: 'Receives the run request' },
-  { id: 'coordinator',         label: '01', name: 'Coordinator',         desc: 'Decomposes the plan into 5 regional agents' },
+  { id: 'coordinator',         label: '01', name: 'Coordinator',         desc: 'Splits the plan across the regional agents' },
   { id: 'regional_agents',     label: '02', name: 'Regional Agents',     desc: 'Per-region GA + service generation' },
   { id: 'milp',                label: '03', name: 'MILP Solve',          desc: 'Stitched problem solved deterministically' },
   { id: 'iteration_selection', label: '04', name: 'Iteration Selection', desc: 'Canonical pick across iterations' },
@@ -250,10 +253,10 @@ export default function DecisionCenter(props) {
   const topRegions = (runtimeProp && runtimeProp.regions) || optState.regions || {};
 
   const iterSelMeta = gbl.iteration_selection || {};
-  const pipelineSelectedIter = gbl.selected_iteration ?? 0;
+  const pipelineSelectedIter = selectedIterationOf((runtimeProp && runtimeProp.global) ? runtimeProp : optState) ?? 0;
   const iterCount = scorecards.length > 0 ? scorecards.length : rawIters.length;
   const allComplete = iterCount > 0;
-  const runId = gbl.run_id || 'N/A';
+  const runId = gbl.run_id || '—';
 
   // User inspection state
   const [inspectIter, setInspectIter] = useState(null);
@@ -330,6 +333,7 @@ export default function DecisionCenter(props) {
     }),
 
     h('div', { className: 'cx-page-body' },
+      h(InspectBanner, { inspecting: inspectIter, selected: pipelineSelectedIter, onReset: () => setInspectIter(null) }),
 
       // ── 1. Top KPI Strip ──────────────────────────────────────────────────
       h('div', { className: 'cx-grid-12', style: { marginBottom: 16 } },
@@ -417,10 +421,11 @@ export default function DecisionCenter(props) {
             h('div', null,
               h(SLabel, null, 'Financial & System Execution'),
               h(KvRow, { label: 'Gross Revenue',    value: gbl.revenue != null ? fmtUsd(gbl.revenue) : EM }),
-              h(KvRow, { label: 'Operating Cost',   value: gbl.operatingCost != null ? fmtUsd(gbl.operatingCost) : EM }),
+              h(KvRow, { label: 'Vessel Operating', value: gbl.operatingCost != null ? fmtUsd(gbl.operatingCost) : EM }),
               h(KvRow, { label: 'Fuel Cost',        value: gbl.fuelCost != null ? fmtUsd(gbl.fuelCost) : EM }),
               h(KvRow, { label: 'Port Tariffs',     value: gbl.portCost != null ? fmtUsd(gbl.portCost) : EM }),
               h(KvRow, { label: 'Transshipment',    value: gbl.transshipCost != null ? fmtUsd(gbl.transshipCost) : EM }),
+              h(KvRow, { label: 'Total Cost',       value: gbl.totalCost != null ? fmtUsd(gbl.totalCost) : EM }),
               h(KvRow, { label: 'Profit Margin',    value: gbl.margin != null ? fmtPct(gbl.margin) : EM, tone: 'good' }),
               h(KvRow, { label: 'Total Runtime',    value: gbl.runtime != null ? fmtSec(gbl.runtime) : EM }),
             ),
@@ -463,7 +468,7 @@ export default function DecisionCenter(props) {
             },
               h('div', {
                 style: {
-                  fontFamily: 'var(--cx-mono)', fontSize: 11.5, fontWeight: 700,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 700,
                   color: isActive ? '#00f5ff' : 'var(--cx-text)',
                   marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 },
@@ -471,7 +476,7 @@ export default function DecisionCenter(props) {
                 h('span', null, 'ITER ' + String(sc.iteration).padStart(2, '0')),
                 h('span', {
                   style: {
-                    fontSize: 8, padding: '2px 6px',
+                    fontSize: 12, padding: '2px 6px',
                     background: isPipeline ? '#10b981' : (isPareto ? '#bf5fff' : 'rgba(255,255,255,0.08)'),
                     color: (isPipeline || isPareto) ? '#0a0e1a' : 'var(--cx-text-faint)',
                     letterSpacing: '0.06em',
@@ -480,7 +485,7 @@ export default function DecisionCenter(props) {
               ),
               h('div', { className: 'p12-kv-grid' },
                 h(Kv, { k: 'score',           v: sc.convergence_score?.toFixed(3) ?? EM }),
-                h(Kv, { k: 'avg coverage',    v: fmtPct(sc.average_regional_coverage) }),
+                h(Kv, { k: 'regional avg coverage',    v: fmtPct(sc.average_regional_coverage) }),
                 h(Kv, { k: 'global coverage', v: fmtPct(sc.global_demand_weighted_coverage) }),
                 h(Kv, { k: 'profit',          v: fmtUsd(sc.weekly_profit) }),
                 h(Kv, { k: 'services',        v: fmtNum(sc.services_deployed) }),
@@ -516,12 +521,12 @@ export default function DecisionCenter(props) {
                     h(DRow, { label: 'Global Coverage',       value: activeSC.global_demand_weighted_coverage - prevSC.global_demand_weighted_coverage, unit: ' pp' }),
                     h(DRow, { label: 'Weekly Profit',         value: activeSC.weekly_profit - prevSC.weekly_profit, isUsd: true }),
                     h(DRow, { label: 'Services Deployed',     value: activeSC.services_deployed - prevSC.services_deployed, unit: '' }),
-                    h(DRow, { label: 'Score ×10⁻³',           value: (activeSC.convergence_score - prevSC.convergence_score) * 1000, unit: '' }),
+                    h(DRow, { label: 'Convergence score', value: activeSC.convergence_score - prevSC.convergence_score, unit: '', dec: 3 }),
                     h(DRow, { label: 'Satisfied Demand',      value: activeSC.satisfied_demand - prevSC.satisfied_demand, unit: ' TEU' }),
                     h(DRow, { label: 'Unserved Demand',       value: activeSC.unserved_demand - prevSC.unserved_demand, unit: ' TEU' }),
                     h(DRow, { label: 'Profit Margin',         value: activeSC.profit_margin_pct - prevSC.profit_margin_pct, unit: ' pp' }),
                   )
-                : h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } },
+                : h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } },
                     'BASELINE — no previous iteration for comparison'
                   ),
             )
@@ -536,7 +541,7 @@ export default function DecisionCenter(props) {
                     h(WeightDelta, { label: 'COVERAGE WEIGHT', prev: prevSC.weights_used.coverage_weight, curr: activeSC.weights_used.coverage_weight }),
                     h(WeightDelta, { label: 'COST WEIGHT',     prev: prevSC.weights_used.cost_weight,     curr: activeSC.weights_used.cost_weight }),
                   )
-                : h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } },
+                : h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } },
                     prevIterNum != null ? 'No weight data for previous iteration' : 'Baseline — no previous weights',
                   ),
             )
@@ -547,7 +552,7 @@ export default function DecisionCenter(props) {
               h(SLabel, null, 'ITER ' + String(activeIterNum).padStart(2, '0') + ' detail'),
               activeSC && h('div', { className: 'p12-kv-grid' },
                 h(Kv, { k: 'score',           v: activeSC.convergence_score?.toFixed(3) ?? EM }),
-                h(Kv, { k: 'avg coverage',    v: fmtPct(activeSC.average_regional_coverage) }),
+                h(Kv, { k: 'regional avg coverage',    v: fmtPct(activeSC.average_regional_coverage) }),
                 h(Kv, { k: 'global coverage', v: fmtPct(activeSC.global_demand_weighted_coverage) }),
                 h(Kv, { k: 'profit',          v: fmtUsd(activeSC.weekly_profit) }),
                 h(Kv, { k: 'margin',          v: fmtPct(activeSC.profit_margin_pct) }),
@@ -562,11 +567,11 @@ export default function DecisionCenter(props) {
               activeIter && h('div', { style: { marginTop: 8 }, className: 'p12-kv-grid' },
                 h(Kv, { k: 'rerun', v: activeIter.rerun ? 'YES' : 'NO', tone: activeIter.rerun ? 'warn' : 'available' }),
                 activeIter.coverageGap != null && h(Kv, { k: 'coverage gap', v: fmtDelta(-activeIter.coverageGap, ' pp') }),
-                h(Kv, { k: 'selected as final', v: activeIter.selected_as_final ? 'YES' : (activeIter.selected_as_final === false ? 'NO' : EM), tone: activeIter.selected_as_final ? 'available' : 'no_data' }),
+                h(Kv, { k: 'selected as final', v: activeIterNum === pipelineSelectedIter ? 'YES' : 'NO', tone: activeIterNum === pipelineSelectedIter ? 'available' : 'no_data' }),
                 activeIter.atIterationCap && h(Kv, { k: 'cap reached', v: 'YES — max iterations', tone: 'warn' }),
               ),
               activeIter?.reason && h('div', {
-                style: { marginTop: 6, fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', lineHeight: 1.5, borderTop: '1px solid var(--cx-edge-soft)', paddingTop: 5 },
+                style: { marginTop: 6, fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', lineHeight: 1.5, borderTop: '1px solid var(--cx-edge-soft)', paddingTop: 5 },
               },
                 h('span', { style: { color: 'var(--cx-text)', marginRight: 6 } }, 'REASON'),
                 activeIter.reason,
@@ -589,7 +594,7 @@ export default function DecisionCenter(props) {
               display: 'grid',
               gridTemplateColumns: `90px repeat(${iterCount}, 1fr)`,
               gap: '4px 12px',
-              fontFamily: 'var(--cx-mono)', fontSize: 9,
+              fontFamily: 'var(--cx-mono)', fontSize: 12,
               marginBottom: 14,
             },
           },
@@ -641,18 +646,18 @@ export default function DecisionCenter(props) {
             },
               h('div', { style: { padding: '8px 12px 8px 0' } },
                 h('div', {
-                  style: { fontFamily: 'var(--cx-mono)', fontSize: 11, fontWeight: 700, color: isSelected ? '#34d399' : 'var(--cx-text)', marginBottom: 6 },
+                  style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 700, color: isSelected ? '#34d399' : 'var(--cx-text)', marginBottom: 6 },
                 }, 'ITER ' + String(it.iter).padStart(2, '0') + (isSelected ? ' ★ SELECTED' : '')),
                 h('div', { className: 'p12-kv-grid' },
                   h(Kv, { k: 'rerun', v: it.rerun ? 'YES' : 'NO', tone: it.rerun ? 'warn' : 'available' }),
                   it.coverageGap != null && h(Kv, { k: 'coverage gap', v: it.coverageGap.toFixed(2) + ' pp', tone: it.coverageGap > 0 ? 'warn' : 'available' }),
-                  h(Kv, { k: 'conflict severity', v: String(it.conflictSeverity ?? 0), tone: (it.conflictSeverity ?? 0) > 0 ? 'warn' : 'available' }),
+                  h(Kv, { k: 'conflict severity', v: String(it.conflictSeverity ?? '—'), tone: (it.conflictSeverity ?? 0) > 0 ? 'warn' : 'available' }),
                   it.lowCoverage != null && h(Kv, { k: 'low coverage', v: it.lowCoverage ? 'YES' : 'NO', tone: it.lowCoverage ? 'warn' : 'available' }),
                   it.atIterationCap && h(Kv, { k: 'iteration cap', v: 'YES — halted', tone: 'warn' }),
-                  it.selected_as_final != null && h(Kv, { k: 'selected as final', v: it.selected_as_final ? 'YES' : 'NO', tone: it.selected_as_final ? 'available' : 'no_data' }),
+                  h(Kv, { k: 'selected as final', v: it.iter === pipelineSelectedIter ? 'YES' : 'NO', tone: it.iter === pipelineSelectedIter ? 'available' : 'no_data' }),
                 ),
                 it.reason && h('div', {
-                  style: { marginTop: 5, fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', lineHeight: 1.5, wordBreak: 'break-word' },
+                  style: { marginTop: 5, fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', lineHeight: 1.5, wordBreak: 'break-word' },
                 }, it.reason),
                 it.weight_adjustments && h('div', { style: { marginTop: 6 } },
                   h(SLabel, null, 'Proposed next weights'),
@@ -674,7 +679,7 @@ export default function DecisionCenter(props) {
                 h(Kv, { k: 'status', v: doEval.status || EM, tone: doEval.status === 'good' ? 'available' : 'warn' }),
               ),
               doEval.reasons?.length > 0 && h('div', {
-                style: { marginTop: 4, fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)', lineHeight: 1.6 },
+                style: { marginTop: 4, fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', lineHeight: 1.6 },
               }, doEval.reasons.map((r, i) => h('div', { key: i }, '· ' + r))),
             )
           ),
@@ -682,7 +687,7 @@ export default function DecisionCenter(props) {
             h('div', { style: { padding: '8px 12px', borderTop: '1px solid var(--cx-edge-soft)' } },
               h(SLabel, null, 'Coordinator proposed actions (decision_output.decisions)'),
               doDecisions.actions.map((a, i) =>
-                h('div', { key: i, style: { marginBottom: 6, fontFamily: 'var(--cx-mono)', fontSize: 9 } },
+                h('div', { key: i, style: { marginBottom: 6, fontFamily: 'var(--cx-mono)', fontSize: 12 } },
                   h('div', { style: { color: '#22d3ee' } }, '· ' + (a.region || '?')),
                   h('div', { style: { color: 'var(--cx-text-faint)', paddingLeft: 8 } }, a.action || ''),
                   a.expected_gain && h('div', { style: { color: '#34d399', paddingLeft: 8 } }, a.expected_gain),
@@ -718,23 +723,23 @@ export default function DecisionCenter(props) {
               h(SLabel, null, 'Feasibility & Dominance Filter'),
               h(KvRow, {
                 label: 'Selection Method',
-                value: iterSelMeta.selection_method ? iterSelMeta.selection_method.replace(/_/g, ' ') : 'Multi-Objective Pareto',
+                value: iterSelMeta.selection_method ? iterSelMeta.selection_method.replace(/_/g, ' ') : EM,
               }),
               h(KvRow, {
                 label: 'Pareto Set',
-                value: (iterSelMeta.pareto_optimal_iterations || []).map(i => 'ITER ' + String(i).padStart(2, '0')).join(', ') || 'ITER 00, ITER 01',
+                value: (iterSelMeta.pareto_optimal_iterations || []).map(i => 'ITER ' + String(i).padStart(2, '0')).join(', ') || 'none',
                 tone: 'good',
               }),
               h(KvRow, {
                 label: 'Dominated Set',
-                value: scorecards.filter(s => !s.pareto_optimal).map(s => 'ITER ' + String(s.iteration).padStart(2, '0')).join(', ') || 'ITER 02',
+                value: scorecards.filter(s => !s.pareto_optimal).map(s => 'ITER ' + String(s.iteration).padStart(2, '0')).join(', ') || 'none',
                 tone: 'warn',
               }),
-              h(KvRow, { label: 'Selection Confidence', value: iterSelMeta.confidence != null ? fmtPct(iterSelMeta.confidence * 100) : '98.0%' }),
-              h(KvRow, { label: 'Constraint Violations', value: '0 violations', tone: 'good' }),
+              h(KvRow, { label: 'Selection Confidence', value: fmtConfidence(iterSelMeta.confidence, iterSelMeta.selection_method) }),
+              h(KvRow, { label: 'Constraint Violations', value: 'not reported' }),
               h('div', {
                 style: {
-                  marginTop: 8, fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                  marginTop: 8, fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', lineHeight: 1.4,
                   borderLeft: '2px solid var(--cx-edge-soft)', paddingLeft: 6,
                 },
@@ -751,7 +756,7 @@ export default function DecisionCenter(props) {
                   gridTemplateColumns: '90px repeat(3, 1fr)',
                   gap: '4px 8px',
                   fontFamily: 'var(--cx-mono)',
-                  fontSize: 9,
+                  fontSize: 12,
                 },
               },
                 h('span', { style: { color: 'var(--cx-text-faint)', borderBottom: '1px solid var(--cx-divider-2)', paddingBottom: 2 } }, 'REGION'),
@@ -784,7 +789,7 @@ export default function DecisionCenter(props) {
             gridTemplateColumns: '110px repeat(7, 1fr)',
             gap: '2px 8px',
             fontFamily: 'var(--cx-mono)',
-            fontSize: 9,
+            fontSize: 12,
             padding: '10px 14px',
           },
         },
@@ -822,7 +827,7 @@ export default function DecisionCenter(props) {
         style: { marginBottom: 16 },
       },
         (Object.keys(llmAgg).length === 0 && Object.keys(llmMet).length === 0)
-          ? h('div', { style: { padding: 12, fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text-faint)' } },
+          ? h('div', { style: { padding: 12, fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } },
               'STATUS: NOT REPORTED'
             )
           : h('div', {
@@ -843,14 +848,14 @@ export default function DecisionCenter(props) {
                 },
               },
                 h(SLabel, null, 'Global LLM Metrics'),
-                h(KvRow, { label: 'Total Calls', value: String(llmMet.llm_calls ?? 6) }),
-                h(KvRow, { label: 'Coordinator Calls', value: String(llmMet.coordinator_llm_calls ?? 1) }),
-                h(KvRow, { label: 'JSON Parse Success', value: String(llmMet.coordinator_json_parse_success ?? 1), tone: 'good' }),
-                h(KvRow, { label: 'Coordinator Fallbacks', value: String(llmMet.coordinator_fallback_count ?? 0) }),
+                h(KvRow, { label: 'Total Calls', value: String(llmMet.llm_calls ?? '—') }),
+                h(KvRow, { label: 'Coordinator Calls', value: String(llmMet.coordinator_llm_calls ?? '—') }),
+                h(KvRow, { label: 'JSON Parse Success', value: String(llmMet.coordinator_json_parse_success ?? '—'), tone: 'good' }),
+                h(KvRow, { label: 'Coordinator Fallbacks', value: String(llmMet.coordinator_fallback_count ?? '—') }),
                 h(KvRow, { label: 'AI Generated', value: llmMet.coordinator_ai_generated ? 'YES' : 'NO', tone: llmMet.coordinator_ai_generated ? 'good' : 'warn' }),
-                h(KvRow, { label: 'Service Gen Regions', value: String(llmMet.servicegen_regions ?? 5) }),
-                h(KvRow, { label: 'Service Gen AI', value: String(llmMet.servicegen_ai_count ?? 0) }),
-                h(KvRow, { label: 'Service Gen Fallbacks', value: String(llmMet.servicegen_fallback_count ?? 5), tone: 'warn' }),
+                h(KvRow, { label: 'Service Gen Regions', value: String(llmMet.servicegen_regions ?? '—') }),
+                h(KvRow, { label: 'Service Gen AI', value: String(llmMet.servicegen_ai_count ?? '—') }),
+                h(KvRow, { label: 'Service Gen Fallbacks', value: String(llmMet.servicegen_fallback_count ?? '—'), tone: 'warn' }),
               ),
               // Card 2: Coordinator Agent
               h('div', {
@@ -862,13 +867,13 @@ export default function DecisionCenter(props) {
                 },
               },
                 h(SLabel, null, 'Coordinator Agent'),
-                h(KvRow, { label: 'Provider', value: coordAgg.coordinator_provider || 'Google' }),
-                h(KvRow, { label: 'Model', value: coordAgg.coordinator_model ? coordAgg.coordinator_model.replace('gemini-', '').slice(0, 14) : 'gemini-flash' }),
-                h(KvRow, { label: 'Attempts', value: String(coordAgg.coordinator_llm_attempts ?? 3) }),
-                h(KvRow, { label: 'Successes', value: String(coordAgg.coordinator_llm_successes ?? 3), tone: 'good' }),
-                h(KvRow, { label: 'Failures', value: String(coordAgg.coordinator_llm_failures ?? 0) }),
-                h(KvRow, { label: 'Latency', value: fmtSec(coordAgg.coordinator_llm_latency_sec ?? 138) }),
-                h(KvRow, { label: 'Decision Source', value: (coordAgg.coordinator_decision_source || 'LLM').toUpperCase(), tone: 'accent' }),
+                h(KvRow, { label: 'Provider', value: coordAgg.coordinator_provider || '—' }),
+                h(KvRow, { label: 'Model', value: coordAgg.coordinator_model ? coordAgg.coordinator_model.replace('gemini-', '').slice(0, 14) : '—' }),
+                h(KvRow, { label: 'Attempts', value: String(coordAgg.coordinator_llm_attempts ?? '—') }),
+                h(KvRow, { label: 'Successes', value: String(coordAgg.coordinator_llm_successes ?? '—'), tone: 'good' }),
+                h(KvRow, { label: 'Failures', value: String(coordAgg.coordinator_llm_failures ?? '—') }),
+                h(KvRow, { label: 'Latency', value: fmtSec(coordAgg.coordinator_llm_latency_sec) }),
+                h(KvRow, { label: 'Decision Source', value: (coordAgg.coordinator_decision_source || '—').toUpperCase(), tone: 'accent' }),
                 h(KvRow, { label: 'Decision Consumed', value: coordAgg.coordinator_decision_consumed ? 'YES' : 'NO', tone: 'good' }),
               ),
               // Card 3: Iteration Selector
@@ -881,14 +886,14 @@ export default function DecisionCenter(props) {
                 },
               },
                 h(SLabel, null, 'Iteration Selector'),
-                h(KvRow, { label: 'Provider', value: iterSelAgg.iteration_selector_provider || 'Google' }),
-                h(KvRow, { label: 'Attempts', value: String(iterSelAgg.iteration_selector_llm_attempts ?? 1) }),
-                h(KvRow, { label: 'Latency', value: fmtSec(iterSelAgg.iteration_selector_llm_latency_sec ?? 2.9) }),
+                h(KvRow, { label: 'Provider', value: iterSelAgg.iteration_selector_provider || '—' }),
+                h(KvRow, { label: 'Attempts', value: String(iterSelAgg.iteration_selector_llm_attempts ?? '—') }),
+                h(KvRow, { label: 'Latency', value: fmtSec(iterSelAgg.iteration_selector_llm_latency_sec) }),
                 h(KvRow, { label: 'Fallback Used', value: iterSelAgg.iteration_selector_fallback ? 'YES' : 'NO', tone: iterSelAgg.iteration_selector_fallback ? 'warn' : 'good' }),
-                h(KvRow, { label: 'Fallback Reason', value: iterSelAgg.iteration_selector_fallback_reason ? 'Unavailable' : EM }),
-                h(KvRow, { label: 'Selection Source', value: iterSelAgg.selection_source ? 'Deterministic' : 'Multi-Objective', tone: 'accent' }),
+                h(KvRow, { label: 'Fallback Reason', value: iterSelAgg.iteration_selector_fallback_reason || EM }),
+                h(KvRow, { label: 'Selection Source', value: iterSelAgg.selection_source ? String(iterSelAgg.selection_source).replace(/_/g, ' ') : EM, tone: 'accent' }),
                 h(KvRow, { label: 'Selected Iter', value: 'ITER ' + String(iterSelAgg.iteration_selected ?? pipelineSelectedIter).padStart(2, '0') }),
-                h(KvRow, { label: 'Confidence', value: fmtPct((iterSelMeta.confidence ?? 0.98) * 100), tone: 'good' }),
+                h(KvRow, { label: 'Confidence', value: fmtConfidence(iterSelMeta.confidence, iterSelMeta.selection_method) }),
               ),
               // Card 4: Provider Telemetry & Consensus
               h('div', {
@@ -900,11 +905,11 @@ export default function DecisionCenter(props) {
                 },
               },
                 h(SLabel, null, 'Provider Telemetry'),
-                h(KvRow, { label: 'Total Attempts', value: String(provTelemetry.attempts ?? 57) }),
-                h(KvRow, { label: 'Successes', value: String(provTelemetry.successes ?? 35), tone: 'good' }),
-                h(KvRow, { label: 'Failures', value: String(provTelemetry.failures ?? 22), tone: 'warn' }),
-                h(KvRow, { label: 'Fallback Uses', value: String(provTelemetry.fallback_uses ?? 35) }),
-                h(KvRow, { label: 'Provider Switches', value: String(provTelemetry.provider_switches ?? 45) }),
+                h(KvRow, { label: 'Total Attempts', value: String(provTelemetry.attempts ?? '—') }),
+                h(KvRow, { label: 'Successes', value: String(provTelemetry.successes ?? '—'), tone: 'good' }),
+                h(KvRow, { label: 'Failures', value: String(provTelemetry.failures ?? '—'), tone: 'warn' }),
+                h(KvRow, { label: 'Fallback Uses', value: String(provTelemetry.fallback_uses ?? '—') }),
+                h(KvRow, { label: 'Provider Switches', value: String(provTelemetry.provider_switches ?? '—') }),
                 globalConsensus?.confidence_score != null && h('div', { style: { marginTop: 6, paddingTop: 4, borderTop: '1px solid var(--cx-edge-soft)' } },
                   h(SLabel, { style: { marginBottom: 3 } }, 'Consensus'),
                   h(KvRow, { label: 'Confidence', value: fmtPct(globalConsensus.confidence_score * 100), tone: 'good' }),
@@ -928,13 +933,13 @@ export default function DecisionCenter(props) {
               gridTemplateColumns: 'repeat(11, max-content)',
               gap: '2px 16px',
               fontFamily: 'var(--cx-mono)',
-              fontSize: 9,
+              fontSize: 12,
               padding: '8px 12px',
               minWidth: 'max-content',
             },
           },
             // Header
-            ...['ITER', 'SCORE', 'Δ SCORE', 'PROFIT', 'Δ PROFIT', 'AVG COV', 'Δ COV', 'SERVICES', 'PARETO', 'RERUN', 'STATUS'].map(col =>
+            ...['ITER', 'SCORE', 'Δ SCORE', 'PROFIT', 'Δ PROFIT', 'REG AVG COV', 'Δ COV', 'SERVICES', 'PARETO', 'RERUN', 'STATUS'].map(col =>
               h('span', {
                 key: 'h-' + col,
                 style: {
@@ -953,7 +958,7 @@ export default function DecisionCenter(props) {
               const dCov    = prev ? ((sc.average_regional_coverage ?? 0) - (prev.average_regional_coverage ?? 0)) : null;
               const isPipeline = sc.iteration === pipelineSelectedIter;
               const isActive   = sc.iteration === activeIterNum;
-              const statusText = it.selected_as_final ? 'SELECTED ★' : (paretoSet.has(sc.iteration) ? 'PARETO' : (isPipeline ? 'SELECTED ★' : 'CANDIDATE'));
+              const statusText = isPipeline ? 'SELECTED ★' : (paretoSet.has(sc.iteration) ? 'PARETO' : 'DOMINATED');
 
               return [
                 h('span', {
@@ -965,7 +970,7 @@ export default function DecisionCenter(props) {
                   },
                 }, 'ITER ' + String(sc.iteration).padStart(2, '0')),
                 h('span', { key: sc.iteration + '-score', style: { color: 'var(--cx-text-dim)', whiteSpace: 'nowrap' } }, sc.convergence_score?.toFixed(3) ?? EM),
-                h('span', { key: sc.iteration + '-dscore', style: { color: deltaColor(dScore), whiteSpace: 'nowrap' } }, dScore != null ? fmtDelta(dScore * 1000, '×10⁻³', 1) : EM),
+                h('span', { key: sc.iteration + '-dscore', style: { color: deltaColor(dScore), whiteSpace: 'nowrap' } }, dScore != null ? fmtDelta(dScore, '', 3) : EM),
                 h('span', { key: sc.iteration + '-profit', style: { color: 'var(--cx-text-dim)', whiteSpace: 'nowrap' } }, fmtUsd(sc.weekly_profit)),
                 h('span', { key: sc.iteration + '-dprofit', style: { color: deltaColor(dProfit), whiteSpace: 'nowrap' } }, dProfit != null ? fmtDeltaUsd(dProfit) : EM),
                 h('span', { key: sc.iteration + '-cov', style: { color: 'var(--cx-text-dim)', whiteSpace: 'nowrap' } }, fmtPct(sc.average_regional_coverage)),

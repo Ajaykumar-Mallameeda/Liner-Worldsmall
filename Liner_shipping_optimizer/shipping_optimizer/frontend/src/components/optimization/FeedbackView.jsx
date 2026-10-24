@@ -19,7 +19,7 @@ export default function FeedbackView({ optimizationState }) {
               border: `1px solid ${it.rerun ? "#ef444433" : "#10b98133"}`
             }}>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-mono text-white/40 uppercase tracking-widest">Iteration {it.iter}</span>
+              <span className="text-xs font-mono text-white/60 uppercase tracking-widest">Iteration {it.iter}</span>
               <div className="flex items-center gap-1">
                 {it.selected_as_final && (
                   <span className="text-xs px-2 py-0.5 rounded font-mono" style={{ background: "rgba(0,212,255,0.2)", color: "#00d4ff" }}>
@@ -32,23 +32,23 @@ export default function FeedbackView({ optimizationState }) {
               </div>
             </div>
             <div className="text-2xl font-bold font-mono text-white mb-1">{fmt(it.profit)}</div>
-            <div className="text-xs text-white/40 mb-3">weekly profit</div>
+            <div className="text-xs text-white/60 mb-3">weekly profit</div>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {/* PROJECT X: two coverage metrics side by side.
                   `coverage`        = regional average (feedback loop).
                   `globalCoverage`  = demand-weighted (network KPI). */}
               <div className="rounded p-2" style={{ background: "rgba(255,255,255,0.04)" }}>
-                <div className="text-xs text-white/40 font-mono">Reg.Cov</div>
+                <div className="text-xs text-white/60 font-mono">Reg.Cov</div>
                 <div className="text-sm font-mono text-white/80">{it.coverage.toFixed(1)}%</div>
               </div>
               <div className="rounded p-2" style={{ background: "rgba(255,255,255,0.04)" }}>
-                <div className="text-xs text-white/40 font-mono">Gbl.Cov</div>
+                <div className="text-xs text-white/60 font-mono">Gbl.Cov</div>
                 <div className="text-sm font-mono text-white/80">
                   {(it.globalCoverage ?? it.coverage).toFixed(1)}%
                 </div>
               </div>
             </div>
-            <div className="text-xs text-white/40 font-mono leading-relaxed">{it.reason.slice(0, 60)}...</div>
+            <div className="text-xs text-white/60 font-mono leading-relaxed">{it.reason.slice(0, 60)}...</div>
 
             <div className="mt-3">
               <div className="h-1 rounded-full bg-white/10 overflow-hidden">
@@ -75,25 +75,25 @@ export default function FeedbackView({ optimizationState }) {
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <div className="text-xs text-white/40 font-mono">Selected</div>
+              <div className="text-xs text-white/60 font-mono">Selected</div>
               <div className="text-2xl font-bold font-mono text-white">
                 Iteration {optimizationState.iteration_selection.selected_iteration}
               </div>
             </div>
             <div>
-              <div className="text-xs text-white/40 font-mono">Candidates</div>
+              <div className="text-xs text-white/60 font-mono">Candidates</div>
               <div className="text-sm font-mono text-white/80">
                 {(optimizationState.iteration_selection.candidate_iterations || []).join(", ") || "—"}
               </div>
-              <div className="text-xs text-white/40 font-mono mt-1">
+              <div className="text-xs text-white/60 font-mono mt-1">
                 Pareto-optimal: {(optimizationState.iteration_selection.pareto_optimal_iterations || []).join(", ") || "—"}
               </div>
             </div>
             <div>
-              <div className="text-xs text-white/40 font-mono">Method</div>
+              <div className="text-xs text-white/60 font-mono">Method</div>
               <div className="text-sm font-mono text-white/80">{optimizationState.iteration_selection.selection_method}</div>
               {optimizationState.iteration_selection.confidence > 0 && (
-                <div className="text-xs text-white/40 font-mono mt-1">
+                <div className="text-xs text-white/60 font-mono mt-1">
                   Confidence: {(optimizationState.iteration_selection.confidence * 100).toFixed(0)}%
                 </div>
               )}
@@ -109,7 +109,7 @@ export default function FeedbackView({ optimizationState }) {
       )}
 
       <div className="rounded-xl p-5" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-4">Convergence Trajectory</div>
+        <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-4">Convergence Trajectory</div>
         <svg viewBox="0 0 400 80" className="w-full">
           <defs>
             <linearGradient id="convGrad" x1="0" y1="0" x2="0" y2="1">
@@ -186,9 +186,9 @@ export default function FeedbackView({ optimizationState }) {
           },
         ].map(({ label, value, color, sub }) => (
           <div key={label} className="rounded-lg p-4 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
-            <div className="text-xs text-white/40 font-mono mb-1">{label}</div>
+            <div className="text-xs text-white/60 font-mono mb-1">{label}</div>
             <div className="text-2xl font-bold font-mono" style={{ color }}>{value}</div>
-            <div className="text-xs text-white/40 mt-1">{sub}</div>
+            <div className="text-xs text-white/60 mt-1">{sub}</div>
           </div>
         ))}
       </div>

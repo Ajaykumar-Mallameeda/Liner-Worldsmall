@@ -86,7 +86,7 @@ function Pill({ value }) {
   const label = FEATURE_STATE_LABEL[value] || value?.toUpperCase() || 'UNKNOWN';
   return (
     <span
-      className="maritime-state-change text-[10px] font-mono uppercase tracking-widest px-2 py-1 rounded"
+      className="maritime-state-change text-[12px] font-mono uppercase tracking-widest px-2 py-1 rounded"
       style={{
         background: `${color}1a`,
         color,
@@ -149,7 +149,7 @@ function ExplainabilityStrip({ feature }) {
 
   return (
     <div
-      className="mt-2 pt-2 grid grid-cols-3 gap-2 text-[9px] font-mono uppercase tracking-widest"
+      className="mt-2 pt-2 grid grid-cols-3 gap-2 text-[12px] font-mono uppercase tracking-widest"
       style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
       role="group"
       aria-label="Feature explainability"
@@ -211,13 +211,13 @@ function ExplainabilityHeadline({ explainability }) {
       role="group"
       aria-label="Routing-impact explainability"
     >
-      <div className="text-[10px] font-mono uppercase tracking-widest text-white/40">
+      <div className="text-[12px] font-mono uppercase tracking-widest text-white/60">
         Explainability
       </div>
       <div className="text-[12px] font-mono text-white/75 leading-relaxed">
         {wording}
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-mono">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[12px] font-mono">
         <TelemetryMetric
           label="Attached"
           value={attached}
@@ -418,7 +418,7 @@ export default function MaritimeRoutingImpactView() {
             <div className="h-3 w-24 bg-white/10 rounded" />
           </div>
         ) : features.length === 0 ? (
-          <div className="text-[11px] text-white/35 font-mono">
+          <div className="text-[12px] text-white/35 font-mono">
             No features were attached in this run.
           </div>
         ) : (
@@ -436,18 +436,18 @@ export default function MaritimeRoutingImpactView() {
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div>
-                      <div className="text-[11px] text-white/85 font-mono uppercase tracking-widest">
+                      <div className="text-[12px] text-white/85 font-mono uppercase tracking-widest">
                         {meta.title || f.feature}
                       </div>
                       {meta.subtitle && (
-                        <div className="text-[10px] text-white/40 font-mono mt-0.5">
+                        <div className="text-[12px] text-white/60 font-mono mt-0.5">
                           {meta.subtitle}
                         </div>
                       )}
                     </div>
                     <Pill value={f.state} />
                   </div>
-                  <div className="text-[11px] text-white/65 font-mono leading-relaxed mt-1.5">
+                  <div className="text-[12px] text-white/65 font-mono leading-relaxed mt-1.5">
                     {f.reason}
                   </div>
                   <div
@@ -470,7 +470,7 @@ export default function MaritimeRoutingImpactView() {
                       }
                     />
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-white/40">
+                  <div className="mt-2 flex items-center justify-between text-[12px] font-mono text-white/60">
                     <DataFreshnessBadge ageSeconds={f.freshness_seconds} />
                     {f.synthetic != null && (
                       <span
@@ -497,7 +497,7 @@ export default function MaritimeRoutingImpactView() {
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {sourcesUsed.length === 0 && sourcesMissing.length === 0 ? (
-            <div className="text-[11px] text-white/35 font-mono">
+            <div className="text-[12px] text-white/35 font-mono">
               No source rollup available.
             </div>
           ) : (
@@ -533,7 +533,7 @@ export default function MaritimeRoutingImpactView() {
           density="compact"
         >
           <pre
-            className="text-[10px] font-mono text-white/55 overflow-x-auto max-h-48 p-2 rounded"
+            className="text-[12px] font-mono text-white/55 overflow-x-auto max-h-48 p-2 rounded"
             style={{
               background: 'rgba(2,12,24,0.6)',
               border: '1px solid rgba(255,255,255,0.04)',
@@ -550,7 +550,7 @@ export default function MaritimeRoutingImpactView() {
           title="No maritime impact recorded"
           density="compact"
         >
-          <div className="text-[11px] text-white/35 font-mono leading-relaxed">
+          <div className="text-[12px] text-white/35 font-mono leading-relaxed">
             The current run did not attach maritime features to the
             optimizer. This is the expected state when
             <code className="mx-1 px-1 rounded"
@@ -566,7 +566,7 @@ export default function MaritimeRoutingImpactView() {
         </IntelligencePanel>
       )}
 
-      <div className="text-[11px] text-white/30 font-mono leading-relaxed max-w-3xl">
+      <div className="text-[12px] text-white/60 font-mono leading-relaxed max-w-3xl">
         Phase 8 routing-impact view, Phase 9 explainability overlay.
         The endpoint
         <code className="mx-1">/api/maritime/routing-impact</code> reads

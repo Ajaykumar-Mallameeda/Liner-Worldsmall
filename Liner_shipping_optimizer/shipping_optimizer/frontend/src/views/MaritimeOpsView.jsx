@@ -30,7 +30,7 @@ function Skeleton({ height = "h-20" }) {
 
 function EmptyState({ message }) {
   return (
-    <div className="text-[11px] text-white/30 font-mono leading-relaxed py-4 text-center">
+    <div className="text-[12px] text-white/60 font-mono leading-relaxed py-4 text-center">
       {message}
     </div>
   );
@@ -161,11 +161,11 @@ export default function MaritimeOpsView() {
           right={<MaritimeStatusBadge value="disabled" />}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono text-white/40">
+            <span className="text-[12px] font-mono text-white/60">
               Maritime intelligence
             </span>
           </div>
-          <div className="text-[11px] text-white/30 font-mono mt-2">
+          <div className="text-[12px] text-white/60 font-mono mt-2">
             Set MARITIME_INTELLIGENCE_ENABLED=1 to enable port
             intelligence.
           </div>
@@ -226,28 +226,28 @@ export default function MaritimeOpsView() {
                     border: "1px solid rgba(148,163,184,0.10)",
                   }}
                 >
-                  <div className="flex items-center justify-between text-[11px] font-mono">
+                  <div className="flex items-center justify-between text-[12px] font-mono">
                     <span className="text-white/80">
                       {a.port_name || a.port_id}
                     </span>
-                    <span className="text-white/40">
+                    <span className="text-white/60">
                       {a.call_count} calls
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-x-3 mt-1 text-[10px] font-mono">
+                  <div className="grid grid-cols-3 gap-x-3 mt-1 text-[12px] font-mono">
                     <div>
-                      <div className="text-white/30">Confirmed</div>
+                      <div className="text-white/60">Confirmed</div>
                       <div className="text-white/70">{a.confirmed_count}</div>
                     </div>
                     <div>
-                      <div className="text-white/30">Open</div>
+                      <div className="text-white/60">Open</div>
                       <div className="text-white/70">{a.open_count}</div>
                     </div>
                     <div>
-                      <div className="text-white/30">Rejected</div>
+                      <div className="text-white/60">Rejected</div>
                       <div className="text-white/70">{a.rejected_count}</div>
                     </div>
-                    <div className="col-span-3 mt-1 text-white/40">
+                    <div className="col-span-3 mt-1 text-white/60">
                       Avg dwell {fmtMinutes(a.avg_dwell_minutes)} ·{" "}
                       {a.unique_vessels} unique vessels
                     </div>
@@ -273,11 +273,11 @@ export default function MaritimeOpsView() {
                     border: "1px solid rgba(148,163,184,0.10)",
                   }}
                 >
-                  <div className="flex items-center justify-between text-[11px] font-mono">
+                  <div className="flex items-center justify-between text-[12px] font-mono">
                     <span className="text-white/80">
                       {m.port_name || m.port_id}
                     </span>
-                    <span className="text-white/40 text-[10px]">
+                    <span className="text-white/60 text-[12px]">
                       dominant: {m.dominant_type}
                     </span>
                   </div>
@@ -286,7 +286,7 @@ export default function MaritimeOpsView() {
                       ([type, count]) => (
                         <span
                           key={type}
-                          className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                          className="text-[12px] font-mono px-1.5 py-0.5 rounded"
                           style={{
                             background: "rgba(148,163,184,0.10)",
                             color: "rgba(255,255,255,0.65)",
@@ -319,12 +319,12 @@ export default function MaritimeOpsView() {
             {timeline.map((c) => (
               <div
                 key={c.port_call_id}
-                className="grid grid-cols-12 gap-2 text-[11px] font-mono py-1"
+                className="grid grid-cols-12 gap-2 text-[12px] font-mono py-1"
                 style={{
                   borderBottom: "1px solid rgba(148,163,184,0.08)",
                 }}
               >
-                <div className="col-span-2 text-white/40">
+                <div className="col-span-2 text-white/60">
                   {fmtTime(c.arrival_ts)}
                 </div>
                 <div className="col-span-3 text-white/70 truncate">
@@ -333,7 +333,7 @@ export default function MaritimeOpsView() {
                 <div className="col-span-3 text-white/70 truncate">
                   {c.mmsi}
                 </div>
-                <div className="col-span-2 text-white/40 truncate">
+                <div className="col-span-2 text-white/60 truncate">
                   {c.vessel_type}
                 </div>
                 <div className="col-span-2 text-right text-white/50">
@@ -351,35 +351,35 @@ export default function MaritimeOpsView() {
           title="Snapshot Provenance"
           density="compact"
         >
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
-            <div className="text-white/40">Source</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] font-mono">
+            <div className="text-white/60">Source</div>
             <div className="text-white/80 text-right">
               {snapshot.metadata.source || "—"}
             </div>
-            <div className="text-white/40">Dataset</div>
+            <div className="text-white/60">Dataset</div>
             <div className="text-white/80 text-right">
               {snapshot.metadata.dataset || "—"}
             </div>
-            <div className="text-white/40">Version</div>
+            <div className="text-white/60">Version</div>
             <div className="text-white/80 text-right">
               {snapshot.metadata.dataset_version || "—"}
             </div>
-            <div className="text-white/40">License</div>
+            <div className="text-white/60">License</div>
             <div className="text-white/80 text-right">
               {snapshot.metadata.license || "—"}
             </div>
-            <div className="text-white/40">Quality</div>
+            <div className="text-white/60">Quality</div>
             <div className="text-white/80 text-right">
               {typeof snapshot.metadata.quality_score === "number"
                 ? snapshot.metadata.quality_score.toFixed(2)
                 : "—"}
             </div>
-            <div className="text-white/40">Snapshot ID</div>
+            <div className="text-white/60">Snapshot ID</div>
             <div className="text-white/60 text-right truncate">
               {snapshot.metadata.snapshot_id || "—"}
             </div>
             {snapshot.metadata.attribution && (
-              <div className="text-white/40 col-span-2 mt-2 pt-2 border-t border-white/5 text-[10px]">
+              <div className="text-white/60 col-span-2 mt-2 pt-2 border-t border-white/5 text-[12px]">
                 {snapshot.metadata.attribution}
               </div>
             )}
@@ -387,7 +387,7 @@ export default function MaritimeOpsView() {
         </IntelligencePanel>
       )}
 
-      <div className="text-[11px] text-white/30 font-mono leading-relaxed max-w-2xl">
+      <div className="text-[12px] text-white/60 font-mono leading-relaxed max-w-2xl">
         Phase 2 port-intelligence console. All values are derived from
         the local NOAA MarineCadastre snapshot on disk; no network
         calls are made from the dashboard. Polled every{" "}

@@ -46,7 +46,7 @@ export default function PortPanel({ optimizationState }) {
   const selPort = selectedPort ? portData.find(p => p.id === selectedPort) : null;
 
   if (!portData.length) {
-    return <div className="text-white/40 font-mono italic text-center py-8">Port data not available</div>;
+    return <div className="text-white/60 font-mono italic text-center py-8">Port data not available</div>;
   }
 
   return (
@@ -60,7 +60,7 @@ export default function PortPanel({ optimizationState }) {
         <div className="flex-1 overflow-y-auto space-y-1 pr-1">
           {filtered.slice(0, 100).map(p => (
             <button key={p.id} onClick={() => setSelectedPort(p.id)}
-              className="w-full text-left px-3 py-2 rounded-lg transition-all text-[11px] font-mono"
+              className="w-full text-left px-3 py-2 rounded-lg transition-all text-[12px] font-mono"
               style={{
                 background: selectedPort === p.id ? `${p.isHub ? '#f59e0b' : '#00d4ff'}12` : 'rgba(255,255,255,0.02)',
                 border: `1px solid ${selectedPort === p.id ? `${p.isHub ? '#f59e0b' : '#00d4ff'}33` : 'rgba(255,255,255,0.06)'}`,
@@ -70,9 +70,9 @@ export default function PortPanel({ optimizationState }) {
                 <span className="font-bold" style={{ color: p.isHub ? '#f59e0b' : '#00d4ff' }}>
                   {p.id} {p.isHub ? '★' : ''}
                 </span>
-                <span className="text-[9px] text-white/30">{p.serviceCount} routes</span>
+                <span className="text-[12px] text-white/60">{p.serviceCount} routes</span>
               </div>
-              <div className="flex justify-between text-[9px] text-white/40 mt-0.5">
+              <div className="flex justify-between text-[12px] text-white/60 mt-0.5">
                 <span>{(p.totalTeu / 1000).toFixed(0)}K TEU</span>
                 <span>Score: {p.importance}</span>
               </div>
@@ -101,17 +101,17 @@ export default function PortPanel({ optimizationState }) {
                 { label: 'Outbound Routes', value: selPort.outbound.toString(), color: '#ec4899' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-lg p-3" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
-                  <div className="text-[9px] text-white/40 font-mono uppercase tracking-wider">{label}</div>
+                  <div className="text-[12px] text-white/60 font-mono uppercase tracking-wider">{label}</div>
                   <div className="text-lg font-bold font-mono mt-1" style={{ color }}>{value}</div>
                 </div>
               ))}
             </div>
             {selPort.regions.length > 0 && (
               <div className="mt-3">
-                <div className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-2">Connected Regions</div>
+                <div className="text-[12px] text-white/60 font-mono uppercase tracking-widest mb-2">Connected Regions</div>
                 <div className="flex gap-2">
                   {selPort.regions.map(r => (
-                    <span key={r} className="px-2 py-1 rounded text-[10px] font-mono" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}>{r}</span>
+                    <span key={r} className="px-2 py-1 rounded text-[12px] font-mono" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}>{r}</span>
                   ))}
                 </div>
               </div>
@@ -121,8 +121,8 @@ export default function PortPanel({ optimizationState }) {
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-3xl mb-2 opacity-20">⚓</div>
-              <div className="text-xs text-white/30 font-mono italic">Select a port to view details</div>
-              <div className="text-[10px] text-white/20 font-mono mt-1">{portData.length} ports loaded</div>
+              <div className="text-xs text-white/60 font-mono italic">Select a port to view details</div>
+              <div className="text-[12px] text-white/50 font-mono mt-1">{portData.length} ports loaded</div>
             </div>
           </div>
         )}

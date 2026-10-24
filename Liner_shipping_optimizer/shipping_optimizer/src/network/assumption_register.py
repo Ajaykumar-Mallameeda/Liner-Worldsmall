@@ -1,4 +1,4 @@
-"""Register of the assumptions that materially affect a reported result (Issue 6).
+"""Register of the assumptions that materially affect a reported result.
 
 Every plan carries this list in ``assumptions.assumption_register`` so that a consumer never has to
 infer which inputs are sourced and which are provisional.  Values are read from the objects in force

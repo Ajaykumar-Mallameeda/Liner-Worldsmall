@@ -63,7 +63,7 @@ export default function Drawer({
               borderRadius: 4,
               cursor: 'pointer',
               fontFamily: 'var(--maritime-font-data)',
-              fontSize: 10,
+              fontSize: 12,
               textTransform: 'uppercase',
               letterSpacing: '0.18em',
             }}
@@ -77,7 +77,7 @@ export default function Drawer({
             padding: '10px 16px',
             borderTop: '1px solid var(--console-edge)',
             fontFamily: 'var(--maritime-font-data)',
-            fontSize: 10,
+            fontSize: 12,
             color: 'var(--console-text-faint)',
             letterSpacing: '0.05em',
           }}>{footer}</footer>

@@ -64,13 +64,13 @@ export default function FleetDashboard({ optimizationState }) {
   }, [fleet.vessels, classFilter, regionFilter, searchTerm, sortKey, sortDir]);
 
   if (!fleet.total) {
-    return <div className="text-white/40 font-mono italic text-center py-8">Fleet data not available</div>;
+    return <div className="text-white/60 font-mono italic text-center py-8">Fleet data not available</div>;
   }
 
   const classes = Object.entries(fleet.classes).sort((a, b) => b[1].count - a[1].count);
 
   const SortHeader = ({ k, label }) => (
-    <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider cursor-pointer select-none"
+    <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider cursor-pointer select-none"
       onClick={() => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('desc'); } }}>
       {label} {sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}
     </th>
@@ -88,14 +88,14 @@ export default function FleetDashboard({ optimizationState }) {
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl p-4 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
             <div className="text-2xl font-bold font-mono" style={{ color }}>{value}</div>
-            <div className="text-xs text-white/40 font-mono mt-1">{label}</div>
+            <div className="text-xs text-white/60 font-mono mt-1">{label}</div>
           </div>
         ))}
       </div>
 
       {/* By Class */}
       <div className="rounded-xl p-5" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-4">Capacity by Class</div>
+        <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-4">Capacity by Class</div>
         <div className="space-y-2">
           {classes.map(([cls, data]) => {
             const pct = ((data.count / fleet.total) * 100).toFixed(0);
@@ -124,11 +124,11 @@ export default function FleetDashboard({ optimizationState }) {
           const utilPct = legUtil(data);
           return (
             <div key={reg} className="rounded-xl p-3 text-center" style={{ background: `${color}08`, border: `1px solid ${color}22` }}>
-              <div className="text-[10px] font-mono font-bold" style={{ color }}>{reg}</div>
+              <div className="text-[12px] font-mono font-bold" style={{ color }}>{reg}</div>
               <div className="text-lg font-bold font-mono text-white/90 mt-1">{data.count}</div>
-              <div className="text-[9px] text-white/40 font-mono">services</div>
-              <div className="text-[10px] text-white/50 font-mono mt-1">{(data.totalLoad / 1000).toFixed(0)}K TEU/wk carried</div>
-              <div className="text-[9px] font-mono" style={{ color: (utilFrac ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>{utilPct} leg load</div>
+              <div className="text-[12px] text-white/60 font-mono">services</div>
+              <div className="text-[12px] text-white/50 font-mono mt-1">{(data.totalLoad / 1000).toFixed(0)}K TEU/wk carried</div>
+              <div className="text-[12px] font-mono" style={{ color: (utilFrac ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>{utilPct} leg load</div>
             </div>
           );
         })}
@@ -161,30 +161,30 @@ export default function FleetDashboard({ optimizationState }) {
               <SortHeader k="capacity" label="Capacity" />
               <SortHeader k="util" label="Leg load %" />
               <SortHeader k="profit" label="Profit" />
-              <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Class</th>
-              <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Region</th>
-              <th className="text-left px-2 py-1.5 text-[10px] font-mono text-white/40 uppercase tracking-wider">Route</th>
+              <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Class</th>
+              <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Region</th>
+              <th className="text-left px-2 py-1.5 text-[12px] font-mono text-white/60 uppercase tracking-wider">Route</th>
             </tr>
           </thead>
           <tbody>
             {filteredVessels.slice(0, 100).map((s, i) => (
               <tr key={s.id} className="transition-colors hover:bg-white/5" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-cyan-400">{s.id}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.load)}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/80">{fmtNum(s.capacity)}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono" style={{ color: (serviceLegLoadFactor(s) ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-cyan-400">{s.id}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/80">{fmtNum(s.load)}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/80">{fmtNum(s.capacity)}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono" style={{ color: (serviceLegLoadFactor(s) ?? 0) > 0.9 ? '#10b981' : '#f59e0b' }}>
                   {fmtPct(serviceLegLoadFactor(s), 0)}
                 </td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-emerald-400">{fmtOr(s.weekly_profit, (v) => `$${(v / 1000).toFixed(0)}K`)}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.vessel_class}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/60">{s.region}</td>
-                <td className="px-2 py-1.5 text-[10px] font-mono text-white/40">{s.ports?.[0]} → {s.ports?.[s.ports.length - 1]}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-emerald-400">{fmtOr(s.weekly_profit, (v) => `$${(v / 1000).toFixed(0)}K`)}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/60">{s.vessel_class}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/60">{s.region}</td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-white/60">{s.ports?.[0]} → {s.ports?.[s.ports.length - 1]}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {filteredVessels.length > 100 && (
-          <div className="text-center py-2 text-[10px] text-white/30 font-mono">Showing 100 of {filteredVessels.length} vessels</div>
+          <div className="text-center py-2 text-[12px] text-white/60 font-mono">Showing 100 of {filteredVessels.length} vessels</div>
         )}
       </div>
     </div>

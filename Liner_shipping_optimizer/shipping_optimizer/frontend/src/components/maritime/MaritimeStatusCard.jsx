@@ -47,12 +47,12 @@ export default function MaritimeStatusCard({ status, snapshot }) {
         }}
       >
         <div className="flex items-center justify-between mb-1">
-          <div className="text-xs uppercase tracking-widest text-white/40 font-mono">
+          <div className="text-xs uppercase tracking-widest text-white/60 font-mono">
             Maritime Intelligence
           </div>
-          <span className="text-[10px] font-mono text-white/30 uppercase">Disabled</span>
+          <span className="text-[12px] font-mono text-white/60 uppercase">Disabled</span>
         </div>
-        <div className="text-[11px] text-white/30 font-mono">
+        <div className="text-[12px] text-white/60 font-mono">
           No maritime sources active. Set MARITIME_INTELLIGENCE_ENABLED=1 to enable.
         </div>
       </div>
@@ -74,7 +74,7 @@ export default function MaritimeStatusCard({ status, snapshot }) {
       }}
     >
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs uppercase tracking-widest text-white/40 font-mono">
+        <div className="text-xs uppercase tracking-widest text-white/60 font-mono">
           Maritime Intelligence
         </div>
         <div className="flex items-center gap-2">
@@ -88,36 +88,36 @@ export default function MaritimeStatusCard({ status, snapshot }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
-        <div className="text-white/40">Traffic</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] font-mono">
+        <div className="text-white/60">Traffic</div>
         <div className="text-white/80 text-right">
           {status.traffic_available ? "AVAILABLE" : "—"}
         </div>
 
-        <div className="text-white/40">Source</div>
+        <div className="text-white/60">Source</div>
         <div className="text-white/80 text-right">{status.source || "—"}</div>
 
-        <div className="text-white/40">Coverage</div>
+        <div className="text-white/60">Coverage</div>
         <div className="text-white/80 text-right">
           {status.record_count != null ? `${status.record_count} cells` : "—"}
         </div>
 
-        <div className="text-white/40">Freshness</div>
+        <div className="text-white/60">Freshness</div>
         <div className="text-white/80 text-right">{status.freshness_label || "Historical"}</div>
 
-        <div className="text-white/40">Quality</div>
+        <div className="text-white/60">Quality</div>
         <div className="text-white/80 text-right">
           {status.quality_score != null ? status.quality_score.toFixed(2) : "—"}
         </div>
 
-        <div className="text-white/40">Snapshot</div>
+        <div className="text-white/60">Snapshot</div>
         <div className="text-white/60 text-right truncate" title={status.snapshot_id || ""}>
           {status.snapshot_id || "—"}
         </div>
       </div>
 
       {snapshot && snapshot.attribution && (
-        <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-white/30 font-mono leading-tight">
+        <div className="mt-2 pt-2 border-t border-white/5 text-[12px] text-white/60 font-mono leading-tight">
           {snapshot.attribution}
         </div>
       )}

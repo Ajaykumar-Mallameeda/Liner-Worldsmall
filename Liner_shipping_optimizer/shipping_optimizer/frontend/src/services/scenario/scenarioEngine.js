@@ -15,17 +15,20 @@ import { numOrNull } from '../../utils/metrics.js';
 export function extractBaselineState(runtimeOrJson) {
   if (!runtimeOrJson) return null;
 
-  const gbl = runtimeOrJson.global || runtimeOrJson;
-  const summary = gbl.summary_metrics || runtimeOrJson.summary_metrics || gbl;
-  const services = gbl.selected_services || runtimeOrJson.selected_services || [];
-  const regionalResults = gbl.regional_results || runtimeOrJson.regional_results || [];
-  const iterSelection = gbl.iteration_selection || runtimeOrJson.iteration_selection || {};
-  const selectedIter = gbl.selected_iteration ?? gbl.final_selected_iteration ?? gbl.best_iteration ?? 0;
+  // A normalized runtime (runtimeAdapter.normalizeRuntime) keeps the pipeline JSON under `raw`;
+  // read summary_metrics / regional_results / network_ledger from it so snake_case keys resolve.
+  const src = runtimeOrJson.raw || runtimeOrJson;
+  const gbl = runtimeOrJson.global || src;
+  const summary = src.summary_metrics || gbl.summary_metrics || gbl;
+  const services = gbl.selected_services || src.selected_services || [];
+  const regionalResults = src.regional_results || gbl.regional_results || [];
+  const iterSelection = gbl.iteration_selection || src.iteration_selection || {};
+  const selectedIter = gbl.selected_iteration ?? src.final_selected_iteration ?? src.best_iteration ?? 0;
 
   // Global economic totals.  Every figure must come from the run on disk (summary_metrics, the global block
   // or the independent ledger's weekly totals).  A missing or non-numeric figure makes the baseline
   // UNAVAILABLE (null): no demo number is substituted, and a genuine 0 is kept.
-  const ledgerWeekly = (runtimeOrJson.network_ledger && runtimeOrJson.network_ledger.weekly_usd) || {};
+  const ledgerWeekly = (src.network_ledger && src.network_ledger.weekly_usd) || {};
   const pick = (...vals) => {
     for (const v of vals) {
       const n = numOrNull(v);
@@ -37,7 +40,7 @@ export function extractBaselineState(runtimeOrJson) {
   const fuelCost = pick(summary.fuel_cost, gbl.fuel_cost, gbl.fuelCost, ledgerWeekly.fuel_cost);
   const portCost = pick(summary.port_cost, gbl.port_cost, gbl.portCost,
     ledgerWeekly.port_call_fixed_cost != null ? Number(ledgerWeekly.port_call_fixed_cost) + Number(ledgerWeekly.port_variable_cost || 0) : null);
-  const transshipCost = pick(summary.transship_cost, gbl.transship_cost, ledgerWeekly.transshipment_cost);
+  const transshipCost = pick(summary.transship_cost, gbl.transship_cost, gbl.transshipCost, ledgerWeekly.transshipment_cost);
   const totalCost = pick(summary.total_cost, summary.cost, gbl.totalCost, gbl.cost, ledgerWeekly.total_operating_cost);
   const operatingCost = pick(summary.operating_cost, gbl.operatingCost, ledgerWeekly.vessel_cost);
   const revenue = pick(summary.revenue, gbl.revenue, ledgerWeekly.revenue);
@@ -80,7 +83,7 @@ export function extractBaselineState(runtimeOrJson) {
     profitMargin,
     services,
     regionalResults,
-    evaluatedAt: rawHealthTime(gbl) || new Date().toISOString(),
+    evaluatedAt: rawHealthTime(gbl) || rawHealthTime(src) || new Date().toISOString(),
     runId: gbl.health_status?.run_id || gbl.run_id || null,
   };
 }

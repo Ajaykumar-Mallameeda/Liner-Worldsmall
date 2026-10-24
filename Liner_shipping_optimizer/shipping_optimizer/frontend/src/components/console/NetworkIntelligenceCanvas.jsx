@@ -93,7 +93,7 @@ export default function NetworkIntelligenceCanvas({
   return (
     <div className="console-canvas" style={{ height }} aria-label="Network intelligence canvas">
       <div className="legend" role="toolbar" aria-label="Map layer controls">
-        <span style={{ color: 'var(--console-text-faint)', textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 9, marginRight: 4 }}>
+        <span style={{ color: 'var(--console-text-faint)', textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 12, marginRight: 4 }}>
           LAYERS
         </span>
         {LAYER_DEFS.map((d) => {

@@ -1,0 +1,42 @@
+flowchart TB
+  IN["Regional Problem<br/>own ports, origin-owned demands,<br/>port_catalog = all ports"]
+  HD["HubDetector: top-5 hubs"]
+  ST["Strategy text<br/>(LLM, rule-based fallback)"]
+
+  subgraph GEN["ServiceGeneratorAgent - candidate pool"]
+    A["A direct services, top corridors"]
+    B["B hub loop services"]
+    Cc["C hub-to-hub trunks"]
+    Dd["D feeders, spoke to best hub"]
+    E["E heuristic base pool"]
+    F["F demand-coherent loops<br/>budget 60, 3-5 ports [DEFAULT]"]
+    G["G route operators, elitism [OFF]"]
+    SCR["Feasibility screen: evaluate_rotation<br/>+ class screening k = 1, time-feasible class"]
+    AR["Archetype mix hints<br/>(LLM, validated)"]
+  end
+
+  FLT["Regional ECONOMIC filter<br/>cap by stand-alone economics<br/>[DEFAULT]"]
+
+  subgraph HGA["HierarchicalGA"]
+    PF["Pre-filter: modellable services on a demand corridor"]
+    SGA["ServiceGA: binary chromosome<br/>surrogate fitness, fleet-repair"]
+    FGA["FrequencyGA: integer departures<br/>surrogate margin, inventory repair"]
+  end
+
+  HM["HubMILP = NetworkPlanner.plan<br/>fixed frequencies, ledger inside"]
+  EX["Explanation text<br/>(LLM, rule-based fallback)"]
+  PV["Regional policy validator"]
+  OUT["Result dict + last_candidate_pool + last_milp_result"]
+
+  IN --> HD --> ST
+  IN --> GEN
+  AR -.-> GEN
+  A --> SCR
+  B --> SCR
+  Cc --> SCR
+  Dd --> SCR
+  E --> SCR
+  F --> SCR
+  G -.-> SCR
+  SCR --> FLT --> PF --> SGA --> FGA --> HM --> OUT
+  HM --> EX --> PV --> OUT

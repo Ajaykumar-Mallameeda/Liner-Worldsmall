@@ -58,7 +58,7 @@ export default function MaritimeDiff({
 }) {
   if (!diff || !Array.isArray(diff.rows) || diff.rows.length === 0) {
     return (
-      <div className="text-[11px] text-white/35 font-mono">
+      <div className="text-[12px] text-white/35 font-mono">
         Previous snapshot unavailable.
       </div>
     );
@@ -67,7 +67,7 @@ export default function MaritimeDiff({
   return (
     <div className="flex flex-col gap-2">
       {previousEvaluatedAt && (
-        <div className="text-[10px] font-mono text-white/35">
+        <div className="text-[12px] font-mono text-white/35">
           previous snapshot: {previousEvaluatedAt.replace('T', ' ').replace('Z', ' UTC').slice(0, 19)}
         </div>
       )}
@@ -92,7 +92,7 @@ export default function MaritimeDiff({
               title={`${row.metric}: ${label}`}
             >
               <span
-                className="font-mono text-[9px] uppercase tracking-widest min-w-[110px]"
+                className="font-mono text-[12px] uppercase tracking-widest min-w-[110px]"
                 style={{ color: 'rgba(255,255,255,0.45)' }}
               >
                 {row.metric}

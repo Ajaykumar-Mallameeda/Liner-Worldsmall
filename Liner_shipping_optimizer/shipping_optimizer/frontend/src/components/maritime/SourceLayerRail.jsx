@@ -52,7 +52,7 @@ export default function SourceLayerRail({
       <span
         className="ml-auto mono-data"
         style={{
-          fontSize: 9,
+          fontSize: 12,
           color: 'var(--maritime-ink-faint)',
           textTransform: 'uppercase',
           letterSpacing: '0.18em',

@@ -1,5 +1,7 @@
 # SYSTEM TRUTH REPORT - AI Vessel Routing Optimizer
 
+Dataset: WorldSmall
+
 
 ## 1 - ORIGINAL ARCHITECTURE
 
@@ -131,15 +133,15 @@ Total dead AI output fields: 0
 
 | Metric | Value |
 |--------|-------|
-| Weekly Profit | $12,172,581 |
-| Annual Profit | $632,974,215 |
-| Demand Coverage | 25.0% |
-| Total Services | 27 |
+| Weekly Profit | $44,978,849 |
+| Annual Profit | $2,338,900,152 |
+| Demand Coverage | 44.6% |
+| Total Services | 30 |
 | Profit Margin | 0.0% |
 
-  - Asia: $17,934,309/wk, 28.2% coverage, 17 services
-  - Europe: $-2,179,418/wk, 13.5% coverage, 2 services
-  - Americas: $-3,582,310/wk, 26.0% coverage, 8 services
+  - Asia: $36,130,829/wk, 55.8% coverage, 26 services
+  - Europe: $3,612,468/wk, 22.5% coverage, 2 services
+  - Americas: $5,235,552/wk, 37.5% coverage, 2 services
 
 ---
 

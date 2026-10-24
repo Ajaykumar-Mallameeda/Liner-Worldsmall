@@ -1,0 +1,30 @@
+flowchart TB
+  POOLS["Regional candidate pools<br/>+ frequency hints (MILP warm start only)"]
+  UN["Union and de-duplicate<br/>key = canonical rotation + vessel class"]
+  TK["Trunk candidates [C3]<br/>12 per under-subscribed class,<br/>diverse set cover, up to 10 ports"]
+  CV["Class variants [OFF]"]
+
+  subgraph PLAN["NetworkPlanner.plan"]
+    M1["1 build_service_model per candidate<br/>reject: missing distance or port record,<br/>draft, canal not passable, no price"]
+    M2["2 build_paths per OD<br/>direct, 1 transfer, 2 transfers (if needed)<br/>end-to-end TransitTime enforced<br/>10 fastest per OD enter the MILP"]
+    M3["3 solve_network (CBC, 120 s stage)"]
+    M3a["LP relaxation: bound + LP-support services"]
+    M3b["support cap 105 [C3]<br/>VUB inequality [C3]"]
+    M3c["integer MILP: f, n, q, u<br/>max profit"]
+    M4["4 local search [C3]<br/>exact LP: add, drop, freq +-1"]
+    M5["5 flow re-optimisation LP<br/>all valid paths of operated services"]
+    M6["6 profit-floor repair<br/>only if profit below 0"]
+    M7["7 compute_ledger<br/>independent recomputation"]
+    M8["8 reconcile<br/>MILP profit vs ledger profit"]
+  end
+
+  PART["Partition to regions<br/>revenue and cargo charges by origin region,<br/>service costs to one owner region"]
+  BLOCK["network_ledger block<br/>weekly_usd, demand_teu_per_week, plan,<br/>optimality, assumptions, register, strategy_report"]
+
+  POOLS --> UN --> M1
+  TK --> M1
+  CV -.-> M1
+  M1 --> M2 --> M3
+  M3 --> M3a --> M3b --> M3c
+  M3c --> M4 --> M5 --> M6 --> M7 --> M8
+  M8 --> PART --> BLOCK

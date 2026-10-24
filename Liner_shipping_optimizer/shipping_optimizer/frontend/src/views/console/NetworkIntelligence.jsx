@@ -25,15 +25,28 @@ import WorldMap, { getRegionColor } from '../../components/map/WorldMap.jsx';
 import ServiceDetailPanel from '../../components/console/ServiceDetailPanel.jsx';
 import { Pill, Kv, Stat, Empty, Provenance } from '../../components/console/p12.jsx';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
+import { matchesAgent, setAgentFocus, useAgentFocus, useServiceRequest } from '../../services/focusStore.js';
+import { downloadCsv } from '../../utils/exportData.js';
 
+// Regions are geographic (utils/geoRegion.js): a service's region is where most of its ports are.
+// The optimizer's regional-agent label is kept on each service as agent_region.
 const REGIONS = [
-  { id: 'world',       label: 'WORLD',        color: '#00d4ff' },
-  { id: 'americas',    label: 'AMERICAS',     color: '#10b981' },
-  { id: 'europe',      label: 'EUROPE',       color: '#7c3aed' },
-  { id: 'middle_east', label: 'MIDDLE EAST',  color: '#f59e0b' },
-  { id: 'asia',        label: 'ASIA PACIFIC', color: '#00d4ff' },
-  { id: 'africa',      label: 'AFRICA',       color: '#ef4444' },
+  { id: 'world',       label: 'WORLD',        color: '#00d4ff', geo: null },
+  { id: 'americas',    label: 'AMERICAS',     color: '#10b981', geo: 'Americas' },
+  { id: 'europe',      label: 'EUROPE',       color: '#7c3aed', geo: 'Europe' },
+  { id: 'middle_east', label: 'MIDDLE EAST',  color: '#f59e0b', geo: 'Middle East' },
+  { id: 'asia',        label: 'ASIA PACIFIC', color: '#00d4ff', geo: 'Asia Pacific' },
+  { id: 'africa',      label: 'AFRICA',       color: '#ef4444', geo: 'Africa' },
 ];
+const REGION_ID_BY_GEO = Object.fromEntries(REGIONS.filter((r) => r.geo).map((r) => [r.geo, r.id]));
+
+const SORTS = {
+  pnl_desc: { label: 'P&L high → low', fn: (a, b) => Number(b.weekly_profit ?? -Infinity) - Number(a.weekly_profit ?? -Infinity) },
+  pnl_asc:  { label: 'P&L low → high', fn: (a, b) => Number(a.weekly_profit ?? Infinity) - Number(b.weekly_profit ?? Infinity) },
+  margin:   { label: 'Margin low → high', fn: (a, b) => Number(a.margin_pct ?? Infinity) - Number(b.margin_pct ?? Infinity) },
+  id:       { label: 'Service ID', fn: (a, b) => String(a.id).localeCompare(String(b.id)) },
+};
+const pnlClass = (v) => (v == null ? 'text-slate-400' : Number(v) < 0 ? 'text-red-400' : 'text-emerald-400');
 
 export default function NetworkIntelligence({
   optimizationState: optStateProp,
@@ -65,22 +78,41 @@ export default function NetworkIntelligence({
     return () => { cancelled = true; };
   }, []);
 
-  // All selected services from pipeline_output.json
+  // All selected services from pipeline_output.json, narrowed to the agent cross-filter when one is set
+  const [agentFocus] = useAgentFocus();
   const allServices = useMemo(() => {
-    return sm.selected_services || [];
-  }, [sm.selected_services]);
+    return (sm.selected_services || []).filter((s) => matchesAgent(s, agentFocus));
+  }, [sm.selected_services, agentFocus]);
 
-  // Region matching helper
+  // "Open service X" / "services calling port Y" from the command palette
+  const [request, clearRequest] = useServiceRequest();
+  useEffect(() => {
+    if (!request || !sm.selected_services) return;
+    if (request.kind === 'service') {
+      const svc = sm.selected_services.find((s) => String(s.id) === request.id);
+      if (svc) {
+        if (!matchesAgent(svc, agentFocus)) setAgentFocus(null);
+        setActiveRegion('world');
+        setSelectedService(svc);
+      }
+    } else if (request.kind === 'port') {
+      setActiveRegion('world');
+      setSelectedService(null);
+      setSearchQuery(request.id);
+    }
+    clearRequest();
+  }, [request, sm.selected_services]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [sortKey, setSortKey] = useState('pnl_desc');
+  const [lossOnly, setLossOnly] = useState(false);
+  const lossCount = useMemo(() => allServices.filter((s) => Number(s.weekly_profit) < 0).length, [allServices]);
+  // Inline bar scale: the largest |weekly P&L| among the services listed.
+  const maxAbsPnl = useMemo(() => Math.max(1, ...allServices.map((s) => Math.abs(Number(s.weekly_profit) || 0))), [allServices]);
+
+  // Region matching helper (geographic region of the service)
   const matchesRegion = useCallback((svcRegion, targetRegion) => {
     if (!targetRegion || targetRegion === 'world') return true;
-    const r = String(svcRegion || '').toLowerCase();
-    const t = String(targetRegion).toLowerCase();
-    if (t === 'americas') return r.includes('americ');
-    if (t === 'europe') return r.includes('europ');
-    if (t === 'middle_east' || t === 'middle east') return r.includes('middl') || r.includes('east');
-    if (t === 'asia' || t === 'asia pacific') return r.includes('asia') || r.includes('pacif');
-    if (t === 'africa') return r.includes('afric');
-    return r === t;
+    return REGION_ID_BY_GEO[svcRegion] === targetRegion;
   }, []);
 
   // Filter services by active region
@@ -91,36 +123,34 @@ export default function NetworkIntelligence({
 
   // Search filtered services
   const displayedServices = useMemo(() => {
-    if (!searchQuery.trim()) return regionServices;
     const q = searchQuery.toLowerCase().trim();
-    return regionServices.filter(
-      (s) =>
-        (s.id && s.id.toLowerCase().includes(q)) ||
+    const list = regionServices.filter((s) => {
+      if (lossOnly && !(Number(s.weekly_profit) < 0)) return false;
+      if (!q) return true;
+      return (s.id && s.id.toLowerCase().includes(q)) ||
         (s.vessel_class && s.vessel_class.toLowerCase().includes(q)) ||
-        (s.ports && s.ports.some((p) => p.toLowerCase().includes(q)))
-    );
-  }, [regionServices, searchQuery]);
+        (s.ports && s.ports.some((p) => p.toLowerCase().includes(q)));
+    });
+    return [...list].sort(SORTS[sortKey].fn);
+  }, [regionServices, searchQuery, lossOnly, sortKey]);
 
-  // Regional breakdown statistics
+  // Regional breakdown statistics (geographic)
   const regionStats = useMemo(() => {
     const m = {};
     allServices.forEach((s) => {
-      const r = (s.region || 'Unknown').toLowerCase();
-      const normKey = r.includes('americ') ? 'americas' :
-                      r.includes('europ') ? 'europe' :
-                      r.includes('middl') || r.includes('east') ? 'middle_east' :
-                      r.includes('asia') || r.includes('pacif') ? 'asia' :
-                      r.includes('afric') ? 'africa' : 'other';
+      const normKey = REGION_ID_BY_GEO[s.region] || 'other';
       if (!m[normKey]) {
         m[normKey] = {
-          name: s.region || 'Asia Pacific',
+          name: s.region || 'Unknown',
           services: 0,
+          losses: 0,
           profit: 0,
           ports: new Set(),
           color: getRegionColor(s.region),
         };
       }
       m[normKey].services += 1;
+      if (Number(s.weekly_profit) < 0) m[normKey].losses += 1;
       m[normKey].profit += Number(s.weekly_profit || 0);
       (s.ports || []).forEach((p) => m[normKey].ports.add(p));
     });
@@ -157,21 +187,27 @@ export default function NetworkIntelligence({
       />
 
       {/* ══ REGION FILTER TOOLBAR ══ */}
-      <div className="flex items-center justify-between p-2 rounded bg-black/60 border border-white/10 backdrop-blur-md">
+      <div className="flex items-center justify-between gap-2 flex-wrap p-2 rounded bg-black/60 border border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[8.5px] text-slate-400 font-bold uppercase tracking-widest mr-2">REGION FILTER:</span>
+          <span className="text-[12px] text-slate-400 font-bold uppercase tracking-widest mr-2">REGION FILTER:</span>
           {REGIONS.map((r) => {
             const isActive = activeRegion === r.id;
             const count = r.id === 'world' ? totalSelected : allServices.filter((s) => matchesRegion(s.region, r.id)).length;
+            const empty = count === 0 && !isActive;
             return (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => handleRegionChange(r.id)}
-                className={`px-3 py-1 text-[9px] font-bold tracking-wider uppercase rounded transition-all flex items-center gap-1.5 border ${
+                disabled={empty}
+                aria-pressed={isActive}
+                title={empty ? `No selected service is mainly in ${r.label.toLowerCase()}` : undefined}
+                className={`px-3 py-1 text-[12px] font-bold tracking-wider uppercase rounded transition-all flex items-center gap-1.5 border ${
                   isActive
                     ? 'shadow-lg'
-                    : 'bg-white/[0.02] border-white/5 text-slate-400 hover:text-white hover:bg-white/5'
+                    : empty
+                      ? 'bg-transparent border-white/5 text-slate-400 opacity-40 cursor-not-allowed'
+                      : 'bg-white/[0.02] border-white/5 text-slate-400 hover:text-white hover:bg-white/5'
                 }`}
                 style={
                   isActive
@@ -186,7 +222,7 @@ export default function NetworkIntelligence({
               >
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: r.color }} />
                 <span>{r.label}</span>
-                <span className="text-[8px] opacity-75 font-normal">({count})</span>
+                <span className="text-[12px] opacity-75 font-normal">({count})</span>
               </button>
             );
           })}
@@ -196,7 +232,7 @@ export default function NetworkIntelligence({
           <button
             type="button"
             onClick={handleClearService}
-            className="text-[9px] px-2.5 py-1 rounded bg-amber-500/20 border border-amber-500/50 text-amber-300 font-bold uppercase hover:bg-amber-500/30 transition-colors"
+            className="text-[12px] px-2.5 py-1 rounded bg-amber-500/20 border border-amber-500/50 text-amber-300 font-bold uppercase hover:bg-amber-500/30 transition-colors"
           >
             ✕ CLEAR SERVICE INSPECTION
           </button>
@@ -206,7 +242,7 @@ export default function NetworkIntelligence({
       {/* ══ TOP SECTION: MAP + SERVICE DETAIL PANEL ══ */}
       <div className="grid grid-cols-12 gap-3 items-stretch">
         {/* Left Column: World Map */}
-        <div className={selectedService ? 'col-span-8' : 'col-span-12'}>
+        <div className={selectedService ? 'col-span-12 xl:col-span-8' : 'col-span-12'}>
           <InstrumentPanel
             title={
               selectedService
@@ -215,11 +251,11 @@ export default function NetworkIntelligence({
             }
             right={
               selectedService ? (
-                <span className="text-cyan-400 font-bold text-[9px]">
+                <span className="text-cyan-400 font-bold text-[12px]">
                   ● SINGLE SERVICE INSPECTION · {selectedService.ports.join(' → ')}
                 </span>
               ) : (
-                <span className="text-slate-400 text-[8.5px]">
+                <span className="text-slate-400 text-[12px]">
                   {activeRegionObj.label} · {regionServices.length} SELECTED
                 </span>
               )
@@ -241,10 +277,10 @@ export default function NetworkIntelligence({
 
         {/* Right Column: Service Detail Side Panel (Only in Single Service Mode) */}
         {selectedService && (
-          <div className="col-span-4">
+          <div className="col-span-12 xl:col-span-4">
             <InstrumentPanel
               title={`Service Details — ${selectedService.id}`}
-              right={<span className="text-emerald-400 font-bold text-[8.5px]">LIVE RUNTIME</span>}
+              right={<span className="text-slate-400 font-bold text-[12px]">FROM RUN</span>}
               bodyPadding="flush"
             >
               <div style={{ maxHeight: 440, overflowY: 'auto' }}>
@@ -258,21 +294,53 @@ export default function NetworkIntelligence({
       {/* ══ BOTTOM SECTION: SELECTED SERVICES TABLE + REGIONAL SPLIT ══ */}
       <div className="grid grid-cols-12 gap-3 items-stretch">
         {/* Left: Selected Services Table (8-cols) */}
-        <div className="col-span-8 flex flex-col h-full">
+        <div className="col-span-12 xl:col-span-8 flex flex-col h-full min-w-0">
           <InstrumentPanel
             title={`Selected Services (${regionServices.length} in ${activeRegionObj.label})`}
             right={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <button
+                  type="button"
+                  onClick={() => setLossOnly((v) => !v)}
+                  aria-pressed={lossOnly}
+                  disabled={lossCount === 0}
+                  className={`px-2 py-0.5 text-[12px] rounded border font-mono ${lossOnly ? 'border-red-400 text-red-300 bg-red-500/10' : 'border-white/10 text-slate-300'} disabled:opacity-40`}
+                  title="Show only services with negative weekly P&L"
+                >
+                  {lossCount} loss-making
+                </button>
+                <select
+                  aria-label="Sort services"
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value)}
+                  className="px-1.5 py-0.5 text-[12px] rounded bg-black/60 border border-white/10 text-slate-200 font-mono"
+                >
+                  {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
                 <input
                   type="text"
+                  aria-label="Filter services"
                   placeholder="Filter by ID, vessel, port..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-2 py-0.5 text-[8.5px] rounded bg-black/60 border border-white/10 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono w-44"
+                  className="px-2 py-0.5 text-[12px] rounded bg-black/60 border border-white/10 text-slate-200 placeholder-slate-400 focus:outline-none focus:border-cyan-400 font-mono w-44"
                 />
-                <span className="text-[8.5px] text-slate-400">
+                <span className="text-[12px] text-slate-400">
                   {displayedServices.length} / {regionServices.length}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => downloadCsv(`${optState?.source?.label || 'run'}_services`, [
+                    ['service', (s) => s.id], ['region', (s) => s.region], ['agent', (s) => s.agent_region], ['vessel_class', (s) => s.vessel_class],
+                    ['vessels', (s) => s.vessels], ['frequency_per_week', (s) => s.frequency_per_week], ['weekly_profit_usd', (s) => s.weekly_profit],
+                    ['revenue_usd', (s) => s.revenue], ['cost_usd', (s) => s.cost], ['margin_pct', (s) => s.margin_pct], ['ports', (s) => (s.ports || []).join(' ')],
+                  ], displayedServices)}
+                  disabled={displayedServices.length === 0}
+                  className="px-2 py-0.5 text-[12px] rounded border border-white/10 text-slate-300 font-mono disabled:opacity-40"
+                  title="Save the rows shown as CSV"
+                >
+                  CSV
+                </button>
               </div>
             }
             bodyPadding="flush"
@@ -289,14 +357,14 @@ export default function NetworkIntelligence({
               </div>
             ) : (
               <div className="cx-table flex-1 flex flex-col">
-                <div className="cx-rows flex-1" style={{ height: 410, maxHeight: 410, overflowY: 'auto' }}>
+                <div className="cx-rows flex-1" style={{ height: 410, maxHeight: 410, overflow: 'auto' }}>
                   {/* Table Header */}
                   <div
-                    className="cx-row sticky top-0 bg-[#060c14] z-10 font-bold text-[8.5px] tracking-wider text-slate-400 border-b border-white/10"
-                    style={{ display: 'grid', gridTemplateColumns: '120px 100px 100px 1fr 100px 80px', padding: '6px 10px' }}
+                    className="cx-row sticky top-0 bg-[#060c14] z-10 font-bold text-[12px] tracking-wider text-slate-400 border-b border-white/10"
+                    style={{ display: 'grid', gridTemplateColumns: '150px 120px 100px minmax(160px, 1fr) 150px 80px', padding: '6px 10px', minWidth: 760 }}
                   >
                     <div>SERVICE ID</div>
-                    <div>REGION</div>
+                    <div title="Where most of the service's ports are. The optimizer agent that planned it is shown on hover over each region.">REGION</div>
                     <div>VESSEL</div>
                     <div>PORT SEQUENCE</div>
                     <div style={{ textAlign: 'right' }}>WEEKLY P&amp;L</div>
@@ -307,20 +375,26 @@ export default function NetworkIntelligence({
                   {displayedServices.map((s) => {
                     const isSelected = selectedService && selectedService.id === s.id;
                     const rColor = getRegionColor(s.region);
+                    const isLoss = Number(s.weekly_profit) < 0;
 
                     return (
                       <div
                         key={s.id}
-                        className={`cx-row transition-all text-[9px] hover:bg-white/[0.04] ${
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Inspect service ${s.id}`}
+                        className={`cx-row transition-all text-[12px] hover:bg-white/[0.04] ${
                           isSelected ? 'bg-cyan-950/40' : ''
                         }`}
                         onClick={() => setSelectedService(s)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedService(s); } }}
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: '120px 100px 100px 1fr 100px 80px',
+                          gridTemplateColumns: '150px 120px 100px minmax(160px, 1fr) 150px 80px',
                           padding: '6px 10px',
+                          minWidth: 760,
                           cursor: 'pointer',
-                          borderLeft: isSelected ? `3px solid ${rColor}` : '3px solid transparent',
+                          borderLeft: isSelected ? `3px solid ${rColor}` : (isLoss ? '3px solid rgba(255,95,99,0.55)' : '3px solid transparent'),
                         }}
                       >
                         {/* Service ID */}
@@ -332,29 +406,36 @@ export default function NetworkIntelligence({
                         {/* Region Badge */}
                         <div>
                           <span
-                            className="text-[7.5px] px-1.5 py-0.5 rounded font-semibold uppercase"
+                            className="text-[12px] px-1.5 py-0.5 rounded font-semibold uppercase whitespace-nowrap"
                             style={{ background: `${rColor}20`, color: rColor }}
+                            title={s.agent_region ? `Planned by the optimizer's "${s.agent_region}" agent` : undefined}
                           >
-                            {s.region || 'Asia Pacific'}
+                            {s.region || '—'}
                           </span>
                         </div>
 
                         {/* Vessel */}
-                        <div className="text-slate-300 truncate">{s.vessel_class || 'Standard'}</div>
+                        <div className="text-slate-300 truncate">{s.vessel_class || '—'}</div>
 
                         {/* Port Sequence */}
                         <div className="text-slate-300 truncate font-semibold">
                           {(s.ports || []).join(' → ')}
-                          <span className="text-slate-500 font-normal text-[8px] ml-1">({fmtNum(s.load)} TEU)</span>
+                          <span className="text-slate-400 font-normal text-[12px] ml-1">({fmtNum(s.load)} TEU)</span>
                         </div>
 
                         {/* Profit */}
-                        <div className="text-right font-bold text-emerald-400">
+                        <div className={`text-right font-bold ${pnlClass(s.weekly_profit)} cell-bar`}>
+                          {s.weekly_profit != null && (
+                            <span className="ibar" aria-hidden="true">
+                              <span className={isLoss ? 'neg' : 'pos'} style={{ width: `${Math.max(4, (Math.abs(Number(s.weekly_profit)) / maxAbsPnl) * 100)}%` }} />
+                            </span>
+                          )}
+                          {isLoss && <span className="sr-only">Loss: </span>}
                           {fmtUsd(s.weekly_profit)}
                         </div>
 
                         {/* Margin */}
-                        <div className="text-right text-cyan-300 font-semibold">
+                        <div className={`text-right font-semibold ${s.margin_pct != null && Number(s.margin_pct) < 0 ? 'text-red-400' : 'text-cyan-300'}`}>
                           {s.margin_pct != null ? fmtPct(s.margin_pct) : '—'}
                         </div>
                       </div>
@@ -367,11 +448,11 @@ export default function NetworkIntelligence({
         </div>
 
         {/* Right: Regional Split & Routing Impact (4-cols) */}
-        <div className="col-span-4 flex flex-col justify-between h-full space-y-3">
+        <div className="col-span-12 xl:col-span-4 flex flex-col justify-between h-full space-y-3">
           {/* Regional Split Breakdown */}
           <InstrumentPanel
             title="Regional Split Breakdown"
-            right={<span className="text-[8px] text-slate-400 uppercase">5 REGIONS ON DISK</span>}
+            right={<span className="text-[12px] text-slate-400 uppercase">{Object.keys(regionStats).length} REGIONS · BY PORT GEOGRAPHY</span>}
             bodyPadding="flush"
             style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
           >
@@ -387,19 +468,21 @@ export default function NetworkIntelligence({
                     }`}
                   >
                     <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-[9.5px] uppercase flex items-center gap-1.5" style={{ color: st.color }}>
+                      <span className="font-bold text-[12px] uppercase flex items-center gap-1.5" style={{ color: st.color }}>
                         <span className="w-2 h-2 rounded-full" style={{ background: st.color }} />
                         {st.name}
                       </span>
-                      <span className="text-[8.5px] text-slate-300 font-bold">{st.services} services</span>
+                      <span className="text-[12px] text-slate-300 font-bold">
+                        {st.services} services{st.losses > 0 && <span className="text-red-400"> · {st.losses} loss</span>}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-[8.5px]">
-                      <div>
-                        <span className="text-slate-500">P&amp;L: </span>
-                        <span className="text-emerald-400 font-bold">{fmtUsd(st.profit)}</span>
+                    <div className="grid grid-cols-2 gap-2 text-[12px]">
+                      <div title="Sum of the selected services' own weekly P&L in this region">
+                        <span className="text-slate-400">Σ service P&amp;L: </span>
+                        <span className={`font-bold ${pnlClass(st.profit)}`}>{fmtUsd(st.profit)}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-slate-500">PORTS: </span>
+                        <span className="text-slate-400">PORTS: </span>
                         <span className="text-slate-200 font-bold">{st.ports.size} ports</span>
                       </div>
                     </div>
@@ -423,7 +506,7 @@ export default function NetworkIntelligence({
                 <Stat k="freshness state" v={routingImpact.freshness_state || routingImpact.state || '—'} />
               </div>
             ) : (
-              <div className="p-2 text-[8.5px] text-slate-400 leading-relaxed">
+              <div className="p-2 text-[12px] text-slate-400 leading-relaxed">
                 <div className="text-slate-300 font-semibold mb-1">● NOT OBSERVED</div>
                 Routing impact analysis has not produced causal diffs for this run.
               </div>

@@ -1,0 +1,40 @@
+flowchart TB
+  subgraph AG["Agents (src/agents/)"]
+    ORCH["OrchestratorAgent<br/>role: orchestrator"]
+    REGA["RegionalAgent x3<br/>role: regional"]
+    SVC["ServiceGeneratorAgent<br/>role: service_generator"]
+    COORDA["CoordinatorAgent<br/>role: coordinator, iteration_selector"]
+  end
+
+  CLIENT["llm_client (single entry)"]
+  subgraph ROUTER["ProviderRouter (src/llm/providers/)"]
+    MAP["role to per-provider model"]
+    CACHE["response cache"]
+    CB["circuit breaker + provider switch"]
+    HF["hard fallback record"]
+  end
+  subgraph PROV["Providers"]
+    P1["OpenRouter"]
+    P2["Groq"]
+    P3["Cerebras"]
+    P4["Google"]
+  end
+
+  VAL["Validators<br/>archetype, regional policy, weights,<br/>consensus engine, iteration-selection contract"]
+  RULE["Deterministic rule-based fallbacks<br/>(text templates, default policy,<br/>Pareto + weighted score)"]
+  ACT["ActuationLedger + provider telemetry<br/>(decision_source = llm or rule-based)"]
+
+  ORCH --> CLIENT
+  REGA --> CLIENT
+  SVC --> CLIENT
+  COORDA --> CLIENT
+  CLIENT --> MAP --> CACHE --> CB
+  CB --> P1
+  CB --> P2
+  CB --> P3
+  CB --> P4
+  CB --> HF
+  CLIENT --> VAL
+  VAL -->|accepted| AG
+  VAL -->|rejected or unavailable| RULE --> AG
+  CLIENT --> ACT

@@ -79,7 +79,7 @@ export default function CommandCenterShell({
             <span className="k">SYSTEM</span>
             <span className="v green">{systemReady ? 'READY' : (sm.status || 'UNKNOWN').toUpperCase()}</span>
           </span>
-          <span className="seg"><span className="k">RUN</span><span className="v">{sm.run_id || 'run-03'}</span></span>
+          <span className="seg"><span className="k">RUN</span><span className="v">{sm.run_id || '—'}</span></span>
           <span className="seg"><span className="k">OPTIMIZER</span><span className="v">{systemReady ? 'CONVERGED' : 'CONVERGED'}</span></span>
           <span className="seg"><span className="k">AGENTS</span><span className="v">GA + MILP</span></span>
           <span className="seg"><span className="k">ITER</span><span className="v">{iterCount}</span></span>

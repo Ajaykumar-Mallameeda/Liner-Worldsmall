@@ -58,10 +58,10 @@ export default function DataFreshnessBadge({ ageSeconds, hint, size = 'sm' }) {
   const ageLabel = formatAge(ageSeconds);
   const sizeStyle =
     size === 'lg'
-      ? { fontSize: 11, padding: '2px 8px' }
+      ? { fontSize: 12, padding: '2px 8px' }
       : size === 'md'
-        ? { fontSize: 10, padding: '2px 7px' }
-        : { fontSize: 9, padding: '1px 6px' };
+        ? { fontSize: 12, padding: '2px 7px' }
+        : { fontSize: 12, padding: '1px 6px' };
   return (
     <span
       className="maritime-state-change inline-flex items-center gap-1.5"
@@ -78,7 +78,7 @@ export default function DataFreshnessBadge({ ageSeconds, hint, size = 'sm' }) {
         className="font-mono"
         style={{
           color: 'rgba(255,255,255,0.45)',
-          fontSize: 9,
+          fontSize: 12,
           letterSpacing: '0.06em',
         }}
       >

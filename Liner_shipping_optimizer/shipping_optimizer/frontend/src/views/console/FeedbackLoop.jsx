@@ -16,6 +16,9 @@ import { useOptimizationState } from '../../hooks/useOptimizationState.js';
 import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Stat, Provenance } from '../../components/console/p12.jsx';
+import InspectBanner from '../../components/console/InspectBanner.jsx';
+import { fmtConfidence, prettyEngineText } from '../../utils/formatters.js';
+import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
 
 const h = createElement;
 const F = Fragment;
@@ -62,18 +65,18 @@ function fmtSec(v) {
 function fmtDelta(v, unit = '', dec = 1) {
   if (v == null) return EM;
   const n = Number(v);
-  return (n >= 0 ? '+' : '') + n.toFixed(dec) + unit;
+  return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(dec) + unit;
 }
 
 function fmtDeltaUsd(v) {
   if (v == null) return EM;
   const n = Number(v);
-  const sign = n >= 0 ? '+' : '';
   const abs = Math.abs(n);
-  return abs >= 1e9 ? sign + '$' + (n / 1e9).toFixed(2) + 'B'
-       : abs >= 1e6 ? sign + '$' + (n / 1e6).toFixed(1) + 'M'
-       : abs >= 1e3 ? sign + '$' + (n / 1e3).toFixed(0) + 'K'
-       : sign + '$' + Math.round(n);
+  const s = n >= 0 ? '+' : '−';
+  return abs >= 1e9 ? s + '$' + (abs / 1e9).toFixed(2) + 'B'
+       : abs >= 1e6 ? s + '$' + (abs / 1e6).toFixed(1) + 'M'
+       : abs >= 1e3 ? s + '$' + (abs / 1e3).toFixed(0) + 'K'
+       : s + '$' + Math.round(abs);
 }
 
 function deltaColor(v) {
@@ -85,7 +88,7 @@ function SLabel({ children, style: extra }) {
   return h('div', {
     style: {
       fontFamily: 'var(--cx-mono)',
-      fontSize: 8.5,
+      fontSize: 12,
       color: 'var(--cx-text-faint)',
       textTransform: 'uppercase',
       letterSpacing: '0.12em',
@@ -105,7 +108,7 @@ function KvRow({ label, value, tone, sub, style: extra }) {
       padding: '3px 0',
       borderBottom: '1px solid rgba(255,255,255,0.04)',
       fontFamily: 'var(--cx-mono)',
-      fontSize: 9,
+      fontSize: 12,
       ...extra,
     },
   },
@@ -143,22 +146,22 @@ function KvRow({ label, value, tone, sub, style: extra }) {
       sub && h('span', {
         style: {
           color: 'var(--cx-text-faint)',
-          fontSize: 7.5,
+          fontSize: 12,
         },
       }, sub),
     ),
   );
 }
 
-function DRow({ label, value, unit = '', isUsd = false, style: ex }) {
+function DRow({ label, value, unit = '', isUsd = false, dec = 1, style: ex }) {
   if (value == null) return null;
-  const formatted = isUsd ? fmtDeltaUsd(value) : fmtDelta(value, unit);
+  const formatted = isUsd ? fmtDeltaUsd(value) : fmtDelta(value, unit, dec);
   const color = deltaColor(value);
   return h('div', {
     style: {
       display: 'flex', justifyContent: 'space-between',
       alignItems: 'baseline',
-      fontFamily: 'var(--cx-mono)', fontSize: 9, padding: '3px 0',
+      fontFamily: 'var(--cx-mono)', fontSize: 12, padding: '3px 0',
       borderBottom: '1px solid rgba(255,255,255,0.04)',
       ...ex,
     },
@@ -173,7 +176,7 @@ function BRow({ label, value, sub, tone = 'default', style: ex }) {
     style: {
       display: 'flex', justifyContent: 'space-between',
       alignItems: 'baseline',
-      fontFamily: 'var(--cx-mono)', fontSize: 9, padding: '3px 0',
+      fontFamily: 'var(--cx-mono)', fontSize: 12, padding: '3px 0',
       borderBottom: '1px solid rgba(255,255,255,0.04)',
       ...ex,
     },
@@ -189,7 +192,7 @@ function BRow({ label, value, sub, tone = 'default', style: ex }) {
                : 'var(--cx-text)',
         },
       }, value ?? EM),
-      sub && h('span', { style: { color: 'var(--cx-text-faint)', fontSize: 7.5 } }, sub),
+      sub && h('span', { style: { color: 'var(--cx-text-faint)', fontSize: 12 } }, sub),
     ),
   );
 }
@@ -200,7 +203,7 @@ function WeightBar({ label, value, color }) {
     h('div', {
       style: {
         display: 'flex', justifyContent: 'space-between',
-        fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+        fontFamily: 'var(--cx-mono)', fontSize: 12,
         color: 'var(--cx-text-faint)', marginBottom: 2,
       },
     },
@@ -235,7 +238,7 @@ function HighContrastDeltaChart({
     return h('div', {
       style: {
         height, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-faint)',
+        fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)',
       },
     }, 'NO AUDIT HISTORY');
   }
@@ -326,7 +329,7 @@ function HighContrastDeltaChart({
         y: H - 2,
         textAnchor: 'middle',
         fontFamily: 'monospace',
-        fontSize: 7.5,
+        fontSize: 12,
         fill: 'rgba(255,255,255,0.4)',
       }, 'I' + String(p.i).padStart(2, '0'))
     ),
@@ -336,7 +339,7 @@ function HighContrastDeltaChart({
       y: PAD.top + 3,
       textAnchor: 'end',
       fontFamily: 'monospace',
-      fontSize: 7,
+      fontSize: 12,
       fill: 'rgba(255,255,255,0.4)',
     }, yFormatter(max)),
     h('text', {
@@ -344,7 +347,7 @@ function HighContrastDeltaChart({
       y: PAD.top + cH + 2,
       textAnchor: 'end',
       fontFamily: 'monospace',
-      fontSize: 7,
+      fontSize: 12,
       fill: 'rgba(255,255,255,0.4)',
     }, yFormatter(min)),
   );
@@ -362,7 +365,7 @@ export default function FeedbackLoop(props) {
   const scorecards = optState.scorecards || [];
 
   const iterSelMeta = gbl.iteration_selection || optState.iteration_selection || (runtimeProp && runtimeProp.iteration_selection) || {};
-  const pipelineSelectedIter = gbl.selected_iteration ?? 0;
+  const pipelineSelectedIter = selectedIterationOf((runtimeProp && runtimeProp.global) ? runtimeProp : optState) ?? 0;
   const iterCount = scorecards.length > 0 ? scorecards.length : rawIters.length;
 
   // Active iteration state (clickable selection)
@@ -443,6 +446,7 @@ export default function FeedbackLoop(props) {
     }),
 
     h('div', { className: 'cx-page-body' },
+      h(InspectBanner, { inspecting: inspectIter, selected: pipelineSelectedIter, onReset: () => setInspectIter(null) }),
 
       // ── Iteration Selector Switcher Strip ─────────────────────────────────
       h('div', {
@@ -460,7 +464,7 @@ export default function FeedbackLoop(props) {
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', {
             style: {
-              fontFamily: 'var(--cx-mono)', fontSize: 9,
+              fontFamily: 'var(--cx-mono)', fontSize: 12,
               color: 'var(--cx-text-faint)', textTransform: 'uppercase', letterSpacing: '0.12em',
             },
           }, 'Inspect Iteration Feedback:'),
@@ -475,7 +479,7 @@ export default function FeedbackLoop(props) {
                 border: `1px solid ${isInspected ? '#00f5ff' : 'var(--cx-edge-soft)'}`,
                 color: isInspected ? '#00f5ff' : 'var(--cx-text-dim)',
                 fontFamily: 'var(--cx-mono)',
-                fontSize: 9,
+                fontSize: 12,
                 fontWeight: isInspected ? 700 : 500,
                 padding: '3px 9px',
                 cursor: 'pointer',
@@ -487,7 +491,7 @@ export default function FeedbackLoop(props) {
         ),
         h('div', {
           style: {
-            fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-faint)',
+            fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)',
           },
         }, activeIterNum === pipelineSelectedIter ? '★ Canonical Pipeline Selection' : 'Comparing vs previous iteration audit'),
       ),
@@ -525,7 +529,7 @@ export default function FeedbackLoop(props) {
             h('div', {
               style: {
                 display: 'flex', justifyContent: 'space-between',
-                fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                fontFamily: 'var(--cx-mono)', fontSize: 12,
                 color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                 paddingTop: 4, marginTop: 4,
               },
@@ -566,7 +570,7 @@ export default function FeedbackLoop(props) {
             h('div', {
               style: {
                 display: 'flex', justifyContent: 'space-between',
-                fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                fontFamily: 'var(--cx-mono)', fontSize: 12,
                 color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                 paddingTop: 4, marginTop: 4,
               },
@@ -585,7 +589,7 @@ export default function FeedbackLoop(props) {
             prevIterNum != null
               ? h(Stat, {
                   k: 'score delta',
-                  v: fmtDelta(dScore != null ? dScore * 1000 : null, '×10⁻³', 1),
+                  v: fmtDelta(dScore, '', 3),
                   variant: dScore >= 0 ? 'good' : 'bad',
                   sub: 'convergence score delta',
                 })
@@ -607,7 +611,7 @@ export default function FeedbackLoop(props) {
             h('div', {
               style: {
                 display: 'flex', justifyContent: 'space-between',
-                fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                fontFamily: 'var(--cx-mono)', fontSize: 12,
                 color: 'var(--cx-text-faint)', borderTop: '1px solid var(--cx-edge-soft)',
                 paddingTop: 4, marginTop: 4,
               },
@@ -638,10 +642,10 @@ export default function FeedbackLoop(props) {
                 },
                   h('div', null,
                     h(KvRow, { label: 'Selected Iteration', value: 'ITER ' + String(pipelineSelectedIter).padStart(2, '0'), tone: 'good' }),
-                    h(KvRow, { label: 'Selection Method', value: iterSelMeta.selection_method ? iterSelMeta.selection_method.replace(/_/g, ' ') : 'Multi-Objective Pareto' }),
+                    h(KvRow, { label: 'Selection Method', value: iterSelMeta.selection_method ? iterSelMeta.selection_method.replace(/_/g, ' ') : EM }),
                   ),
                   h('div', null,
-                    h(KvRow, { label: 'Confidence Score', value: iterSelMeta.confidence != null ? fmtPct(iterSelMeta.confidence) : '90.0%', tone: 'good' }),
+                    h(KvRow, { label: 'Confidence Score', value: fmtConfidence(iterSelMeta.confidence, iterSelMeta.selection_method) }),
                     h(KvRow, { label: 'Pareto Optimal', value: (iterSelMeta.pareto_optimal_iterations || []).includes(pipelineSelectedIter) ? 'YES' : 'NO', tone: 'good' }),
                   ),
                 ),
@@ -652,18 +656,18 @@ export default function FeedbackLoop(props) {
                         borderLeft: '3px solid var(--cx-cyan-2)',
                         padding: '8px 10px',
                         fontFamily: 'var(--cx-mono)',
-                        fontSize: 9.5,
+                        fontSize: 12,
                         color: 'var(--cx-text)',
                         lineHeight: 1.45,
                         borderRadius: '0 2px 2px 0',
                         marginBottom: 8,
                       },
-                    }, selectionRationale)
+                    }, prettyEngineText(selectionRationale))
                   : h('div', {
                       style: {
                         padding: '8px 10px',
                         fontFamily: 'var(--cx-mono)',
-                        fontSize: 9,
+                        fontSize: 12,
                         color: 'var(--cx-text-faint)',
                         marginBottom: 8,
                       },
@@ -677,7 +681,7 @@ export default function FeedbackLoop(props) {
                     key: idx,
                     style: {
                       display: 'flex', gap: 6,
-                      fontFamily: 'var(--cx-mono)', fontSize: 9,
+                      fontFamily: 'var(--cx-mono)', fontSize: 12,
                       color: 'var(--cx-text-dim)', marginBottom: 3, lineHeight: 1.35,
                     },
                   },
@@ -705,14 +709,14 @@ export default function FeedbackLoop(props) {
                   },
                 },
                   h('div', null,
-                    h(KvRow, { label: 'Validation Score', value: testScorecard.score != null ? fmtPct(testScorecard.score) : '99.4%', tone: 'good' }),
-                    h(KvRow, { label: 'Assertions Passed', value: testScorecard.assertions_passed != null ? `${testScorecard.assertions_passed}/${testScorecard.assertions_total || 326}` : '324/326', tone: 'good' }),
-                    h(KvRow, { label: 'Constraint Violations', value: '0 violations', tone: 'good' }),
+                    h(KvRow, { label: 'Validation Score', value: testScorecard.score != null ? fmtPct(testScorecard.score) : EM, tone: testScorecard.score != null ? 'good' : undefined }),
+                    h(KvRow, { label: 'Assertions Passed', value: testScorecard.assertions_passed != null ? `${testScorecard.assertions_passed}/${testScorecard.assertions_total ?? EM}` : EM, tone: testScorecard.assertions_passed != null ? 'good' : undefined }),
+                    h(KvRow, { label: 'Constraint Violations', value: 'not reported' }),
                   ),
                   h('div', null,
-                    h(KvRow, { label: 'Consensus Confidence', value: consensusResult.confidence_score != null ? fmtPct(consensusResult.confidence_score) : '90.0%', tone: 'good' }),
+                    h(KvRow, { label: 'Consensus Confidence', value: consensusResult.confidence_score != null ? fmtPct(consensusResult.confidence_score * 100) : EM, tone: 'good' }),
                     h(KvRow, { label: 'Conflicts Resolved', value: String(conflictsResolved.length || 1), tone: 'good' }),
-                    h(KvRow, { label: 'Warnings', value: String(testScorecard.warnings ?? 5), tone: 'warn' }),
+                    h(KvRow, { label: 'Warnings', value: String(testScorecard.warnings ?? '—'), tone: 'warn' }),
                   ),
                 ),
                 // Conflicts Resolved detail
@@ -727,11 +731,11 @@ export default function FeedbackLoop(props) {
                 },
                   h(SLabel, { style: { color: '#10b981', marginBottom: 3 } }, 'Reconciled Hub Conflict:'),
                   h('div', {
-                    style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text)', lineHeight: 1.35 },
-                  }, conflictsResolved[0].resolution || 'Weighted hub support produced final hubs=[USLAX]'),
+                    style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)', lineHeight: 1.35 },
+                  }, prettyEngineText(conflictsResolved[0].resolution) || EM),
                   conflictsResolved[0].detail && h('div', {
-                    style: { fontFamily: 'var(--cx-mono)', fontSize: 8, color: 'var(--cx-text-faint)', marginTop: 3 },
-                  }, conflictsResolved[0].detail),
+                    style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', marginTop: 3 },
+                  }, prettyEngineText(conflictsResolved[0].detail)),
                 ),
                 // Archetype distribution mix
                 Object.keys(archetypeMix).length > 0 && h('div', {
@@ -747,10 +751,10 @@ export default function FeedbackLoop(props) {
                   h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 } },
                     Object.entries(archetypeMix).map(([k, v]) =>
                       h('div', { key: k, style: { textAlign: 'center' } },
-                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 7.5, color: 'var(--cx-text-faint)', textTransform: 'uppercase' } },
+                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', textTransform: 'uppercase' } },
                           k.replace('_ratio', '')
                         ),
-                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, fontWeight: 700, color: 'var(--cx-text)' } },
+                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 700, color: 'var(--cx-text)' } },
                           fmtPct(v)
                         ),
                       )
@@ -760,7 +764,7 @@ export default function FeedbackLoop(props) {
               ),
               consensusResult.final_archetype_params?.notes && h('div', {
                 style: {
-                  fontFamily: 'var(--cx-mono)', fontSize: 8,
+                  fontFamily: 'var(--cx-mono)', fontSize: 12,
                   color: 'var(--cx-text-faint)', lineHeight: 1.3,
                   borderTop: '1px solid var(--cx-edge-soft)', paddingTop: 5,
                   marginTop: 4,
@@ -789,12 +793,12 @@ export default function FeedbackLoop(props) {
                   },
                 },
                   h('div', null,
-                    h(KvRow, { label: 'Coordinator Eval', value: doEval.score != null ? `${doEval.score} / ${doEval.max || 5}` : '3 / 5', tone: 'good' }),
-                    h(KvRow, { label: 'Eval Status', value: (doEval.status || 'good').toUpperCase(), tone: 'good' }),
+                    h(KvRow, { label: 'Coordinator Eval', value: doEval.score != null ? `${doEval.score} / ${doEval.max ?? 5}` : EM, tone: doEval.score != null ? 'good' : undefined }),
+                    h(KvRow, { label: 'Eval Status', value: doEval.status ? String(doEval.status).toUpperCase() : EM, tone: doEval.status ? 'good' : undefined }),
                   ),
                   h('div', null,
-                    h(KvRow, { label: 'Decision Source', value: (decisionOutput.llm_actuation?.decision_source || 'LLM').toUpperCase(), tone: 'accent' }),
-                    h(KvRow, { label: 'Actuation Latency', value: fmtSec(decisionOutput.llm_actuation?.latency_sec ?? 41.7) }),
+                    h(KvRow, { label: 'Decision Source', value: (decisionOutput.llm_actuation?.decision_source || '—').toUpperCase(), tone: 'accent' }),
+                    h(KvRow, { label: 'Actuation Latency', value: fmtSec(decisionOutput.llm_actuation?.latency_sec) }),
                   ),
                 ),
                 doEval.reasons?.length > 0 && h('div', {
@@ -809,7 +813,7 @@ export default function FeedbackLoop(props) {
                   doEval.reasons.map((r, i) =>
                     h('div', {
                       key: i,
-                      style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text)', lineHeight: 1.35 },
+                      style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)', lineHeight: 1.35 },
                     }, '· ' + r)
                   ),
                 ),
@@ -827,9 +831,9 @@ export default function FeedbackLoop(props) {
                         borderRadius: 2,
                       },
                     },
-                      h('div', { style: { color: '#22d3ee', fontWeight: 600, fontFamily: 'var(--cx-mono)', fontSize: 8.5 } }, '· ' + (act.region || 'Region')),
-                      h('div', { style: { color: 'var(--cx-text-dim)', fontFamily: 'var(--cx-mono)', fontSize: 8, marginTop: 1, lineHeight: 1.3 } }, act.action),
-                      act.expected_gain && h('div', { style: { color: '#34d399', fontFamily: 'var(--cx-mono)', fontSize: 7.5, marginTop: 2 } }, act.expected_gain),
+                      h('div', { style: { color: '#22d3ee', fontWeight: 600, fontFamily: 'var(--cx-mono)', fontSize: 12 } }, '· ' + (act.region || 'Region')),
+                      h('div', { style: { color: 'var(--cx-text-dim)', fontFamily: 'var(--cx-mono)', fontSize: 12, marginTop: 1, lineHeight: 1.3 } }, act.action),
+                      act.expected_gain && h('div', { style: { color: '#34d399', fontFamily: 'var(--cx-mono)', fontSize: 12, marginTop: 2 } }, act.expected_gain),
                     )
                   ),
                 ),
@@ -868,7 +872,7 @@ export default function FeedbackLoop(props) {
                   h('div', null,
                     h(KvRow, { label: 'Low Coverage Flag', value: activeAudit.lowCoverage ? 'YES' : 'NO', tone: activeAudit.lowCoverage ? 'warn' : 'good' }),
                     h(KvRow, { label: 'Iteration Cap', value: activeAudit.atIterationCap ? 'YES — Max Iterations' : 'NO', tone: activeAudit.atIterationCap ? 'warn' : 'good' }),
-                    h(KvRow, { label: 'Final Selected', value: activeAudit.selected_as_final ? 'YES' : 'NO', tone: activeAudit.selected_as_final ? 'good' : 'no_data' }),
+                    h(KvRow, { label: 'Final Selected', value: activeIterNum === pipelineSelectedIter ? 'YES' : 'NO', tone: activeIterNum === pipelineSelectedIter ? 'good' : 'no_data' }),
                   ),
                 ),
                 (activeAudit.rerun_reason || activeAudit.reason) && h('div', {
@@ -881,8 +885,8 @@ export default function FeedbackLoop(props) {
                 },
                   h(SLabel, { style: { color: (activeAudit.needs_rerun ?? activeAudit.rerun) ? '#fbbf24' : '#34d399', marginBottom: 3 } }, 'Authoritative Rerun Reason:'),
                   h('div', {
-                    style: { fontFamily: 'var(--cx-mono)', fontSize: 9, color: 'var(--cx-text)', lineHeight: 1.35 },
-                  }, activeAudit.rerun_reason || activeAudit.reason),
+                    style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text)', lineHeight: 1.35 },
+                  }, prettyEngineText(activeAudit.rerun_reason || activeAudit.reason)),
                 ),
                 // Proposed next weights
                 (activeAudit.weight_adjustments || doFeedback.weight_adjustments) && h('div', { style: { marginBottom: 8 } },
@@ -898,10 +902,10 @@ export default function FeedbackLoop(props) {
                           textAlign: 'center',
                         },
                       },
-                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 7.5, color: 'var(--cx-text-faint)', textTransform: 'uppercase' } },
+                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)', textTransform: 'uppercase' } },
                           k.replace('_weight', '')
                         ),
-                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 10, fontWeight: 700, color: 'var(--cx-text)' } },
+                        h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 700, color: 'var(--cx-text)' } },
                           fmtPct(v, 1)
                         ),
                       )
@@ -917,7 +921,7 @@ export default function FeedbackLoop(props) {
                     key: i,
                     style: {
                       display: 'flex', gap: 6,
-                      fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                      fontFamily: 'var(--cx-mono)', fontSize: 12,
                       color: 'var(--cx-text-dim)', marginBottom: 2, lineHeight: 1.3,
                     },
                   },
@@ -947,9 +951,9 @@ export default function FeedbackLoop(props) {
                 ? h('div', { style: { display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' } },
                     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px', marginBottom: 8 } },
                       h('div', null,
-                        h(DRow, { label: 'Convergence Score', value: (activeSC.convergence_score - prevSC.convergence_score) * 1000, unit: '×10⁻³' }),
+                        h(DRow, { label: 'Convergence Score', value: activeSC.convergence_score - prevSC.convergence_score, unit: '', dec: 3 }),
                         h(DRow, { label: 'Weekly Profit', value: activeSC.weekly_profit - prevSC.weekly_profit, isUsd: true }),
-                        h(DRow, { label: 'Avg Coverage', value: activeSC.average_regional_coverage - prevSC.average_regional_coverage, unit: ' pp' }),
+                        h(DRow, { label: 'Regional Avg Coverage', value: activeSC.average_regional_coverage - prevSC.average_regional_coverage, unit: ' pp' }),
                         h(DRow, { label: 'Global Coverage', value: activeSC.global_demand_weighted_coverage - prevSC.global_demand_weighted_coverage, unit: ' pp' }),
                       ),
                       h('div', null,
@@ -969,7 +973,7 @@ export default function FeedbackLoop(props) {
                       },
                     },
                       h(SLabel, { style: { marginBottom: 3 } }, 'Iteration Transition Delta Summary:'),
-                      h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, color: 'var(--cx-text-dim)', lineHeight: 1.35 } },
+                      h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-dim)', lineHeight: 1.35 } },
                         `Transition evaluated from Iteration ${prevIterNum} to ${activeIterNum}. Score converged to ${activeSC.convergence_score.toFixed(3)} with ${activeSC.services_deployed} total active routes deployed across the global network.`
                       ),
                     ),
@@ -979,7 +983,7 @@ export default function FeedbackLoop(props) {
                       h('div', null,
                         h(BRow, { label: 'Baseline Score', value: activeSC?.convergence_score?.toFixed(3), tone: 'accent' }),
                         h(BRow, { label: 'Baseline Profit', value: fmtUsd(activeSC?.weekly_profit), tone: 'good' }),
-                        h(BRow, { label: 'Avg Coverage', value: fmtPct(activeSC?.average_regional_coverage), tone: 'good' }),
+                        h(BRow, { label: 'Regional Avg Coverage', value: fmtPct(activeSC?.average_regional_coverage), tone: 'good' }),
                         h(BRow, { label: 'Global Coverage', value: fmtPct(activeSC?.global_demand_weighted_coverage), tone: 'good' }),
                       ),
                       h('div', null,
@@ -1003,8 +1007,8 @@ export default function FeedbackLoop(props) {
                       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 } },
                         regionalResults.map(reg =>
                           h('div', { key: reg.name, style: { textAlign: 'center', padding: '3px 2px', background: 'rgba(0,0,0,0.15)', borderRadius: 2 } },
-                            h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 7.5, color: 'var(--cx-text-faint)' } }, reg.name),
-                            h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 8.5, fontWeight: 700, color: reg.profit >= 0 ? 'var(--cx-green)' : 'var(--cx-red)' } }, fmtUsd(reg.profit)),
+                            h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, color: 'var(--cx-text-faint)' } }, reg.name),
+                            h('div', { style: { fontFamily: 'var(--cx-mono)', fontSize: 12, fontWeight: 700, color: reg.profit >= 0 ? 'var(--cx-green)' : 'var(--cx-red)' } }, fmtUsd(reg.profit)),
                           )
                         ),
                       ),
@@ -1028,7 +1032,7 @@ export default function FeedbackLoop(props) {
                     display: 'grid',
                     gridTemplateColumns: `80px repeat(${iterCount}, 1fr)`,
                     gap: '3px 12px',
-                    fontFamily: 'var(--cx-mono)', fontSize: 8.5,
+                    fontFamily: 'var(--cx-mono)', fontSize: 12,
                     marginBottom: 8,
                   },
                 },
@@ -1065,7 +1069,7 @@ export default function FeedbackLoop(props) {
       h(Provenance, {
         source: 'pipeline_output.json (iteration_selection, decision_output, consensus_result, iteration_audit, test_scorecard)',
         sourceStatus: iterCount > 0 ? 'available' : 'no_data',
-        attribution: (gbl.run_id || 'run-03') + ' · Multi-objective optimizer audit trail',
+        attribution: (gbl.run_id || '—') + ' · Multi-objective optimizer audit trail',
         license: 'Internal artifact',
         recordCount: iterCount,
         snapshotId: gbl.evaluated_at ? new Date(gbl.evaluated_at).toLocaleTimeString() : undefined,

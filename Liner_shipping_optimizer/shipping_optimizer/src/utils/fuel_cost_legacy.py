@@ -1,5 +1,5 @@
 """LEGACY COPY (verbatim) of the pre-network-model implementation, kept for reference.
-Not imported by the pipeline. Superseded by src/network/* (see reports/overnight_tasks_2_to_4).
+Not imported by the pipeline. Superseded by src/network/*.
 """
 """
 Fuel Cost Calculation Module for Liner Shipping Optimizer

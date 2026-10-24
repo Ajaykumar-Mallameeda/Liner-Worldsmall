@@ -95,7 +95,7 @@ export default function MaritimeResilienceView() {
         />
       </div>
 
-      <div className="text-[11px] text-white/30 font-mono leading-relaxed max-w-2xl">
+      <div className="text-[12px] text-white/60 font-mono leading-relaxed max-w-2xl">
         Resilience core view: shows snapshot freshness, quality,
         fallback tier, and checksum status. When maritime
         intelligence is disabled (default), all cards report
@@ -119,8 +119,8 @@ function ResilienceCard({ title, enabled, cell, resilience }) {
   if (!enabled) {
     return (
       <IntelligencePanel title={title} density="comfortable">
-        <div className="text-xs text-white/40 font-mono mt-2">DISABLED</div>
-        <div className="text-[11px] text-white/30 font-mono mt-2">
+        <div className="text-xs text-white/60 font-mono mt-2">DISABLED</div>
+        <div className="text-[12px] text-white/60 font-mono mt-2">
           master flag off — no maritime side effects
         </div>
       </IntelligencePanel>
@@ -140,7 +140,7 @@ function ResilienceCard({ title, enabled, cell, resilience }) {
       density="comfortable"
       right={<MaritimeStatusBadge value={state} pulse={fresh} />}
     >
-      <dl className="mt-1 grid grid-cols-2 gap-2 text-[11px] font-mono text-white/60">
+      <dl className="mt-1 grid grid-cols-2 gap-2 text-[12px] font-mono text-white/60">
         <Field label="Snapshot" value={resilience?.snapshot_id || cell?.snapshot_id || "—"} />
         <Field label="Tier" value={tier} />
         <Field label="Records" value={String(recordCount)} />
@@ -164,8 +164,8 @@ function ResilienceCard({ title, enabled, cell, resilience }) {
 function Field({ label, value }) {
   return (
     <div>
-      <dt className="uppercase tracking-widest text-white/30 text-[9px]">{label}</dt>
-      <dd className="text-white/80 mt-0.5 break-all font-mono text-[11px]">{value}</dd>
+      <dt className="uppercase tracking-widest text-white/60 text-[12px]">{label}</dt>
+      <dd className="text-white/80 mt-0.5 break-all font-mono text-[12px]">{value}</dd>
     </div>
   );
 }

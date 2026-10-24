@@ -138,7 +138,7 @@ export default function PipelineView({ optimizationState }) {
             }}>
               <div style={{
                 position: "absolute", top: 7, left: 0, right: 0, textAlign: "center",
-                fontSize: 7, fontWeight: 800, letterSpacing: "1px",
+                fontSize: 12, fontWeight: 800, letterSpacing: "1px",
                 color: l.color, fontFamily: "monospace", textTransform: "uppercase", opacity: 0.75,
                 whiteSpace: "nowrap", overflow: "hidden",
               }}>{l.label}</div>
@@ -219,7 +219,7 @@ export default function PipelineView({ optimizationState }) {
 
       <div style={{ width: 258, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
         <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-          <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.4)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Pipeline Stats</div>
+          <div style={{ fontSize: 12, fontFamily: "monospace", color: "rgba(255,255,255,0.4)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Pipeline Stats</div>
           {[
             { label: "Total Runtime",       value: g.runtime ? `${g.runtime}s` : "—" },
             { label: "Feedback Iterations", value: optimizationState.iterations.length.toString() },
@@ -230,8 +230,8 @@ export default function PipelineView({ optimizationState }) {
             { label: "Conflicts Detected",  value: g.decision_output?.conflicts?.length?.toString() || "0" },
           ].map(({ label, value }) => (
             <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.42)", fontFamily: "monospace" }}>{label}</span>
-              <span style={{ fontSize: 11, fontFamily: "monospace", color: "rgba(255,255,255,0.9)", fontWeight: 700 }}>{value}</span>
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.42)", fontFamily: "monospace" }}>{label}</span>
+              <span style={{ fontSize: 12, fontFamily: "monospace", color: "rgba(255,255,255,0.9)", fontWeight: 700 }}>{value}</span>
             </div>
           ))}
         </div>
@@ -239,24 +239,24 @@ export default function PipelineView({ optimizationState }) {
         <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", flex: 1, minHeight: 120 }}>
           {activeInfo ? (
             <>
-              <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.4)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 8 }}>Node Detail</div>
+              <div style={{ fontSize: 12, fontFamily: "monospace", color: "rgba(255,255,255,0.4)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 8 }}>Node Detail</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.9)", fontFamily: "monospace", marginBottom: 10 }}>{activeInfo.label}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {activeInfo.items.map((item, i) => (
-                  <div key={i} style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 4, borderLeft: "2px solid rgba(255,255,255,0.1)", fontFamily: "monospace", lineHeight: 1.5 }}>{item}</div>
+                  <div key={i} style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 4, borderLeft: "2px solid rgba(255,255,255,0.1)", fontFamily: "monospace", lineHeight: 1.5 }}>{item}</div>
                 ))}
               </div>
             </>
           ) : (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, height: "100%", minHeight: 80 }}>
               <div style={{ fontSize: 22, opacity: 0.25 }}>◎</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", fontFamily: "monospace", textAlign: "center" }}>Click any node to see details</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.28)", fontFamily: "monospace", textAlign: "center" }}>Click any node to see details</div>
             </div>
           )}
         </div>
 
         <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-          <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.4)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 10 }}>Feedback Loop</div>
+          <div style={{ fontSize: 12, fontFamily: "monospace", color: "rgba(255,255,255,0.4)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 10 }}>Feedback Loop</div>
           <div style={{ display: "flex", gap: 6 }}>
             {optimizationState.iterations.length > 0 ? optimizationState.iterations.map((it, i) => (
               <div key={i} style={{
@@ -264,12 +264,12 @@ export default function PipelineView({ optimizationState }) {
                 background: it.rerun ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
                 border: `1px solid ${it.rerun ? "#ef444430" : "#10b98130"}`,
               }}>
-                <div style={{ fontSize: 10, fontFamily: "monospace", color: it.rerun ? "#ef4444" : "#10b981", fontWeight: 700 }}>it.{it.iter}</div>
-                <div style={{ fontSize: 8.5, color: it.rerun ? "#ef4444" : "#10b981", fontFamily: "monospace" }}>{it.rerun ? "RERUN" : "OK"}</div>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "monospace", marginTop: 2 }}>{it.coverage.toFixed(1)}%</div>
+                <div style={{ fontSize: 12, fontFamily: "monospace", color: it.rerun ? "#ef4444" : "#10b981", fontWeight: 700 }}>it.{it.iter}</div>
+                <div style={{ fontSize: 12, color: it.rerun ? "#ef4444" : "#10b981", fontFamily: "monospace" }}>{it.rerun ? "RERUN" : "OK"}</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "monospace", marginTop: 2 }}>{it.coverage.toFixed(1)}%</div>
               </div>
             )) : (
-              <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontFamily: "monospace", fontStyle: "italic" }}>No iteration data</div>
+              <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, fontFamily: "monospace", fontStyle: "italic" }}>No iteration data</div>
             )}
           </div>
         </div>

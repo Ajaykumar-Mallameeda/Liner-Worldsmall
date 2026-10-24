@@ -35,7 +35,7 @@ export default function BackendCertification({ optimizationState }) {
 
   return (
     <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-      <div className="text-xs font-mono text-white/40 uppercase tracking-widest mb-3">Backend Certification</div>
+      <div className="text-xs font-mono text-white/60 uppercase tracking-widest mb-3">Backend Certification</div>
 
       <div className="flex items-center gap-2 mb-3">
         <div className="w-2 h-2 rounded-full bg-emerald-400" style={{ boxShadow: "0 0 8px #10b981" }} />
@@ -45,8 +45,8 @@ export default function BackendCertification({ optimizationState }) {
       <div className="space-y-1 mb-3">
         {Object.entries(CERTIFICATION_STATUS).map(([key, cert]) => (
           <div key={key} className="flex items-center justify-between py-0.5">
-            <span className="text-[10px] text-white/50 font-mono">{cert.label}</span>
-            <span className="text-[10px] font-mono" style={{ color: cert.color }}>✓ {cert.status}</span>
+            <span className="text-[12px] text-white/50 font-mono">{cert.label}</span>
+            <span className="text-[12px] font-mono" style={{ color: cert.color }}>✓ {cert.status}</span>
           </div>
         ))}
       </div>
@@ -55,30 +55,30 @@ export default function BackendCertification({ optimizationState }) {
         <div className="pt-2 border-t border-white/5 space-y-1">
           {runtimeVersion.successRate != null && (
             <div className="flex items-center justify-between py-0.5">
-              <span className="text-[9px] text-white/30 font-mono">Region Success Rate</span>
-              <span className="text-[9px] text-emerald-400 font-mono">{(runtimeVersion.successRate * 100).toFixed(0)}%</span>
+              <span className="text-[12px] text-white/60 font-mono">Region Success Rate</span>
+              <span className="text-[12px] text-emerald-400 font-mono">{(runtimeVersion.successRate * 100).toFixed(0)}%</span>
             </div>
           )}
           {runtimeVersion.regionsCompleted > 0 && (
             <div className="flex items-center justify-between py-0.5">
-              <span className="text-[9px] text-white/30 font-mono">Regions Executed</span>
-              <span className="text-[9px] text-white/60 font-mono">{runtimeVersion.regionsCompleted}</span>
+              <span className="text-[12px] text-white/60 font-mono">Regions Executed</span>
+              <span className="text-[12px] text-white/60 font-mono">{runtimeVersion.regionsCompleted}</span>
             </div>
           )}
           {runtimeVersion.consensusConfidence != null && (
             <div className="flex items-center justify-between py-0.5">
-              <span className="text-[9px] text-white/30 font-mono">Consensus Confidence</span>
-              <span className="text-[9px] text-white/60 font-mono">{(runtimeVersion.consensusConfidence * 100).toFixed(1)}%</span>
+              <span className="text-[12px] text-white/60 font-mono">Consensus Confidence</span>
+              <span className="text-[12px] text-white/60 font-mono">{(runtimeVersion.consensusConfidence * 100).toFixed(1)}%</span>
             </div>
           )}
           <div className="flex items-center justify-between py-0.5">
-            <span className="text-[9px] text-white/30 font-mono">Runtime File</span>
-            <span className="text-[9px] text-white/40 font-mono">pipeline_output.json</span>
+            <span className="text-[12px] text-white/60 font-mono">Runtime File</span>
+            <span className="text-[12px] text-white/60 font-mono">pipeline_output.json</span>
           </div>
         </div>
       )}
 
-      <div className="mt-2 pt-2 border-t border-white/5 text-[8px] text-white/20 font-mono text-center">
+      <div className="mt-2 pt-2 border-t border-white/5 text-[12px] text-white/50 font-mono text-center">
         Backend FROZEN · Frontend adapts to runtime
       </div>
     </div>

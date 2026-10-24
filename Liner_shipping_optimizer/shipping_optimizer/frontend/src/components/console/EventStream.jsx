@@ -147,7 +147,7 @@ export function buildEventStream(runtime, maritimeOverview, { desc = true } = {}
       source: 'llm',
       type: 'llm_actuation',
       severity: 'info',
-      summary: `LLM actuation · ${calls} calls · ${(llm.providers_used || []).join('+') || 'fallback'}`,
+      summary: `LLM actuation · ${calls} calls · ${(Array.isArray(llm.providers_used) ? llm.providers_used : Object.keys(llm.providers_used || {})).join('+') || 'fallback'}`,
       metadata: { calls, providers: llm.providers_used, models: llm.models_used },
       provenance: 'llm_runtime_aggregate',
     });

@@ -90,7 +90,7 @@ export default function Header({
             </div>
             <div
               className="p12-meta"
-              style={{ marginTop: 2, fontSize: 9, color: 'var(--p12-ink-faint)' }}
+              style={{ marginTop: 2, fontSize: 12, color: 'var(--p12-ink-faint)' }}
             >
               Multi-Agent Liner Shipping Optimizer
             </div>
@@ -160,7 +160,7 @@ export default function Header({
             >
               {m.v != null ? m.v : '—'}
             </span>
-            {m.sub && <span className="p12-meta" style={{ fontSize: 8 }}>{m.sub}</span>}
+            {m.sub && <span className="p12-meta" style={{ fontSize: 12 }}>{m.sub}</span>}
           </div>
         ))}
       </div>

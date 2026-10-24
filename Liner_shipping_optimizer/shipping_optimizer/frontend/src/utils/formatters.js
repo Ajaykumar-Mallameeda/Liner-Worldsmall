@@ -17,6 +17,28 @@ export const fmtUsd = (n) => {
   return neg ? `-${s}` : s;
 };
 export const fmtPct = (n, d = 1) => (n != null ? `${Number(n).toFixed(d)}%` : '—');
+// Engine prose embeds Python reprs ("hubs=['CNSHA', 'CNYTN']", "weights {'weekly_profit': 0.6}").
+// Render lists as "CNSHA, CNYTN" and dicts as "weekly profit 0.6 · coverage 0.25".
+export const prettyEngineText = (text) => {
+  if (text == null) return text;
+  return String(text)
+    .replace(/\{([^{}]*)\}/g, (m, body) => {
+      const parts = body.split(/,\s*(?=')/).map((kv) => {
+        const mm = kv.match(/^\s*'([^']+)'\s*:\s*(.+?)\s*$/);
+        return mm ? `${mm[1].replace(/_/g, ' ')} ${mm[2].replace(/^'|'$/g, '')}` : null;
+      });
+      return parts.every(Boolean) ? parts.join(' · ') : m;
+    })
+    .replace(/\[((?:\s*'[^']*'\s*,?)*)\]/g, (m, body) => body.split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean).join(', '));
+};
+
+// Selection confidence (0-1). The deterministic selector writes 0.0 because it has no confidence model;
+// show that as "not computed" instead of a 0% that reads like a failed selection.
+export const fmtConfidence = (c, method) => {
+  if (c == null || Number.isNaN(Number(c))) return '—';
+  if (Number(c) === 0 && /deterministic/i.test(method || '')) return 'not computed (deterministic rule)';
+  return `${(Number(c) * 100).toFixed(1)}%`;
+};
 export const fmtTs = (ts) => {
   if (!ts) return '—';
   try { return new Date(ts).toISOString().replace('T', ' ').slice(0, 19) + ' UTC'; }
