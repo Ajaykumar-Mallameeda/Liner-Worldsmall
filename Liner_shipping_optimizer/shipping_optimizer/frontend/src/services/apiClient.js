@@ -132,7 +132,7 @@ class ApiClient {
         const runtime = JSON.parse(await response.text());
         // Atomic validation: ensure required contract structure is present
         if (runtime && (runtime.summary_metrics || runtime.selected_services || runtime.iteration_results || runtime.regional_results)) {
-          const dataset = runtime.dataset_run?.dataset || null;
+          const dataset = runtime.dataset_run?.dataset || runtime.test_scorecard?.dataset_run?.dataset || null;
           // Register the dataset's ports (names, coordinates, countries) first: normalizing assigns each
           // service a geographic region, which needs them for synthetic port codes.
           await ensurePortData(rawFilesFor(dataset || (run.kind === 'benchmark' ? run.dataset : 'worldsmall'))?.dir);
@@ -148,7 +148,7 @@ class ApiClient {
         }
       }
     } catch (_) { /* fall through to API fallback */ }
-    if (run.kind === 'benchmark') throw new Error('benchmark run unavailable');
+    if (run.kind === 'benchmark' || run.kind === 'extra') throw new Error(`${run.kind} run unavailable`);
 
     // API fallback - assemble the same shape from the backend.
     const [summary, iterations, regions] = await Promise.all([

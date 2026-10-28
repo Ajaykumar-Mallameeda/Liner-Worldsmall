@@ -17,7 +17,12 @@ import { selectedIterationOf, liveLinkOf } from '../../runtime/consoleSelectors.
 import { openPalette } from './CommandPalette.jsx';
 import LogoMark from '../common/LogoMark.jsx';
 import { useAgentFocus } from '../../services/focusStore.js';
-import { toggleDensity, toggleTheme, usePrefs } from '../../services/prefsStore.js';
+import { cycleMotion, motionLevel, toggleDensity, toggleTheme, usePrefs } from '../../services/prefsStore.js';
+import { startPresentation } from './PresentationHud.jsx';
+
+// Motion setting: system → reduced → off. The glyph shows the setting; the title also says the level in force.
+const MOTION_GLYPH = { system: '◎', reduced: '◔', off: '○' };
+const MOTION_NEXT = { system: 'reduced', reduced: 'off', off: 'system' };
 
 function getISTFormatted() {
   try {
@@ -125,6 +130,18 @@ export default function TopHeaderBar({ optimizationState, runtime, navOpen = fal
         </button>
         <button type="button" className="cx-th-icon" onClick={toggleDensity} aria-label={`Switch to ${prefs.density === 'compact' ? 'comfortable' : 'compact'} density`} title={`Density: ${prefs.density}`}>
           <span aria-hidden="true">{prefs.density === 'compact' ? '☷' : '☰'}</span>
+        </button>
+        <button
+          type="button"
+          className="cx-th-icon"
+          onClick={cycleMotion}
+          aria-label={`Motion: ${prefs.motion}. Switch to ${MOTION_NEXT[prefs.motion]}`}
+          title={`Motion: ${prefs.motion}${prefs.motion === 'system' ? ` (system asks for ${motionLevel(prefs) === 'full' ? 'full' : 'reduced'} motion)` : ''} · click for ${MOTION_NEXT[prefs.motion]}`}
+        >
+          <span aria-hidden="true">{MOTION_GLYPH[prefs.motion]}</span>
+        </button>
+        <button type="button" className="cx-th-icon" onClick={startPresentation} aria-label="Start presentation mode" title="Present: step through the main views on a timer">
+          <span aria-hidden="true">▷</span>
         </button>
         <span className={`cx-th-ws-badge is-${link.tone}`} title={link.title}>
           <span className="dot" aria-hidden="true" />

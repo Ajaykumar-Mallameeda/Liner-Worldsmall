@@ -141,6 +141,8 @@ def test_regions_count_and_keys_frozen():
 
 #: additive keys of the decision phase (leg load factor definitions): see tests/test_utilisation_definitions.py
 _UTILISATION_KEYS = {"weekly_capacity_per_leg", "carried_teu_legs", "offered_teu_legs", "leg_load_factor"}
+#: optional additive keys (2026-10-24, contract keys_optional): the ledger's per-leg times and loads; older runs lack them
+_LEG_TIMING_KEYS = {"port_stay_days", "legs"}
 
 
 def test_selected_services_keys_frozen():
@@ -148,7 +150,7 @@ def test_selected_services_keys_frozen():
     services = data["selected_services"]
     assert services, "selected_services must be non-empty on success"
     for i, s in enumerate(services):
-        extras = set(s) - FROZEN_SERVICE_KEYS - _UTILISATION_KEYS
+        extras = set(s) - FROZEN_SERVICE_KEYS - _UTILISATION_KEYS - _LEG_TIMING_KEYS
         missing = FROZEN_SERVICE_KEYS - set(s)
         assert not missing, f"service[{i}] missing keys: {missing}"
         assert not extras, f"service[{i}] has unexpected keys: {extras}"

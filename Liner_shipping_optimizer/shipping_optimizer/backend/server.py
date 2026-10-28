@@ -23,6 +23,9 @@ app = FastAPI(title="Shipping Optimizer API")
 # Read-only run catalog: current run + frozen 30-seed benchmark (backend/run_catalog.py)
 from backend.run_catalog import router as run_catalog_router
 app.include_router(run_catalog_router)
+# What-if re-evaluation of a recorded plan through the engine's ledger (backend/whatif.py); never re-runs the optimizer
+from backend.whatif import router as whatif_router
+app.include_router(whatif_router)
 
 # Mount static data directory
 repo_root_data = Path(__file__).resolve().parent.parent / "data"

@@ -437,6 +437,8 @@ def reconcile(
             "frequency_per_week": int(row["frequency"]),
             "vessels": int(row["vessels"]),
             "cycle_time_days": int(row["cycle_time_days"]),
+            "port_stay_days": float(row["port_stay_days"]),
+            "legs": [dict(leg) for leg in row["legs"]],
         })
 
     status_label = "Optimal" if plan.status == "optimal" else "Feasible"

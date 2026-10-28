@@ -8,15 +8,23 @@
  * (opened from the header's menu button; `open` / `onClose` control it).
  *
  * Pure presentational. Counts + state come from props.
+ *
+ * Motion: one marker (rail + tint) glides between items instead of each item lighting up on its own; hovering
+ * or focusing an item preloads that group's tab code. Keys 1–8 open the groups (MaritimeDashboard).
  */
 
+import { useRef } from 'react';
 import { navGroups, groupOfTab } from '../layout/navItems.js';
 import { fmtNum } from '../../utils/formatters.js';
 import { Pill, State } from './p12.jsx';
 import { liveLinkOf } from '../../runtime/consoleSelectors.js';
+import { preloadTab } from '../../views/console/tabLoaders.js';
+import useGlide from './useGlide.js';
 
 export default function ConsoleSidebar({ activeNav, onNavChange, optimizationState, counts = {}, lastTabByGroup = {}, open = false, onClose }) {
   const activeGroup = groupOfTab(activeNav).id;
+  const navRef = useRef(null);
+  const glide = useGlide(navRef, activeGroup);
 
   const sc = optimizationState?.global?.test_scorecard || {};
   const passed = sc.assertions_passed;
@@ -43,18 +51,25 @@ export default function ConsoleSidebar({ activeNav, onNavChange, optimizationSta
           <div className="title">Vessel Routing</div>
         </div>
 
-        <nav className="nav-scroll" aria-label="Primary">
-          {navGroups.map((g) => {
+        <nav className="nav-scroll has-glide" aria-label="Primary" ref={navRef}>
+          {glide && (
+            <span className="nav-glide" aria-hidden="true" style={{ transform: `translateY(${glide.y}px)`, height: glide.h }} />
+          )}
+          {navGroups.map((g, i) => {
             const active = activeGroup === g.id;
             const count = counts[g.id];
+            const target = lastTabByGroup[g.id] || g.tabs[0].id;
             return (
               <button
                 key={g.id}
                 type="button"
                 onClick={() => go(g)}
+                onPointerEnter={() => preloadTab(target)}
+                onFocus={() => preloadTab(target)}
                 className={`nav-item ${active ? 'is-active' : ''}`}
                 aria-current={active ? 'page' : undefined}
-                title={g.tabs.length > 1 ? `${g.label}: ${g.tabs.map((t) => t.label).join(', ')}` : g.label}
+                aria-keyshortcuts={String(i + 1)}
+                title={`${g.tabs.length > 1 ? `${g.label}: ${g.tabs.map((t) => t.label).join(', ')}` : g.label} · key ${i + 1}`}
               >
                 <span className="icon" aria-hidden="true">{g.icon}</span>
                 <span className="label">{g.label}</span>

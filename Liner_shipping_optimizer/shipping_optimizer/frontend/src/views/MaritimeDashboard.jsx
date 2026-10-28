@@ -8,10 +8,14 @@
  * single source of truth. The /api/maritime/overview poll is preserved.
  *
  * The open tab lives in the URL hash (#/<group>/<tab>) so a reload or a shared link opens the same tab.
- * Each view is loaded on first use (React.lazy) to keep the first download small.
+ * Each view is loaded on first use (React.lazy) to keep the first download small; hovering a tab preloads it.
+ *
+ * Tab switching (2026-10-24 motion round): only the main pane crossfades (view transition named "main-pane");
+ * sub-tabs slide in from their side; each tab keeps its scroll position; keys 1–8 pick a group and [ / ] step
+ * sub-tabs; presentation mode steps through the main views on a timer.
  */
 
-import { useCallback, useEffect, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from "react";
 import { useOptimizationState } from '../hooks/useOptimizationState.js';
 import { apiClient } from '../services/apiClient.js';
 import { subscribeRun } from '../services/runSelection.js';
@@ -26,30 +30,50 @@ import SubTabs from '../components/console/SubTabs.jsx';
 import ViewBoundary from '../components/console/ViewBoundary.jsx';
 import SystemRail from '../components/console/SystemRail.jsx';
 import CommandPalette from '../components/console/CommandPalette.jsx';
-import ViewSkeleton from '../components/console/ViewSkeleton.jsx';
+import ViewSkeleton, { Reveal } from '../components/console/ViewSkeleton.jsx';
+import PresentationHud from '../components/console/PresentationHud.jsx';
 import Toaster from '../components/common/Toaster.jsx';
 import { toast } from '../services/toastStore.js';
-import '../services/prefsStore.js'; // applies the saved theme / density before first paint
+import '../services/prefsStore.js'; // applies the saved theme / density / motion before first paint
+import { withViewTransition } from '../utils/motion.js';
 
-import navItems, { groupOfTab } from '../components/layout/navItems.js';
+import navItems, { navGroups, groupOfTab } from '../components/layout/navItems.js';
+import { tabLoaders } from './console/tabLoaders.js';
 
-// Command console views, one chunk each
-const CommandCenter = lazy(() => import('./console/CommandCenter.jsx'));
-const NetworkIntelligence = lazy(() => import('./console/NetworkIntelligence.jsx'));
-const FleetIntelligence = lazy(() => import('./console/FleetIntelligence.jsx'));
-const DemandIntelligence = lazy(() => import('./console/DemandIntelligence.jsx'));
-const PortIntelligence = lazy(() => import('./console/PortIntelligence.jsx'));
-const MaritimeSituation = lazy(() => import('./console/MaritimeSituation.jsx'));
-const PipelineOps = lazy(() => import('./console/PipelineOps.jsx'));
-const RegionalAgents = lazy(() => import('./console/RegionalAgents.jsx'));
-const GaMilp = lazy(() => import('./console/GaMilp.jsx'));
-const FeedbackLoop = lazy(() => import('./console/FeedbackLoop.jsx'));
-const DecisionCenter = lazy(() => import('./console/DecisionCenter.jsx'));
-const ScenarioAnalysis = lazy(() => import('./console/ScenarioAnalysis.jsx'));
-const Benchmarks = lazy(() => import('./console/Benchmarks.jsx'));
-const Telemetry = lazy(() => import('./console/Telemetry.jsx'));
-const DataSources = lazy(() => import('./console/DataSources.jsx'));
-const SystemHealth = lazy(() => import('./console/SystemHealth.jsx'));
+// Command console views, one chunk each (tabLoaders also serves hover preloading)
+const CommandCenter = lazy(tabLoaders.command_center);
+const NetworkIntelligence = lazy(tabLoaders.network_intel);
+const FleetIntelligence = lazy(tabLoaders.fleet_intel);
+const DemandIntelligence = lazy(tabLoaders.demand_intel);
+const PortIntelligence = lazy(tabLoaders.port_intel);
+const MaritimeSituation = lazy(tabLoaders.maritime_situation);
+const PipelineOps = lazy(tabLoaders.pipeline_ops);
+const RegionalAgents = lazy(tabLoaders.regional_agents);
+const GaMilp = lazy(tabLoaders.ga_milp);
+const FeedbackLoop = lazy(tabLoaders.feedback_loop);
+const DecisionCenter = lazy(tabLoaders.decision_center);
+const ScenarioAnalysis = lazy(tabLoaders.scenario_analysis);
+const Benchmarks = lazy(tabLoaders.benchmarks);
+const RunDiff = lazy(tabLoaders.run_diff);
+const WhatIf = lazy(tabLoaders.whatif);
+const Telemetry = lazy(tabLoaders.telemetry);
+const DataSources = lazy(tabLoaders.data_sources);
+const SystemHealth = lazy(tabLoaders.system_health);
+
+// Presentation mode: the main views in story order, each shown for PRESENT_DWELL_MS.
+const PRESENT_TABS = ['command_center', 'network_intel', 'demand_intel', 'port_intel', 'fleet_intel', 'decision_center', 'benchmarks', 'scenario_analysis'];
+const PRESENT_DWELL_MS = 12000;
+
+const isTyping = (el) => /^(INPUT|TEXTAREA|SELECT)$/.test(el?.tagName || '') || el?.isContentEditable;
+
+/** Restores the workspace scroll position saved for a tab once its view has rendered. */
+function ScrollRestore({ tab, positions }) {
+  useLayoutEffect(() => {
+    const ws = document.getElementById('console-workspace');
+    if (ws) ws.scrollTop = positions[tab] || 0;
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 
 const TAB_IDS = new Set(navItems.map((n) => n.id));
 // Tabs that read the selected run's file; they show a skeleton until it has loaded once.
@@ -74,21 +98,103 @@ export default function App() {
   const [runtime, setRuntime] = useState(null);
   const [runtimeFailed, setRuntimeFailed] = useState(false);
 
+  // Refs mirror the state for the window-level key handlers and the transition direction.
+  const activeRef = useRef(activeNav);
+  const lastTabRef = useRef(lastTabByGroup);
+  const scrollByTab = useRef({});
+  useEffect(() => { activeRef.current = activeNav; }, [activeNav]);
+  useEffect(() => { lastTabRef.current = lastTabByGroup; }, [lastTabByGroup]);
+
   const setActiveNav = useCallback((tab) => {
     if (!TAB_IDS.has(tab)) return;
+    const prev = activeRef.current;
     const g = groupOfTab(tab);
-    setActiveNavState(tab);
-    setLastTabByGroup((m) => ({ ...m, [g.id]: tab }));
     const hash = `#/${g.id}/${tab}`;
     if (window.location.hash !== hash) window.history.replaceState(null, '', hash);
+    if (tab === prev) return;
+    // Sub-tabs of the same group slide in from the side they sit on; a group change only crossfades.
+    const pg = groupOfTab(prev);
+    let dir = null;
+    if (pg.id === g.id) {
+      const ids = g.tabs.map((t) => t.id);
+      dir = ids.indexOf(tab) > ids.indexOf(prev) ? 'next' : 'prev';
+    }
+    const ws = document.getElementById('console-workspace');
+    if (ws) scrollByTab.current[prev] = ws.scrollTop;
+    activeRef.current = tab;
+    withViewTransition(() => {
+      setActiveNavState(tab);
+      setLastTabByGroup((m) => ({ ...m, [g.id]: tab }));
+    }, dir);
   }, []);
 
   // Back/forward and hand-edited hashes.
   useEffect(() => {
-    const onHash = () => setActiveNavState(tabFromHash());
+    const onHash = () => setActiveNav(tabFromHash());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
+  }, [setActiveNav]);
+
+  // Presentation mode: { index, paused } while presenting, null otherwise.
+  const [presenting, setPresenting] = useState(null);
+  const enteredFullscreen = useRef(false);
+  const stopPresenting = useCallback(() => {
+    setPresenting(null);
+    if (enteredFullscreen.current && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    enteredFullscreen.current = false;
   }, []);
+  const stepPresentation = useCallback((delta) => {
+    setPresenting((p) => (p ? { ...p, index: (p.index + delta + PRESENT_TABS.length) % PRESENT_TABS.length } : p));
+  }, []);
+  useEffect(() => {
+    const start = () => {
+      const at = PRESENT_TABS.indexOf(activeRef.current);
+      setPresenting({ index: at >= 0 ? at : 0, paused: false });
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().then(() => { enteredFullscreen.current = true; }).catch(() => {});
+      }
+    };
+    window.addEventListener('vr:present', start);
+    return () => window.removeEventListener('vr:present', start);
+  }, []);
+  // Follow the presented view, and advance after the dwell time unless paused.
+  useEffect(() => {
+    if (!presenting) return undefined;
+    setActiveNav(PRESENT_TABS[presenting.index]);
+    if (presenting.paused) return undefined;
+    const t = setTimeout(() => stepPresentation(1), PRESENT_DWELL_MS);
+    return () => clearTimeout(t);
+  }, [presenting, setActiveNav, stepPresentation]);
+
+  // Keys: 1–8 open a group (its last-used tab), [ and ] step through the group's sub-tabs.
+  // While presenting: Space pauses, ← / → step, Esc stops. Nothing fires while typing or inside a dialog.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (isTyping(e.target) || e.target?.closest?.('[role="dialog"]')) return;
+      if (presenting) {
+        if (e.key === 'Escape') { e.preventDefault(); stopPresenting(); return; }
+        if (e.key === ' ') { e.preventDefault(); setPresenting((p) => p && { ...p, paused: !p.paused }); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); stepPresentation(1); return; }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); stepPresentation(-1); return; }
+      }
+      if (/^[1-8]$/.test(e.key)) {
+        const g = navGroups[Number(e.key) - 1];
+        if (!g) return;
+        e.preventDefault();
+        setActiveNav(lastTabRef.current[g.id] || g.tabs[0].id);
+      } else if (e.key === '[' || e.key === ']') {
+        const g = groupOfTab(activeRef.current);
+        if (g.tabs.length < 2) return;
+        e.preventDefault();
+        const i = g.tabs.findIndex((t) => t.id === activeRef.current);
+        const n = (i + (e.key === ']' ? 1 : -1) + g.tabs.length) % g.tabs.length;
+        setActiveNav(g.tabs[n].id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [presenting, setActiveNav, stepPresentation, stopPresenting]);
 
   // Close the drawer with Escape.
   useEffect(() => {
@@ -99,10 +205,14 @@ export default function App() {
   }, [navOpen]);
 
   useEffect(() => {
-    const handleFSChange = () => setPresentationMode(!!document.fullscreenElement);
+    const handleFSChange = () => {
+      setPresentationMode(!!document.fullscreenElement);
+      // Esc in fullscreen is taken by the browser: leaving the fullscreen we entered also ends the presentation.
+      if (!document.fullscreenElement && enteredFullscreen.current) stopPresenting();
+    };
     document.addEventListener('fullscreenchange', handleFSChange);
     return () => document.removeEventListener('fullscreenchange', handleFSChange);
-  }, []);
+  }, [stopPresenting]);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,6 +292,8 @@ export default function App() {
       case 'decision_center':    return <DecisionCenter {...common} />;
       case 'scenario_analysis':  return <ScenarioAnalysis {...common} />;
       case 'benchmarks':         return <Benchmarks />;
+      case 'run_diff':           return <RunDiff />;
+      case 'whatif':             return <WhatIf />;
       case 'telemetry':          return <Telemetry maritimeOverview={maritimeOverview} />;
       case 'data_sources':       return <DataSources maritimeOverview={maritimeOverview} />;
       case 'system_health':      return <SystemHealth maritimeOverview={maritimeOverview} runtime={runtime} />;
@@ -219,7 +331,12 @@ export default function App() {
           <SubTabs group={group} activeTab={activeNav} onSelect={setActiveNav} />
           <ViewBoundary key={activeNav} label={navItems.find((n) => n.id === activeNav)?.label || group.label}>
             <Suspense fallback={<ViewSkeleton label={group.label} />}>
-              {runtime == null && !runtimeFailed && RUN_TABS.has(activeNav) ? <ViewSkeleton label="the run" /> : renderMain()}
+              {runtime == null && !runtimeFailed && RUN_TABS.has(activeNav) ? <ViewSkeleton label="the run" /> : (
+                <Reveal>
+                  {renderMain()}
+                  <ScrollRestore tab={activeNav} positions={scrollByTab.current} />
+                </Reveal>
+              )}
             </Suspense>
           </ViewBoundary>
         </main>
@@ -227,6 +344,19 @@ export default function App() {
 
       <SystemRail maritimeOverview={maritimeOverview} runtime={runtime} />
       <CommandPalette runtime={runtime} onNavigate={setActiveNav} />
+      {presenting && (
+        <PresentationHud
+          label={navItems.find((n) => n.id === PRESENT_TABS[presenting.index])?.label || ''}
+          index={presenting.index}
+          total={PRESENT_TABS.length}
+          dwellMs={PRESENT_DWELL_MS}
+          paused={presenting.paused}
+          onPrev={() => stepPresentation(-1)}
+          onNext={() => stepPresentation(1)}
+          onTogglePause={() => setPresenting((p) => p && { ...p, paused: !p.paused })}
+          onStop={stopPresenting}
+        />
+      )}
       <Toaster />
     </div>
   );

@@ -20,6 +20,7 @@ import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Stat, Provenance } from '../../components/console/p12.jsx';
 import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
+import GaPlayback from '../../components/charts/GaPlayback.jsx';
 
 const h = createElement;
 const F = Fragment;
@@ -581,6 +582,13 @@ export default function GaMilp(props) {
           formatter: v => fmtNum(v),
           deltaFormatter: v => fmtDelta(v, '', 0),
         }),
+      ),
+
+      // ── GA generation playback (runs that record generation_history) ─────
+      h('div', { style: { marginBottom: 16 } },
+        h(InstrumentPanel, { title: 'GA generation playback', right: 'service GA · per regional agent' },
+          h(GaPlayback, { raw: optState.raw, selectedIteration: pipelineSelectedIter })
+        )
       ),
 
       // ── Provenance Footer ────────────────────────────────────────────────

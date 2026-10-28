@@ -15,6 +15,7 @@ import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import { Pill, Kv, Stat, Empty, Tag, Dot, Provenance } from '../../components/console/p12.jsx';
 import { selectedIterationOf } from '../../runtime/consoleSelectors.js';
+import StageTimeBar, { stageTimingOf } from '../../components/charts/StageTimeBar.jsx';
 const h = createElement;
 const F = Fragment;
 
@@ -120,6 +121,13 @@ export default function PipelineOps(props) {
             h(Stat, { k: 'profit', v: sm.weeklyProfit != null ? fmtUsd(sm.weeklyProfit) : EM, variant: 'accent', sub: 'per week' })
           )
         )
+      ),
+
+      h(InstrumentPanel, {
+        title: 'Planner Time by Stage',
+        right: 'final plan · network_ledger.reconciliation.stage_timing',
+      },
+        h(StageTimeBar, { timing: stageTimingOf((runtimeProp && runtimeProp.raw) || optState.raw, selectedIterationOf(runtimeProp || optState)), label: 'final plan', exportBase: runId || 'run' })
       ),
 
       h(InstrumentPanel, {

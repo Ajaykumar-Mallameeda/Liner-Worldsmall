@@ -7,9 +7,65 @@
  */
 
 import React from 'react';
-import { getPortName, getPortFullLabel } from '../../utils/portLookup.js';
+import { getPortName, getPortFullLabel, getPortCoordinates } from '../../utils/portLookup.js';
 import { getRegionColor } from '../map/WorldMap.jsx';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
+import { legScheduleOf } from '../../utils/legTimes.js';
+
+/**
+ * One rotation laid out in time: a bar of sail days (per leg) and port stays across the declared cycle, then
+ * the legs with distance, sail days and weekly load against weekly capacity (capacity × departures per week).
+ * Runs without per-leg times get the distance-split estimate, labelled as such.
+ */
+function VoyageTimeline({ service }) {
+  const sch = legScheduleOf(service, getPortCoordinates);
+  if (!sch) return null;
+  const weeklyCap = (Number(service.capacity) || 0) * (Number(service.frequency_per_week) || 1);
+  const fromRun = sch.source === 'run';
+  const segs = [];
+  sch.legs.forEach((l, i) => {
+    segs.push({ key: `s${i}`, kind: 'sail', days: l.sailDays, tip: `${l.from} → ${l.to}: ${l.sailDays.toFixed(1)} days at sea` });
+    segs.push({ key: `p${i}`, kind: 'port', days: sch.stayDays, tip: `${l.to}: ${sch.stayDays.toFixed(1)} day${sch.stayDays === 1 ? '' : 's'} in port` });
+  });
+  if (sch.slackDays > 0.05) segs.push({ key: 'slack', kind: 'slack', days: sch.slackDays, tip: `${sch.slackDays.toFixed(1)} days of schedule slack (whole-day cycle)` });
+  const sea = sch.legs.reduce((a, l) => a + l.sailDays, 0);
+  return (
+    <div className="bg-white/[0.02] p-2 border border-white/5">
+      <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-white/5 gap-2">
+        <span className="text-[12px] text-slate-400 uppercase tracking-wider font-semibold">VOYAGE TIMELINE</span>
+        <span className={`vt-src ${fromRun ? 'is-run' : ''}`} title={fromRun
+          ? "Sail days and port stays recorded by the engine's ledger for this run."
+          : 'This run predates per-leg times: sea time (cycle minus a 24 h stay per call) is split over the legs by great-circle distance.'}>
+          {fromRun ? 'run leg times' : 'estimated'}
+        </span>
+      </div>
+      <div className="vt-bar" role="img" aria-label={`${sea.toFixed(1)} days at sea, ${(sch.stayDays * sch.legs.length).toFixed(1)} in port${sch.slackDays > 0.05 ? `, ${sch.slackDays.toFixed(1)} slack` : ''}, cycle ${sch.cycleDays} days`}>
+        {segs.map((sg) => <span key={sg.key} className={`vt-seg is-${sg.kind}`} style={{ flexGrow: sg.days }} title={sg.tip} />)}
+      </div>
+      <div className="flex justify-between text-[12px] text-slate-400 mt-1 mb-1.5 flex-wrap gap-x-3">
+        <span><span className="vt-key is-sail" aria-hidden="true" />sea {sea.toFixed(1)} d</span>
+        <span><span className="vt-key is-port" aria-hidden="true" />port {(sch.stayDays * sch.legs.length).toFixed(1)} d</span>
+        {sch.slackDays > 0.05 && <span><span className="vt-key is-slack" aria-hidden="true" />slack {sch.slackDays.toFixed(1)} d</span>}
+        <span className="text-slate-300">cycle {sch.cycleDays} d</span>
+      </div>
+      <table className="vt-table">
+        <thead>
+          <tr><th scope="col">Leg</th><th scope="col">nm</th><th scope="col">Sail d</th><th scope="col" title="Weekly TEU on the leg / weekly capacity">Load</th></tr>
+        </thead>
+        <tbody>
+          {sch.legs.map((l, i) => (
+            <tr key={i}>
+              <td>{l.from}→{l.to}</td>
+              <td>{l.distanceNm != null ? fmtNum(l.distanceNm) : '—'}</td>
+              <td>{l.sailDays.toFixed(1)}</td>
+              <td>{l.loadTeu != null && weeklyCap > 0 ? `${fmtNum(l.loadTeu)} · ${Math.round((l.loadTeu / weeklyCap) * 100)}%` : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function ServiceDetailPanel({ service, onClose }) {
   if (!service) return null;
@@ -110,6 +166,8 @@ export default function ServiceDetailPanel({ service, onClose }) {
           })}
         </div>
       </div>
+
+      <VoyageTimeline service={service} />
 
       {/* ── Financial Breakdown Table ── */}
       <div className="bg-white/[0.02] p-2 border border-white/5">

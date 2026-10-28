@@ -8,19 +8,36 @@
  *
  * Colours are the validated pair (--viz-1 series, --viz-2 flag); text stays in text tokens. Every chart has
  * a hover tooltip and a table view (ChartFrame).
+ *
+ * Motion: Chart / Table crossfades (150 ms, opacity); bars grow in (300 ms) only when the data behind them
+ * changes, never on a re-render, a toggle back to the chart or a return to the tab (growOf). Hovering a
+ * service bar or an agent row lights its routes on the map (focusStore hover link).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import { fmtUsd, fmtNum, fmtPct } from '../../utils/formatters.js';
 import { niceTicks, paretoFront } from '../../utils/benchStats.js';
 import { downloadCsv, downloadSvgPng } from '../../utils/exportData.js';
-import { matchesAgent, sameAgent, toggleAgentFocus, useAgentFocus } from '../../services/focusStore.js';
+import { matchesAgent, sameAgent, toggleAgentFocus, useAgentFocus, hoverProps } from '../../services/focusStore.js';
+
+// Data signatures whose bars have already grown in once (per page load).
+const grown = new Set();
+/**
+ * { key, cls } for a bar group drawing data `sig`: key the group by it (new data remounts it) and give it cls,
+ * the grow animation the first time this data is drawn, else nothing. Not a hook, so it can sit after a chart's
+ * early "no data" return; the signature is recorded just after this render.
+ */
+export function growOf(sig, axis = 'x') {
+  const first = !grown.has(sig);
+  if (first) setTimeout(() => grown.add(sig), 0);
+  return { key: sig, cls: first ? `viz-grow-${axis}` : '' };
+}
 
 const EM = '—';
 const usdAxis = (v) => (Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(Math.abs(v) >= 1e7 ? 0 : 1)}M` : Math.abs(v) >= 1e3 ? `$${(v / 1e3).toFixed(0)}K` : `$${v}`);
 
 // Callback ref: the plot unmounts while the table view is shown, so re-observe whenever it remounts.
-function useWidth(fallback = 480) {
+export function useWidth(fallback = 480) {
   const [el, setEl] = useState(null);
   const [w, setW] = useState(fallback);
   useEffect(() => {
@@ -60,7 +77,7 @@ export function ChartFrame({ legend, table, note, csv, exportName = 'chart', exp
         </div>
       </div>
       {mode === 'chart' ? (
-        <div className="viz-plot" ref={wrap} onMouseLeave={hide}>
+        <div className="viz-plot viz-swap" key="chart" ref={wrap} onMouseLeave={hide}>
           {children({ show, hide })}
           {tip && (
             <div className="viz-tip" style={{ left: Math.min(tip.x + 12, tip.w - 190), top: Math.max(tip.y - 10, 0) }} role="tooltip">
@@ -69,7 +86,7 @@ export function ChartFrame({ legend, table, note, csv, exportName = 'chart', exp
           )}
         </div>
       ) : (
-        <div className="viz-table-wrap">{table}</div>
+        <div className="viz-table-wrap viz-swap" key="table">{table}</div>
       )}
       {note && <div className="viz-note">{note}</div>}
     </div>
@@ -102,6 +119,7 @@ export function CostWaterfall({ revenue, lines = [], profit, exportBase = 'run' 
   const SHORT = { Revenue: 'Rev.', Operating: 'Oper.', Transshipment: 'Trans.', Profit: 'Profit', Fuel: 'Fuel', Port: 'Port' };
   const money = (v) => (narrow && Math.abs(v) >= 1e7 ? `${v < 0 ? '-' : ''}$${Math.round(Math.abs(v) / 1e6)}M` : fmtUsd(v));
   const share = (v) => (revenue ? `${((v / revenue) * 100).toFixed(1)}% of revenue` : '');
+  const grow = growOf(`wf|${steps.map((st) => Math.round(st.to)).join('|')}`, 'y');
   return (
     <ChartFrame
       exportName={`${exportBase}_revenue_to_profit`}
@@ -124,6 +142,7 @@ export function CostWaterfall({ revenue, lines = [], profit, exportBase = 'run' 
                 <text x={L - 6} y={y(t) + 4} className="viz-axis" textAnchor="end">{usdAxis(t)}</text>
               </g>
             ))}
+            <g key={grow.key} className={grow.cls} style={{ transformOrigin: `0 ${y(0)}px` }}>
             {steps.map((s, i) => {
               const cx = L + band * i + band / 2;
               const top = y(Math.max(s.from, s.to)); const h = Math.max(1, Math.abs(y(s.from) - y(s.to)));
@@ -141,6 +160,7 @@ export function CostWaterfall({ revenue, lines = [], profit, exportBase = 'run' 
                 </g>
               );
             })}
+            </g>
           </svg>
         </div>
       )}
@@ -240,6 +260,7 @@ export function ServicePnl({ services = [], maxRows = 400, exportBase = 'run' })
   const x = (v) => L + (W - L - R) * ((v - lo) / (hi - lo || 1));
   const ticks = niceTicks(lo, hi, 3);
   const totalLoss = losers.reduce((a, r) => a + r.p, 0);
+  const grow = growOf(`svc|${rows.map((r) => `${r.id}:${Math.round(r.p)}`).join('|')}`);
   return (
     <ChartFrame
       exportName={`${exportBase}_profit_by_service`}
@@ -262,12 +283,13 @@ export function ServicePnl({ services = [], maxRows = 400, exportBase = 'run' })
                 <text x={x(t)} y={T - 7} className="viz-axis" textAnchor="middle">{usdAxis(t)}</text>
               </g>
             ))}
+            <g key={grow.key} className={grow.cls} style={{ transformOrigin: `${x(0)}px 0` }}>
             {rows.map((r, i) => {
               const yy = T + i * ROW;
               const a = x(Math.min(0, r.p)); const b = x(Math.max(0, r.p));
               const labelIdx = i < 3 || i >= rows.length - 3;
               return (
-                <g key={r.id} onMouseMove={(e) => show(e, [`Service ${r.id}`, `${fmtUsd(r.p)} / week`, r.rev != null ? `revenue ${fmtUsd(r.rev)} · cost ${fmtUsd(r.cost)}` : '', `${r.agent || EM} agent · ${r.ports.length} port calls`].filter(Boolean))} onMouseLeave={hide}>
+                <g key={r.id} {...hoverProps('service', r.id)} onMouseMove={(e) => show(e, [`Service ${r.id}`, `${fmtUsd(r.p)} / week`, r.rev != null ? `revenue ${fmtUsd(r.rev)} · cost ${fmtUsd(r.cost)}` : '', `${r.agent || EM} agent · ${r.ports.length} port calls`, 'Its routes are lit on the map'].filter(Boolean))} onMouseLeave={hide}>
                   <rect x={0} y={yy} width={W} height={ROW} fill="transparent" />
                   <text x={L - 6} y={yy + ROW - 4} className="viz-axis" textAnchor="end">{r.id.length > 15 ? `${r.id.slice(0, 14)}…` : r.id}</text>
                   <rect x={a} y={yy + 2} width={Math.max(1, b - a)} height={ROW - 4} rx={2} fill={r.p < 0 ? 'var(--viz-2)' : 'var(--viz-1)'} />
@@ -275,6 +297,7 @@ export function ServicePnl({ services = [], maxRows = 400, exportBase = 'run' })
                 </g>
               );
             })}
+            </g>
           </svg>
         </div>
       )}
@@ -293,6 +316,7 @@ export function AgentCoverage({ regions = {}, target = 70, exportBase = 'run' })
   const ROW = 34, L = 104, R = 118, T = 16;
   const H = T + rows.length * ROW + 18;
   const x = (v) => L + (W - L - R) * (Math.max(0, Math.min(100, v)) / 100);
+  const grow = growOf(`agent|${rows.map((r) => `${r.agent}:${r.cov.toFixed(2)}`).join('|')}`);
   return (
     <ChartFrame
       exportName={`${exportBase}_coverage_by_agent`}
@@ -321,14 +345,15 @@ export function AgentCoverage({ regions = {}, target = 70, exportBase = 'run' })
               const below = r.cov < target;
               return (
                 <g key={r.agent} className={`viz-row ${isF ? 'is-focus' : ''} ${focus && !isF ? 'is-dim' : ''}`} role="button" tabIndex={0}
-                  aria-pressed={!!isF} aria-label={`${r.name} ${fmtPct(r.cov)}; filter views to this agent`}
+                  aria-pressed={!!isF} aria-label={`${r.name} ${fmtPct(r.cov)}; filter views to this agent`} {...hoverProps('agent', r.agent)}
                   onClick={() => toggleAgentFocus(r.agent)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAgentFocus(r.agent); } }}
                   onMouseMove={(e) => show(e, [`${r.name} agent`, `${fmtPct(r.cov)} of its demand served`, `${below ? 'below' : 'meets'} the ${target}% target (${(r.cov - target).toFixed(1)} pp)`, r.unserved != null ? `${fmtNum(Math.round(r.unserved))} TEU / week unserved` : '', isF ? 'Click to clear the filter' : 'Click to filter every view'].filter(Boolean))}
                   onMouseLeave={hide}>
                   <rect x={0} y={yy} width={W} height={ROW} className="viz-hit" />
                   <text x={L - 8} y={yy + ROW / 2 + 4} className="viz-label" textAnchor="end">{r.name}</text>
                   <rect x={x(0)} y={yy + 9} width={x(100) - x(0)} height={ROW - 18} rx={3} className="viz-track" />
-                  <rect x={x(0)} y={yy + 9} width={Math.max(2, x(r.cov) - x(0))} height={ROW - 18} rx={3} fill="var(--viz-1)" />
+                  <rect x={x(0)} y={yy + 9} width={Math.max(2, x(r.cov) - x(0))} height={ROW - 18} rx={3} fill="var(--viz-1)"
+                    key={grow.key} className={grow.cls} style={{ transformOrigin: `${x(0)}px 0` }} />
                   <line x1={x(target)} x2={x(target)} y1={yy + 5} y2={yy + ROW - 5} className="viz-target" />
                   <text x={W - R + 8} y={yy + ROW / 2 + 4} className="viz-val">{fmtPct(r.cov)}<tspan className={below ? 'viz-st-below' : 'viz-st-met'}>{below ? ' ▼ below' : ' ✓ met'}</tspan></text>
                 </g>

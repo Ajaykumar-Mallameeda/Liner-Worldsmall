@@ -261,7 +261,11 @@
       "vessels",
       "cycle_time_days"
     ],
-    "note": "WorldMap.jsx consumes id/ports/region; fleetStats.js derives fleet stats from these records client-side. frequency_per_week / vessels / cycle_time_days were added (additive, network-economics redesign): departures per week, vessels tied up = ceil(cycle_time_days * frequency / 7), and the declared rotation time in days derived from distance, class design speed and port stay."
+    "keys_optional": [
+      "port_stay_days",
+      "legs"
+    ],
+    "note": "WorldMap.jsx consumes id/ports/region; fleetStats.js derives fleet stats from these records client-side. frequency_per_week / vessels / cycle_time_days were added (additive, network-economics redesign): departures per week, vessels tied up = ceil(cycle_time_days * frequency / 7), and the declared rotation time in days derived from distance, class design speed and port stay. port_stay_days / legs are optional (additive, 2026-10-24, reporting only): the ledger's own per-leg figures of the closed rotation, legs[i] = {from, to, distance_nm, sail_days, load_teu}; runs made before that date do not carry them."
   },
   "structural_expectations": {
     "description": "Must hold in EVERY successful run. Enforced by certification suite and/or schema tests.",

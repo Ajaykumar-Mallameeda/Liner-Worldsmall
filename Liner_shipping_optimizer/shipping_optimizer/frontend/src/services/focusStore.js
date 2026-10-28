@@ -60,6 +60,39 @@ export function requestPort(code) {
   serviceStore.set(code == null ? null : { kind: 'port', id: String(code) });
 }
 
+/**
+ * Hover link: pointing at a service or an agent in a table or chart lights up its routes on the map.
+ * { kind: 'service' | 'agent', id } or null. Transient: set on pointer enter / focus, cleared on leave / blur.
+ */
+const hoverStore = createStore(null);
+let hoverKey = null;
+export function setHoverTarget(kind, id) {
+  const key = kind && id != null ? `${kind}:${id}` : null;
+  if (key === hoverKey) return;
+  hoverKey = key;
+  hoverStore.set(key ? { kind, id: String(id) } : null);
+}
+export const clearHoverTarget = () => setHoverTarget(null);
+export function useHoverTarget() {
+  return useSyncExternalStore(hoverStore.subscribe, hoverStore.get, hoverStore.get);
+}
+/** Pointer and keyboard props that make an element drive the hover link. */
+export function hoverProps(kind, id) {
+  return {
+    onPointerEnter: () => setHoverTarget(kind, id),
+    onPointerLeave: clearHoverTarget,
+    onFocus: () => setHoverTarget(kind, id),
+    onBlur: clearHoverTarget,
+  };
+}
+/** True when a service is the hovered one, or belongs to the hovered agent. */
+export function matchesHover(service, target) {
+  if (!target || !service) return false;
+  if (target.kind === 'service') return String(service.id) === target.id;
+  if (target.kind === 'agent') return sameAgent(service.agent_region ?? service.region, target.id);
+  return false;
+}
+
 /** [{ kind, id } or null, clear] — the Network tab consumes and clears it. */
 export function useServiceRequest() {
   const value = useSyncExternalStore(serviceStore.subscribe, serviceStore.get, serviceStore.get);

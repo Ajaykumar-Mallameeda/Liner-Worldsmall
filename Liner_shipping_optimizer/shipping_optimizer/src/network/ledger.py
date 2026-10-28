@@ -231,7 +231,7 @@ def compute_ledger(
         cycle = math.ceil(round(sea_days + port_days, 9))
         vessels = 0 if f == 0 else math.ceil(round(cycle * f / 7.0, 9))
         svc[s.service_id] = {
-            "ports": ports, "class": cls, "f": f, "leg_days": leg_days, "cycle": cycle,
+            "ports": ports, "class": cls, "f": f, "leg_days": leg_days, "leg_nm": legs, "cycle": cycle,
             "vessels": vessels, "cap": float(cls.capacity_teu),
             "vessel_cost": vessels * cls.tc_rate_daily * 7.0,
             "fuel": f * fuel_t * price,
@@ -395,5 +395,12 @@ def compute_ledger(
             "vessel_cost": r["vessel_cost"], "fuel_cost": r["fuel"],
             "fuel_tonnes": r["fuel_tonnes"], "fuel_price_usd_per_t": r["fuel_price"],
             "port_cost": r["port_fixed"] + r["var_cost"],
+            # the closed rotation leg by leg (leg i sails ports[i] -> ports[i+1]): the times the cycle above
+            # is the ceiling of (sum of sail days + one port stay per call); reporting only, nothing reads it back
+            "port_stay_days": stay_days,
+            "legs": [{"from": r["ports"][i], "to": r["ports"][(i + 1) % len(r["ports"])],
+                      "distance_nm": r["leg_nm"][i], "sail_days": r["leg_days"][i],
+                      "load_teu": leg_load.get((sid, i), 0.0)}
+                     for i in range(len(r["ports"]))],
         }
     return L

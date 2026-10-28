@@ -14,6 +14,8 @@
         var p = JSON.parse(localStorage.getItem('vr.prefs') || '{}') || {};
         if (p.theme === 'light') document.documentElement.dataset.theme = 'light';
         if (p.density === 'compact') document.documentElement.dataset.density = 'compact';
+        var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        document.documentElement.dataset.motion = p.motion === 'off' ? 'off' : (p.motion === 'reduced' || rm) ? 'reduced' : 'full';
       } catch (e) { /* storage blocked: defaults */ }
     </script>
     <style>
@@ -26,10 +28,8 @@
       [data-theme="light"] .boot .hole { fill: #eef1f5; }
       .boot .name { color: #e8f4f0; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
       [data-theme="light"] .boot .name { color: #0f172a; }
-      @media (prefers-reduced-motion: no-preference) {
-        .boot .ring { stroke-dasharray: 46; animation: boot-trace 1.6s linear infinite; }
-        @keyframes boot-trace { to { stroke-dashoffset: -92; } }
-      }
+      [data-motion="full"] .boot .ring { stroke-dasharray: 46; animation: boot-trace 1.6s linear infinite; }
+      @keyframes boot-trace { to { stroke-dashoffset: -92; } }
     </style>
   </head>
   <body>

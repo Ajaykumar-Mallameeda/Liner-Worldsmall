@@ -36,6 +36,15 @@ NO_IMPROVE_LIMIT = 8      # early stop threshold
 MAX_RUNTIME = 90          # hard runtime cap in seconds
 
 
+def _generation_record(gen: int, population, fitness, best_so_far) -> Dict:
+    """One entry of ``generation_history``: the population's fitness spread after generation ``gen``
+    (0 = the initial population) and the services switched on in that generation's best chromosome."""
+    top = max(range(len(fitness)), key=fitness.__getitem__)
+    return {"gen": gen, "best": float(fitness[top]), "mean": float(sum(fitness) / len(fitness)),
+            "worst": float(min(fitness)), "best_so_far": float(best_so_far),
+            "services_on": int(sum(population[top]))}
+
+
 class ServiceGA:
     # ------------------------------------------------------------------ #
     #  Construction                                                      #
@@ -353,6 +362,8 @@ class ServiceGA:
         start_time   = time.time()
         actual_generations = 0
         early_stop_reason  = "completed"
+        # per-generation record for the dashboard's playback; read-only (no RNG draw, no effect on selection)
+        history = [_generation_record(0, population, fitness, best_fitness)]
 
         for gen in range(self.generations):
             actual_generations += 1
@@ -377,6 +388,7 @@ class ServiceGA:
                 best_fitness, no_improve = current_best, 0
             else:
                 no_improve += 1
+            history.append(_generation_record(gen + 1, population, fitness, best_fitness))
             if no_improve >= self.stagnation_limit:
                 early_stop_reason = "stagnation"
                 break
@@ -391,6 +403,7 @@ class ServiceGA:
             "early_stop_reason":            early_stop_reason,
             "best_fitness":                 float(best_fitness),
             "runtime_seconds":              round(elapsed, 4),
+            "generation_history":           history,
         }
         logger.info("service_ga_complete | selected=%d best_fitness=%s generations=%d stop=%s runtime=%.2fs",
                     sum(best), best_fitness, actual_generations, early_stop_reason, elapsed)

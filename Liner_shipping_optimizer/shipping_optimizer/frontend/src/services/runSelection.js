@@ -3,6 +3,7 @@
  *
  *   { kind: 'current' }                                  -> pipeline_output.json of the latest local run
  *   { kind: 'benchmark', dataset: 'worldsmall', seed: 7 } -> a frozen Benchmark/seed-30 run (via /api/runs)
+ *   { kind: 'extra', id: 'worldsmall_seed00_20261024' }   -> a run kept outside the benchmark (runs_extra/<id>)
  *
  * The choice is remembered per browser; every view reads the same selection.
  */
@@ -15,6 +16,7 @@ function readStored() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const run = raw ? JSON.parse(raw) : null;
     if (run && run.kind === 'benchmark' && typeof run.dataset === 'string' && Number.isInteger(run.seed)) return run;
+    if (run && run.kind === 'extra' && typeof run.id === 'string') return run;
   } catch (_) { /* storage unavailable: fall back to the current run */ }
   return CURRENT;
 }
@@ -29,7 +31,7 @@ export function getSelectedRun() {
 export function setSelectedRun(run) {
   const next = run && run.kind === 'benchmark'
     ? { kind: 'benchmark', dataset: String(run.dataset), seed: Number(run.seed) }
-    : CURRENT;
+    : run && run.kind === 'extra' ? { kind: 'extra', id: String(run.id) } : CURRENT;
   if (runKey(next) === runKey(selected)) return;
   selected = next;
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (_) { /* not persisted */ }
@@ -42,6 +44,7 @@ export function subscribeRun(fn) {
 }
 
 export function runKey(run) {
+  if (run && run.kind === 'extra') return `extra:${run.id}`;
   return run && run.kind === 'benchmark' ? `${run.dataset}/${run.seed}` : 'current';
 }
 
@@ -49,6 +52,7 @@ export function runOutputUrl(run) {
   if (run && run.kind === 'benchmark') {
     return `/api/runs/${encodeURIComponent(run.dataset)}/${run.seed}/pipeline_output`;
   }
+  if (run && run.kind === 'extra') return `/api/runs-extra/${encodeURIComponent(run.id)}/pipeline_output`;
   return '/pipeline_output.json';
 }
 
@@ -56,5 +60,6 @@ export function runOutputUrl(run) {
 export function runLabel(run, datasetName) {
   const name = datasetName || (run && run.dataset) || 'Run';
   if (run && run.kind === 'benchmark') return `${name} · seed ${String(run.seed).padStart(2, '0')}`;
+  if (run && run.kind === 'extra') return `${name} · ${run.id}`;
   return `${name} · latest run`;
 }

@@ -8,6 +8,8 @@
  * - The selected iteration is the run's own answer (consoleSelectors.selectedIterationOf); clicking another
  *   iteration INSPECTS it: a banner says so and every KPI on the page switches to that iteration.
  * - Every figure comes from the run on disk. A missing figure shows as "—", never as a placeholder number.
+ * - Replay steps through the iterations (map, tiles and charts follow), then returns to the selected one.
+ * - Headline figures roll to their new value on a run or iteration switch and flash once.
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -15,10 +17,12 @@ import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import MapCanvas from '../../components/console/MapCanvas.jsx';
 import LlmDiagnosticsPanel from '../../components/console/LlmDiagnosticsPanel.jsx';
 import VsMean from '../../components/common/VsMean.jsx';
-import { UnitValue, Sparkline, Provenance } from '../../components/common/Figure.jsx';
+import { Sparkline, Provenance, RollingValue } from '../../components/common/Figure.jsx';
 import ComparePanel from '../../components/console/ComparePanel.jsx';
 import { useBenchBaseline } from '../../services/benchBaseline.js';
 import { CostWaterfall, ProfitCoverage, ServicePnl, AgentCoverage } from '../../components/charts/PlanCharts.jsx';
+import StageTimeBar, { stageTimingOf } from '../../components/charts/StageTimeBar.jsx';
+import { usePresence } from '../../utils/motion.js';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
 import {
   buildProfitSeries,
@@ -33,6 +37,9 @@ const EM = '—';
 const pad2 = (n) => String(n).padStart(2, '0');
 const num = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
 const titleCase = (s) => (s ? String(s).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : s);
+const fmtCount = (v) => (v == null ? EM : fmtNum(Math.round(v)));
+const fmtScore = (v) => (v == null ? EM : v.toFixed(3));
+const REPLAY_STEP_MS = 1800;   // each iteration stays on screen this long during a replay
 
 function sparkPoints(values, top, span) {
   if (!values.length) return [];
@@ -99,10 +106,27 @@ export default function CommandCenter({
     }));
   }, [scorecards, audit, optState?.iterations]);
 
+  // Iteration replay: index into iterationsResolved while replaying, null otherwise.
+  const [replayAt, setReplayAt] = useState(null);
+  const replaying = replayAt != null;
+  useEffect(() => {
+    if (replayAt == null) return undefined;
+    const it = iterationsResolved[replayAt];
+    if (!it) { setReplayAt(null); return undefined; }
+    setUserSelectedIter(it.iter === canonicalSel ? null : it.iter);
+    const t = setTimeout(() => {
+      if (replayAt + 1 < iterationsResolved.length) setReplayAt(replayAt + 1);
+      else { setReplayAt(null); setUserSelectedIter(null); }   // end on the run's own answer
+    }, REPLAY_STEP_MS);
+    return () => clearTimeout(t);
+  }, [replayAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stopReplay = () => { setReplayAt(null); setUserSelectedIter(null); };
+
   const lastIter = iterationsResolved.length ? iterationsResolved[iterationsResolved.length - 1].iter : null;
   const baseSel = canonicalSel ?? lastIter;
   const viewIterNum = userSelectedIter ?? baseSel;
   const inspecting = userSelectedIter != null && userSelectedIter !== canonicalSel;
+  const comparePresence = usePresence(comparing && iterationsResolved.length > 1);
   const viewIter = iterationsResolved.find((i) => i.iter === viewIterNum) || null;
 
   // Services drawn on the map: the viewed iteration's, else the run's final selection.
@@ -174,7 +198,17 @@ export default function CommandCenter({
 
   return (
     <div className="cx-page-body cc-body-full">
-      {inspecting && (
+      {replaying ? (
+        <div className="cx-inspect-banner cx-replay-banner" role="status" aria-live="polite">
+          <span>
+            Replay: <b>iter {pad2(viewIterNum)}</b> ({replayAt + 1} of {iterationsResolved.length}){viewIterNum === canonicalSel ? ', the run’s selected iteration' : ''}. The map and every figure follow.
+          </span>
+          <span className="replay-steps" aria-hidden="true">
+            {iterationsResolved.map((it, i) => <span key={it.iter} className={i === replayAt ? 'is-on' : i < replayAt ? 'is-done' : ''}>{pad2(it.iter)}</span>)}
+          </span>
+          <button type="button" onClick={stopReplay}>Stop replay</button>
+        </div>
+      ) : inspecting && (
         <div className="cx-inspect-banner" role="status">
           <span>
             Inspecting <b>iter {pad2(viewIterNum)}</b>. The run selected <b>iter {canonicalSel != null ? pad2(canonicalSel) : EM}</b>; every figure below is for iter {pad2(viewIterNum)}.
@@ -216,6 +250,10 @@ export default function CommandCenter({
                 <span className="cc-ss-v text-slate-300">{iterationsResolved.length ? `${iterationsResolved.length} on disk` : EM}</span>
               </div>
             </div>
+            <div className="cc-stage-time">
+              <div className="cc-ss-k">PLANNER TIME · ITER {viewIterNum != null ? pad2(viewIterNum) : EM}</div>
+              <StageTimeBar compact timing={stageTimingOf(raw, viewIterNum)} label={`iter ${viewIterNum != null ? pad2(viewIterNum) : EM} plan`} exportBase={runLabel} />
+            </div>
           </InstrumentPanel>
         </div>
 
@@ -241,7 +279,7 @@ export default function CommandCenter({
               <div className="cd-tile">
                 <span className="lbl">WEEKLY P&amp;L <Provenance rows={provOf('weekly_profit', 'summary_metrics.weekly_profit')} /></span>
                 <span className="v-row">
-                  <span className={`v ${weeklyProfit != null && weeklyProfit < 0 ? 'text-red-400' : 'text-cyan-400'}`}><UnitValue text={fmtUsd(weeklyProfit)} /></span>
+                  <span className={`v ${weeklyProfit != null && weeklyProfit < 0 ? 'text-red-400' : 'text-cyan-400'}`}><RollingValue value={weeklyProfit} format={fmtUsd} memKey="cc.profit" /></span>
                   <Sparkline values={series('profit')} active={viewIdx} label="Weekly profit by iteration" />
                 </span>
                 <span className="sub">{useSummary && sm.revenue != null ? `REVENUE ${fmtUsd(sm.revenue)}` : `ITER ${viewIterNum != null ? pad2(viewIterNum) : EM}`}</span>
@@ -250,7 +288,7 @@ export default function CommandCenter({
               <div className="cd-tile">
                 <span className="lbl" title="Served TEU / total weekly demand (demand-weighted)">COVERAGE <Provenance rows={provOf('global_demand_weighted_coverage', 'summary_metrics.coverage')} /></span>
                 <span className="v-row">
-                  <span className="v text-emerald-400"><UnitValue text={fmtPct(coverage)} /></span>
+                  <span className="v text-emerald-400"><RollingValue value={coverage} format={fmtPct} memKey="cc.coverage" /></span>
                   <Sparkline values={series('coverage')} active={viewIdx} label="Coverage by iteration" />
                 </span>
                 <span className="sub">{teuServed != null ? `${fmtNum(Math.round(teuServed))} TEU SERVED` : EM}</span>
@@ -259,7 +297,7 @@ export default function CommandCenter({
               <div className="cd-tile">
                 <span className="lbl">SERVICES <Provenance rows={[...provOf('services_deployed', 'selected_services.length')].map(([k, v]) => (k === 'Field' ? [k, viewServices.length ? `iteration_results[iter ${viewIterNum}].selected_services (count)` : v] : [k, v]))} /></span>
                 <span className="v-row">
-                  <span className="v text-slate-100">{servicesCount ?? EM}</span>
+                  <span className="v text-slate-100"><RollingValue value={servicesCount} format={fmtCount} memKey="cc.services" units={false} /></span>
                   <Sparkline values={series('servicesDeployed')} active={viewIdx} label="Services by iteration" />
                 </span>
                 <span className="sub">IN ITER {viewIterNum != null ? pad2(viewIterNum) : EM}</span>
@@ -268,7 +306,7 @@ export default function CommandCenter({
               <div className="cd-tile">
                 <span className="lbl" title="Weekly profit / weekly revenue">MARGIN <Provenance rows={provOf('profit_margin_pct', 'summary_metrics.weekly_profit / revenue')} /></span>
                 <span className="v-row">
-                  <span className="v text-slate-100"><UnitValue text={fmtPct(marginPct)} /></span>
+                  <span className="v text-slate-100"><RollingValue value={marginPct} format={fmtPct} memKey="cc.margin" /></span>
                   <Sparkline values={series('marginPct')} active={viewIdx} label="Margin by iteration" />
                 </span>
                 <span className="sub">ON REVENUE</span>
@@ -279,13 +317,13 @@ export default function CommandCenter({
             <div className="cc-cd-secondary-grid">
               <div className="cc-cd-sub-row">
                 <span className="k">TEU UNSERVED</span>
-                <span className="v">{unservedTeu != null ? fmtNum(Math.round(unservedTeu)) : EM}</span>
+                <span className="v"><RollingValue value={unservedTeu} format={fmtCount} memKey="cc.unserved" units={false} /></span>
                 <span className="k">REGIONS</span>
                 <span className="v">{regionCount ?? EM}</span>
               </div>
               <div className="cc-cd-sub-row">
                 <span className="k" title="Coordinator convergence score of this iteration (0–1)">SCORE</span>
-                <span className="v">{score != null ? score.toFixed(3) : EM}</span>
+                <span className="v"><RollingValue value={score} format={fmtScore} memKey="cc.score" units={false} /></span>
                 <span className="k" title="Average of the regional coverages (not demand-weighted)">REGIONAL AVG COV</span>
                 <span className="v">{fmtPct(viewIter?.regionalCoverage)}</span>
               </div>
@@ -335,17 +373,19 @@ export default function CommandCenter({
         </div>
       </div>
 
-      {comparing && iterationsResolved.length > 1 && (
-        <InstrumentPanel title="Compare Iterations" right={<span className="text-[12px] font-mono text-slate-400 uppercase">{bench ? `vs ${bench.n}-seed mean` : 'no benchmark for this dataset'}</span>}>
-          <ComparePanel
-            iterations={iterationsResolved}
-            iterResults={rawIterResults}
-            selectedIter={canonicalSel}
-            bench={bench}
-            runLabel={runLabel}
-            onClose={() => setComparing(false)}
-          />
-        </InstrumentPanel>
+      {comparePresence.mounted && (
+        <div className="ov-inline" data-state={comparePresence.state}>
+          <InstrumentPanel title="Compare Iterations" right={<span className="text-[12px] font-mono text-slate-400 uppercase">{bench ? `vs ${bench.n}-seed mean` : 'no benchmark for this dataset'}</span>}>
+            <ComparePanel
+              iterations={iterationsResolved}
+              iterResults={rawIterResults}
+              selectedIter={canonicalSel}
+              bench={bench}
+              runLabel={runLabel}
+              onClose={() => setComparing(false)}
+            />
+          </InstrumentPanel>
+        </div>
       )}
 
       {/* ══ PLAN ECONOMICS: where the money goes, how the plan compares, which services and agents drive it ══ */}
@@ -376,7 +416,16 @@ export default function CommandCenter({
         <div className="cc-opt-progress-panel">
           <InstrumentPanel
             title="Optimization Progress"
-            right={<span className="text-[12px] font-mono text-slate-400 uppercase">{iterationsResolved.length} ITERATIONS · CLICK TO INSPECT</span>}
+            right={(
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                <span className="text-[12px] font-mono text-slate-400 uppercase" title="Click an iteration to inspect it">{iterationsResolved.length} ITERATIONS</span>
+                <button type="button" className="cmp-btn" style={{ whiteSpace: 'nowrap' }} aria-pressed={replaying} disabled={iterationsResolved.length < 2}
+                  onClick={() => (replaying ? stopReplay() : setReplayAt(0))}
+                  title="Step through the iterations in order; the map and figures follow">
+                  {replaying ? '■ Stop' : '▶ Replay'}
+                </button>
+              </span>
+            )}
             bodyPadding="flush"
           >
             <div className="cc-opt-container">
@@ -389,7 +438,7 @@ export default function CommandCenter({
                     <button
                       key={it.iter}
                       type="button"
-                      onClick={() => setUserSelectedIter(it.iter === canonicalSel ? null : it.iter)}
+                      onClick={() => { setReplayAt(null); setUserSelectedIter(it.iter === canonicalSel ? null : it.iter); }}
                       className={`cc-iter-card ${isView ? 'is-active-glow' : ''}`}
                       aria-pressed={isView}
                     >

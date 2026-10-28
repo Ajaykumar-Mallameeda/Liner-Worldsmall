@@ -3,9 +3,40 @@
  *   UnitValue   "$45.0M" → number in full ink, currency and unit set smaller and dimmer
  *   Sparkline   one value per iteration; the iteration on screen is marked
  *   Provenance  "where does this number come from": file, field, run — a click-open popover
+ *   RollingValue  a figure that rolls to its new value (300 ms) on a run or iteration switch and flashes once
  */
 
 import React, { useEffect, useId, useRef, useState } from 'react';
+import { tween, MS } from '../../utils/motion.js';
+
+// Last value shown per tile, so a figure also rolls after its view remounts (a run switch shows a skeleton first).
+const lastShown = new Map();
+const toNum = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/**
+ * value: number or null; format: number → text (called with in-between values while rolling);
+ * memKey: stable id of the tile; units: split currency / unit with UnitValue.
+ */
+export function RollingValue({ value, format, memKey, units = true }) {
+  const v = toNum(value);
+  const prev = memKey ? lastShown.get(memKey) : undefined;
+  const [shown, setShown] = useState(() => (v != null && prev != null ? prev : v));
+  const [flash, setFlash] = useState(0);
+  const cur = useRef(shown);
+  useEffect(() => {
+    if (memKey) lastShown.set(memKey, v);
+    const from = cur.current;
+    if (v == null || from == null || Math.abs(from - v) < 1e-9) { cur.current = v; setShown(v); return undefined; }
+    setFlash((f) => f + 1);
+    return tween({ from, to: v, duration: MS[300], onFrame: (x) => { cur.current = x; setShown(x); } });
+  }, [v, memKey]);
+  const text = format(shown);
+  return (
+    <span key={flash} className={`roll ${flash ? 'roll-flash' : ''}`}>
+      {units ? <UnitValue text={text} /> : text}
+    </span>
+  );
+}
 
 const SPLIT = /^([−-]?)(\$?)([\d.,]+)\s*([A-Za-z%]*)(.*)$/;
 

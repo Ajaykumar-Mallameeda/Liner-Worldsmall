@@ -229,6 +229,9 @@ class FrequencyGA:
         start_time = time.time()
         actual_generations = 0
         early_stop_reason = "completed"
+        # per-generation record for the dashboard's playback; read-only (no RNG draw, no effect on selection)
+        history = [{"gen": 0, "best": float(best_fitness), "mean": float(sum(fitness) / len(fitness)),
+                    "worst": float(min(fitness)), "best_so_far": float(best_fitness)}]
 
         for gen in range(self.generations):
             actual_generations += 1
@@ -249,6 +252,8 @@ class FrequencyGA:
                 best_fitness, no_improve = current_best, 0
             else:
                 no_improve += 1
+            history.append({"gen": gen + 1, "best": float(current_best), "mean": float(sum(fitness) / len(fitness)),
+                            "worst": float(min(fitness)), "best_so_far": float(best_fitness)})
             if no_improve >= self.stagnation_limit:
                 early_stop_reason = "stagnation"
                 break
@@ -263,6 +268,7 @@ class FrequencyGA:
             "early_stop_reason":            early_stop_reason,
             "best_fitness":                 float(best_fitness),
             "runtime_seconds":              round(elapsed, 4),
+            "generation_history":           history,
         }
         logger.info("frequency_ga_complete | best_fitness=%s generations=%d stop=%s runtime=%.2fs",
                     best_fitness, actual_generations, early_stop_reason, elapsed)

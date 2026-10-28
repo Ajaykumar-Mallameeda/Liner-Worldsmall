@@ -23,9 +23,11 @@ export const navGroups = [
   ] },
   { id: 'benchmarks',   label: 'Benchmarks',     icon: '▦', tabs: [
     { id: 'benchmarks',         label: '30-seed benchmark' },
+    { id: 'run_diff',           label: 'Run diff' },
   ] },
   { id: 'scenarios',    label: 'Scenarios',      icon: '⌁', tabs: [
     { id: 'scenario_analysis',  label: 'Scenario Analysis' },
+    { id: 'whatif',             label: 'What-if' },
   ] },
   { id: 'system',       label: 'System',         icon: '▣', tabs: [
     { id: 'system_health',      label: 'Health' },

@@ -23,9 +23,13 @@ import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import WorldMap, { getRegionColor } from '../../components/map/WorldMap.jsx';
 import ServiceDetailPanel from '../../components/console/ServiceDetailPanel.jsx';
+import PortDetailPanel from '../../components/console/PortDetailPanel.jsx';
+import { fetchDemand, ledgerForServices, datasetOf, portActivity } from '../../utils/portFlows.js';
+import { getPortName } from '../../utils/portLookup.js';
 import { Pill, Kv, Stat, Empty, Provenance } from '../../components/console/p12.jsx';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
-import { matchesAgent, setAgentFocus, useAgentFocus, useServiceRequest } from '../../services/focusStore.js';
+import { matchesAgent, setAgentFocus, useAgentFocus, useServiceRequest, hoverProps } from '../../services/focusStore.js';
+import { usePresence } from '../../utils/motion.js';
 import { downloadCsv } from '../../utils/exportData.js';
 
 // Regions are geographic (utils/geoRegion.js): a service's region is where most of its ports are.
@@ -61,6 +65,7 @@ export default function NetworkIntelligence({
   const [selectedService, setSelectedService] = useState(null);
   const [routingImpact, setRoutingImpact] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [focusPort, setFocusPort] = useState(null);   // port asked for from the palette: the map glides to it
 
   // Fetch routing impact if available
   useEffect(() => {
@@ -99,6 +104,7 @@ export default function NetworkIntelligence({
       setActiveRegion('world');
       setSelectedService(null);
       setSearchQuery(request.id);
+      setFocusPort(request.id);
     }
     clearRequest();
   }, [request, sm.selected_services]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -168,7 +174,42 @@ export default function NetworkIntelligence({
     setSelectedService(null);
   };
 
+  // Port drawer and unserved layer: the run's routed flows against the dataset's lane demand (backend route).
+  const [openPort, setOpenPort] = useState(null);
+  const [showUnserved, setShowUnserved] = useState(true);
+  const [demand, setDemand] = useState(undefined);   // undefined loading · null unavailable · object loaded
+  const dataset = datasetOf(optState);
+  useEffect(() => {
+    let cancelled = false;
+    setDemand(undefined);
+    fetchDemand(dataset).then((d) => { if (!cancelled) setDemand(d || null); });
+    return () => { cancelled = true; };
+  }, [dataset]);
+  // Flows come from the ledger of exactly the plan shown (the run's or one iteration's); with no such ledger the
+  // per-port figures would describe another plan, so they are withheld.
+  const ledger = useMemo(() => ledgerForServices(optState, sm.selected_services), [optState, sm.selected_services]);
+  const flowsMatch = Boolean(ledger);
+  const activity = useMemo(() => portActivity({
+    flows: ledger?.plan?.flows || [],
+    services: sm.selected_services || [],
+    demand: ledger ? demand?.demand || null : null,
+  }), [ledger, sm.selected_services, demand]);
+  const unservedNote = !flowsMatch ? 'unserved: this plan has no matching routed flows'
+    : demand === undefined ? 'unserved: loading demand…'
+      : demand === null ? 'unserved: needs the backend (lane demand)' : null;
+
+  const openPortDrawer = useCallback((code) => { setSelectedService(null); setOpenPort(code); }, []);
+  const inspectService = useCallback((svc) => { setOpenPort(null); setSelectedService(svc); }, []);
+
   const totalSelected = allServices.length;
+  // Detail column enters and leaves with the shared panel motion; it keeps the last service / port while closing.
+  const detail = usePresence(Boolean(selectedService || openPort));
+  const lastService = React.useRef(null);
+  const lastPort = React.useRef(null);
+  if (selectedService) { lastService.current = selectedService; lastPort.current = null; }
+  if (openPort) { lastPort.current = openPort; lastService.current = null; }
+  const shownService = selectedService || (openPort ? null : lastService.current);
+  const shownPort = openPort || (selectedService ? null : lastPort.current);
   const activeRegionObj = REGIONS.find((r) => r.id === activeRegion) || REGIONS[0];
   const activeRegionColor = activeRegionObj.color;
 
@@ -242,7 +283,7 @@ export default function NetworkIntelligence({
       {/* ══ TOP SECTION: MAP + SERVICE DETAIL PANEL ══ */}
       <div className="grid grid-cols-12 gap-3 items-stretch">
         {/* Left Column: World Map */}
-        <div className={selectedService ? 'col-span-12 xl:col-span-8' : 'col-span-12'}>
+        <div className={detail.mounted ? 'col-span-12 xl:col-span-8' : 'col-span-12'}>
           <InstrumentPanel
             title={
               selectedService
@@ -255,8 +296,19 @@ export default function NetworkIntelligence({
                   ● SINGLE SERVICE INSPECTION · {selectedService.ports.join(' → ')}
                 </span>
               ) : (
-                <span className="text-slate-400 text-[12px]">
-                  {activeRegionObj.label} · {regionServices.length} SELECTED
+                <span className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="text-slate-400 text-[12px]">{activeRegionObj.label} · {regionServices.length} SELECTED</span>
+                  <button
+                    type="button"
+                    className="ni-layer-btn"
+                    aria-pressed={showUnserved && !unservedNote}
+                    disabled={Boolean(unservedNote)}
+                    onClick={() => setShowUnserved((v) => !v)}
+                    title={unservedNote || 'Ring each port by the TEU it could not ship or receive; dash the largest unserved lanes'}
+                  >
+                    <span className="ni-layer-key" aria-hidden="true" />
+                    {unservedNote || `Unserved demand · ${fmtNum(activity.totals.unserved)} TEU`}
+                  </button>
                 </span>
               )
             }
@@ -268,23 +320,48 @@ export default function NetworkIntelligence({
                 selectedServices={regionServices}
                 inspectedService={selectedService}
                 regionFilter={activeRegion}
-                onSelectService={setSelectedService}
+                onSelectService={inspectService}
                 onClearService={handleClearService}
+                focusPort={focusPort}
+                unserved={showUnserved && !unservedNote ? activity : null}
+                onPortOpen={openPortDrawer}
+                openPort={openPort}
+                drawKey={`${optState?.source?.url || ''}|${optState?.source?.modifiedIso || sm.run_id || ''}|network`}
               />
             </div>
           </InstrumentPanel>
         </div>
 
         {/* Right Column: Service Detail Side Panel (Only in Single Service Mode) */}
-        {selectedService && (
-          <div className="col-span-12 xl:col-span-4">
+        {detail.mounted && shownService && (
+          <div className="col-span-12 xl:col-span-4 ov-slide" data-state={detail.state}>
             <InstrumentPanel
-              title={`Service Details — ${selectedService.id}`}
+              title={`Service Details — ${shownService.id}`}
               right={<span className="text-slate-400 font-bold text-[12px]">FROM RUN</span>}
               bodyPadding="flush"
             >
               <div style={{ maxHeight: 440, overflowY: 'auto' }}>
-                <ServiceDetailPanel service={selectedService} onClose={handleClearService} />
+                <ServiceDetailPanel service={shownService} onClose={handleClearService} />
+              </div>
+            </InstrumentPanel>
+          </div>
+        )}
+        {detail.mounted && shownPort && !shownService && (
+          <div className="col-span-12 xl:col-span-4 ov-slide" data-state={detail.state}>
+            <InstrumentPanel
+              title={`Port — ${shownPort} ${getPortName(shownPort)}`}
+              right={<span className="text-slate-400 font-bold text-[12px]">{demand ? 'RUN + DATASET' : 'FROM RUN'}</span>}
+              bodyPadding="flush"
+            >
+              <div style={{ maxHeight: 460, overflowY: 'auto' }}>
+                <PortDetailPanel
+                  code={shownPort}
+                  activity={activity}
+                  tariffs={demand?.ports || null}
+                  onInspectService={inspectService}
+                  onOpenPort={openPortDrawer}
+                  onClose={() => setOpenPort(null)}
+                />
               </div>
             </InstrumentPanel>
           </div>
@@ -388,6 +465,7 @@ export default function NetworkIntelligence({
                         }`}
                         onClick={() => setSelectedService(s)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedService(s); } }}
+                        {...hoverProps('service', s.id)}
                         style={{
                           display: 'grid',
                           gridTemplateColumns: '150px 120px 100px minmax(160px, 1fr) 150px 80px',
