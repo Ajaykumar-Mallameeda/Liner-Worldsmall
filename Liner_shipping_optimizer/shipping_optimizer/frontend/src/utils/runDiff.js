@@ -10,6 +10,8 @@
  * from another starting port still matches.
  */
 
+import { transshipmentModel } from './transshipment.js';
+
 /** Canonical form of a closed loop: rotated to start at its smallest port code (direction kept). */
 export function rotationKey(ports) {
   const p = (ports || []).filter(Boolean);
@@ -37,7 +39,12 @@ export function planKpis(plan) {
   const services = plan?.services || [];
   const vessels = Object.values(fleet).reduce((a, c) => a + (Number(c?.used) || 0), 0)
     || services.reduce((a, s) => a + (Number(s.vessels) || 0), 0);
+  const flows = plan?.ledger?.plan?.flows;
+  const ts = flows?.length ? transshipmentModel({ flows }).totals : null;
   return {
+    transship_teu: ts ? ts.transferTeu : null,
+    transship_share: ts ? ts.share : null,
+    transship_hubs: ts ? ts.hubs : null,
     profit: wk.operating_profit ?? null,
     revenue: wk.revenue ?? null,
     cost: wk.total_operating_cost ?? null,
@@ -96,4 +103,23 @@ export function diffOverlay(rows) {
     status.set(id, r.status === 'added' ? 'added' : r.status === 'removed' ? 'removed' : 'kept');
   });
   return { services, status };
+}
+
+/**
+ * One side of the split-screen diff (design D7): plan A's services (those only in A marked 'removed') or plan B's
+ * (those only in B marked 'added'); matched services are 'kept' on both maps. fitPorts = every port of A and B, so
+ * both maps frame the same area before the viewer moves them.
+ */
+export function diffSide(rows, side) {
+  const key = side === 'A' ? 'a' : 'b';
+  const services = []; const status = new Map(); const ports = new Set();
+  rows.forEach((r) => {
+    [r.a, r.b].forEach((sv) => (sv?.ports || []).forEach((p) => ports.add(p)));
+    const src = r[key];
+    if (!src) return;
+    const id = `${side}:${src.id}`;
+    services.push({ ...src, id, region: src.region || 'world', load: Number(src.load) || 0 });
+    status.set(id, r.status === 'added' ? 'added' : r.status === 'removed' ? 'removed' : 'kept');
+  });
+  return { services, status, fitPorts: [...ports].sort() };
 }

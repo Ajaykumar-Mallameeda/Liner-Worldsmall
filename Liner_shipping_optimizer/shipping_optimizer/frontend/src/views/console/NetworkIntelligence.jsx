@@ -17,14 +17,18 @@
  *    - Clear / Back button restores the active region view.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motionLevel } from '../../services/prefsStore.js';
 import { useOptimizationState } from '../../hooks/useOptimizationState.js';
 import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import WorldMap, { getRegionColor } from '../../components/map/WorldMap.jsx';
 import ServiceDetailPanel from '../../components/console/ServiceDetailPanel.jsx';
 import PortDetailPanel from '../../components/console/PortDetailPanel.jsx';
+import BottomSheet, { useIsPhone } from '../../components/console/BottomSheet.jsx';
 import { fetchDemand, ledgerForServices, datasetOf, portActivity } from '../../utils/portFlows.js';
+import { useTransshipment } from '../../services/transshipmentData.js';
+import { hubAt } from '../../utils/transshipment.js';
 import { getPortName } from '../../utils/portLookup.js';
 import { Pill, Kv, Stat, Empty, Provenance } from '../../components/console/p12.jsx';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
@@ -105,6 +109,7 @@ export default function NetworkIntelligence({
       setSelectedService(null);
       setSearchQuery(request.id);
       setFocusPort(request.id);
+      setOpenPort(request.id);   // also when the map is already on this port (no new glide to open it)
     }
     clearRequest();
   }, [request, sm.selected_services]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -194,6 +199,7 @@ export default function NetworkIntelligence({
     services: sm.selected_services || [],
     demand: ledger ? demand?.demand || null : null,
   }), [ledger, sm.selected_services, demand]);
+  const transship = useTransshipment(optState);
   const unservedNote = !flowsMatch ? 'unserved: this plan has no matching routed flows'
     : demand === undefined ? 'unserved: loading demand…'
       : demand === null ? 'unserved: needs the backend (lane demand)' : null;
@@ -204,6 +210,18 @@ export default function NetworkIntelligence({
   const totalSelected = allServices.length;
   // Detail column enters and leaves with the shared panel motion; it keeps the last service / port while closing.
   const detail = usePresence(Boolean(selectedService || openPort));
+  const phone = useIsPhone();   // phones: details in a bottom sheet over the map (design D9)
+  const mapBoxRef = useRef(null);
+  const sheetOpen = Boolean(phone && (selectedService || openPort));
+  // The half-height sheet leaves the top of the screen for the map: bring the map there when details open.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const el = mapBoxRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    if (top >= 0 && top < 140) return;   // already near the top
+    el.scrollIntoView({ block: 'start', behavior: motionLevel() === 'full' ? 'smooth' : 'auto' });
+  }, [sheetOpen, selectedService, openPort]);
   const lastService = React.useRef(null);
   const lastPort = React.useRef(null);
   if (selectedService) { lastService.current = selectedService; lastPort.current = null; }
@@ -314,7 +332,7 @@ export default function NetworkIntelligence({
             }
             bodyPadding="flush"
           >
-            <div style={{ height: selectedService ? 440 : 460 }}>
+            <div ref={mapBoxRef} style={{ height: selectedService ? 440 : 460, scrollMarginTop: 56 }}>
               <WorldMap
                 optimizationState={optState}
                 selectedServices={regionServices}
@@ -333,7 +351,18 @@ export default function NetworkIntelligence({
         </div>
 
         {/* Right Column: Service Detail Side Panel (Only in Single Service Mode) */}
-        {detail.mounted && shownService && (
+        {phone && (
+          <BottomSheet open={Boolean(selectedService || openPort)}
+            eyebrow={selectedService ? 'Service · from run' : `Port · ${demand ? 'run + dataset' : 'from run'}`}
+            title={selectedService ? selectedService.id : openPort ? `${openPort} ${getPortName(openPort)}` : ''}
+            onClose={selectedService ? handleClearService : () => setOpenPort(null)}>
+            {selectedService ? <ServiceDetailPanel service={selectedService} /> : openPort ? (
+              <PortDetailPanel code={openPort} activity={activity} tariffs={demand?.ports || null} hub={hubAt(transship.model, openPort)}
+                onInspectService={inspectService} onOpenPort={openPortDrawer} />
+            ) : null}
+          </BottomSheet>
+        )}
+        {!phone && detail.mounted && shownService && (
           <div className="col-span-12 xl:col-span-4 ov-slide" data-state={detail.state}>
             <InstrumentPanel
               title={`Service Details — ${shownService.id}`}
@@ -346,7 +375,7 @@ export default function NetworkIntelligence({
             </InstrumentPanel>
           </div>
         )}
-        {detail.mounted && shownPort && !shownService && (
+        {!phone && detail.mounted && shownPort && !shownService && (
           <div className="col-span-12 xl:col-span-4 ov-slide" data-state={detail.state}>
             <InstrumentPanel
               title={`Port — ${shownPort} ${getPortName(shownPort)}`}
@@ -357,6 +386,7 @@ export default function NetworkIntelligence({
                 <PortDetailPanel
                   code={shownPort}
                   activity={activity}
+                  hub={hubAt(transship.model, shownPort)}
                   tariffs={demand?.ports || null}
                   onInspectService={inspectService}
                   onOpenPort={openPortDrawer}

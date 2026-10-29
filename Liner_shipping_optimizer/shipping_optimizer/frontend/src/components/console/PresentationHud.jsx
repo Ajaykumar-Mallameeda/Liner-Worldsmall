@@ -1,6 +1,7 @@
 /**
  * PresentationHud — the control strip shown while presentation mode steps through the main views.
- * Space pauses, ← / → step, Esc stops (handled by MaritimeDashboard). The bar under the strip fills over the
+ * Space pauses, ← / → step, C shows or hides the guided-tour callouts (design D11), Esc stops (handled by
+ * MaritimeDashboard). The bar under the strip fills over the
  * dwell time; under reduced or no motion the seconds left are shown instead of the moving bar.
  */
 import React, { useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import { useMotionLevel } from '../../services/prefsStore.js';
 /** Header button and command palette start presentation mode through this event (MaritimeDashboard listens). */
 export const startPresentation = () => window.dispatchEvent(new Event('vr:present'));
 
-export default function PresentationHud({ label, index, total, dwellMs, paused, onPrev, onNext, onTogglePause, onStop }) {
+export default function PresentationHud({ label, index, total, dwellMs, paused, onPrev, onNext, onTogglePause, onStop, callouts = true, onToggleCallouts }) {
   const level = useMotionLevel();
   const [left, setLeft] = useState(Math.round(dwellMs / 1000));
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function PresentationHud({ label, index, total, dwellMs, paused, 
         <button type="button" onClick={onPrev} aria-label="Previous view" title="Previous view (←)">◀</button>
         <button type="button" onClick={onTogglePause} aria-label={paused ? 'Resume' : 'Pause'} title={`${paused ? 'Resume' : 'Pause'} (Space)`}>{paused ? '▶' : '❚❚'}</button>
         <button type="button" onClick={onNext} aria-label="Next view" title="Next view (→)">▶▶</button>
+        {onToggleCallouts && <button type="button" onClick={onToggleCallouts} aria-pressed={callouts} aria-label="Guided-tour callouts" title={`${callouts ? 'Hide' : 'Show'} the findings callouts (C)`}>ⓘ</button>}
         <button type="button" onClick={onStop} aria-label="Stop presenting" title="Stop presenting (Esc)">✕</button>
       </span>
       {level === 'full' && !paused && (

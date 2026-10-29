@@ -2,7 +2,9 @@
  * CommandPalette — Ctrl+K / ⌘K (or the header Search button, or "/" outside a text field).
  * Jumps to any tab, opens a service or a port on the Network tab, sets or clears the agent cross-filter,
  * and switches theme, density, motion and compare mode, and starts presentation mode. Everything listed comes
- * from the run on screen.
+ * from the run on screen. Port results are cards with a Sentinel-2 thumbnail of the port (design D8).
+ * Scenario commands (design D10, utils/paletteActions.js): "close Suez", "fuel +20%", "demand -10%", "rates +30%",
+ * "war risk on", "compare with seed 7" open the What-if or Run diff with that scenario applied.
  *
  * Opens and closes with the shared overlay motion (usePresence + .ov-* classes): Esc closes at once and focus
  * goes back to where it was while the exit fade finishes.
@@ -17,6 +19,9 @@ import { MOTIONS, setMotion, toggleDensity, toggleTheme, usePrefs, motionLevel }
 import { usePresence } from '../../utils/motion.js';
 import { preloadTab } from '../../views/console/tabLoaders.js';
 import { startPresentation } from './PresentationHud.jsx';
+import PortThumb, { THUMB_CREDIT } from './PortThumb.jsx';
+import { parseActions, EXAMPLES } from '../../utils/paletteActions.js';
+import { requestScenario } from '../../services/scenarioIntent.js';
 
 const GROUP_KEY = Object.fromEntries(navGroups.map((g, i) => [g.id, String(i + 1)]));
 const MOTION_LABEL = { system: 'follow the system setting', reduced: 'reduced (fades only)', off: 'off' };
@@ -100,6 +105,7 @@ export default function CommandPalette({ runtime, onNavigate }) {
     MOTIONS.filter((m) => m !== prefs.motion).forEach((m) => {
       out.push({ group: 'View', label: `Motion: ${MOTION_LABEL[m]}`, hint: `now ${prefs.motion}${prefs.motion === 'system' ? ` (${motionLevel(prefs)})` : ''}`, run: () => setMotion(m) });
     });
+    out.push({ group: 'View', label: 'Download the one-page PDF plan report', hint: 'KPIs · map · waterfall · services', run: () => { onNavigate('command_center'); setTimeout(() => window.dispatchEvent(new Event('vr:plan-report')), 300); } });
     out.push({ group: 'View', label: 'Start presentation (steps through the main views)', hint: 'Space pause · ← → step · Esc stop', run: startPresentation });
     const services = runtime?.global?.selected_services || [];
     const ports = new Map();
@@ -108,17 +114,22 @@ export default function CommandPalette({ runtime, onNavigate }) {
       (s.ports || []).forEach((p) => ports.set(p, (ports.get(p) || 0) + 1));
     });
     [...ports.entries()].sort((a, b) => b[1] - a[1]).forEach(([p, n]) => {
-      out.push({ group: 'Port', label: `Port ${getPortFullLabel(p) || p}`, hint: `${n} call${n > 1 ? 's' : ''} in plan`, run: () => { onNavigate('network_intel'); requestPort(p); } });
+      out.push({ group: 'Port', port: p, label: `Port ${getPortFullLabel(p) || p}`, hint: `${n} call${n > 1 ? 's' : ''} in plan`, run: () => { onNavigate('network_intel'); requestPort(p); } });
     });
     return out;
   }, [runtime, agent, prefs, onNavigate]);
 
   const results = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return items.filter((it) => it.group !== 'Service' && it.group !== 'Port').concat(items.filter((it) => it.group === 'Service').slice(0, 5));
-    return items.map((it) => ({ it, sc: score(`${it.label} ${it.hint || ''}`, s) }))
-      .filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc).slice(0, 60).map((x) => x.it);
-  }, [items, q]);
+    const scenario = (a) => ({
+      group: 'Scenario', label: a.label, hint: a.hint,
+      run: () => { requestScenario(a); onNavigate(a.kind === 'diff' ? 'run_diff' : 'whatif'); },
+    });
+    if (!s) return EXAMPLES.map(scenario).concat(items.filter((it) => it.group !== 'Service' && it.group !== 'Port'), items.filter((it) => it.group === 'Service').slice(0, 5));
+    // A typed command is an exact intent: it goes first, above fuzzy matches of tabs, services and ports.
+    return parseActions(s).map(scenario).concat(items.map((it) => ({ it, sc: score(`${it.label} ${it.hint || ''}`, s) }))
+      .filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc).slice(0, 60).map((x) => x.it));
+  }, [items, q, onNavigate]);
 
   useEffect(() => { setActive(0); }, [q]);
   useEffect(() => {
@@ -144,7 +155,7 @@ export default function CommandPalette({ runtime, onNavigate }) {
         <input
           ref={input}
           className="cmdk-input"
-          placeholder="Jump to a tab, service, port or agent…"
+          placeholder="Jump to a tab, service or port, or type “close Suez”, “fuel +20%”, “compare with seed 7”…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           role="combobox"
@@ -165,10 +176,11 @@ export default function CommandPalette({ runtime, onNavigate }) {
                   data-idx={i}
                   role="option"
                   aria-selected={i === active}
-                  className={`cmdk-item ${i === active ? 'is-active' : ''}`}
+                  className={`cmdk-item ${it.port ? 'cmdk-port' : ''} ${i === active ? 'is-active' : ''}`}
                   onMouseMove={() => setActive(i)}
                   onClick={() => choose(it)}
                 >
+                  {it.port && <PortThumb code={it.port} size={40} metres={5000} />}
                   <span className="l">{it.label}</span>
                   {it.hint && <span className="h">{it.hint}</span>}
                 </div>
@@ -176,7 +188,7 @@ export default function CommandPalette({ runtime, onNavigate }) {
             );
           })}
         </div>
-        <div className="cmdk-foot"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span></div>
+        <div className="cmdk-foot"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span>{results.some((it) => it.port) && <span className="cmdk-credit" title={THUMB_CREDIT}>Port images: Sentinel-2 cloudless · EOX · CC BY-NC-SA 4.0</span>}</div>
       </div>
     </div>
   );

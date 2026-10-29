@@ -27,6 +27,8 @@ export default defineConfig({
       },
     },
   },
+  // MapLibre's tile worker is a module worker (GlMap.jsx bundles it with ?worker&url).
+  worker: { format: 'es' },
   build: {
     outDir: 'dist',
     sourcemap: true,

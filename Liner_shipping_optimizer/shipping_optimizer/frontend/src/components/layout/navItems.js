@@ -6,6 +6,10 @@ export const navGroups = [
   ] },
   { id: 'network',      label: 'Network',        icon: '⊕', tabs: [
     { id: 'network_intel',      label: 'Routes & Services' },
+    { id: 'transshipment',      label: 'Transshipment' },
+    { id: 'transit_finder',     label: 'Transit finder' },
+    { id: 'schedules',          label: 'Schedules' },
+    { id: 'sea_conditions',     label: 'Sea state & currents' },
   ] },
   { id: 'demand_ports', label: 'Demand & Ports', icon: '◍', tabs: [
     { id: 'demand_intel',       label: 'Demand' },
@@ -28,6 +32,8 @@ export const navGroups = [
   { id: 'scenarios',    label: 'Scenarios',      icon: '⌁', tabs: [
     { id: 'scenario_analysis',  label: 'Scenario Analysis' },
     { id: 'whatif',             label: 'What-if' },
+    { id: 'emissions',          label: 'Emissions & ETS' },
+    { id: 'reliability',        label: 'Reliability & congestion' },
   ] },
   { id: 'system',       label: 'System',         icon: '▣', tabs: [
     { id: 'system_health',      label: 'Health' },

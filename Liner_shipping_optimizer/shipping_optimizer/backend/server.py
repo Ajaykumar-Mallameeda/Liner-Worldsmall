@@ -26,6 +26,36 @@ app.include_router(run_catalog_router)
 # What-if re-evaluation of a recorded plan through the engine's ledger (backend/whatif.py); never re-runs the optimizer
 from backend.whatif import router as whatif_router
 app.include_router(whatif_router)
+from backend.searoutes import router as searoutes_router
+app.include_router(searoutes_router)
+from backend.chokepoints import router as chokepoints_router
+app.include_router(chokepoints_router)
+# Point-to-point transit finder over the recorded plan (backend/transit.py)
+from backend.transit import router as transit_router
+app.include_router(transit_router)
+# Emissions, EU ETS, ECA fuel, slow steaming and the profit-vs-CO2 front over the recorded plan (backend/emissions.py)
+from backend.emissions import router as emissions_router
+app.include_router(emissions_router)
+# The plan's ports against IMF PortWatch, the NGA World Port Index and UNCTAD's port LSCI (backend/port_activity.py)
+from backend.port_activity import router as port_activity_router
+app.include_router(port_activity_router)
+# Live AIS positions for the map (backend/ais.py, Digitraffic)
+from backend.ais import router as ais_router
+app.include_router(ais_router)
+# Sea state and currents along the plan's lanes (backend/weather.py, Open-Meteo Marine)
+from backend.weather import router as weather_router
+app.include_router(weather_router)
+# Schedule reliability and congestion Monte Carlo (backend/reliability.py)
+from backend.reliability import router as reliability_router
+app.include_router(reliability_router)
+# Sentinel-1 radar ship counts around a port (backend/sarships.py, Planetary Computer)
+from backend.sarships import router as sarships_router
+app.include_router(sarships_router)
+# Market inputs and war risk for the What-if (backend/market.py, backend/war_risk.py)
+from backend.market import router as market_router
+from backend.war_risk import router as war_risk_router
+app.include_router(market_router)
+app.include_router(war_risk_router)
 
 # Mount static data directory
 repo_root_data = Path(__file__).resolve().parent.parent / "data"

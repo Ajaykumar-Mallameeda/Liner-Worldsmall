@@ -5,9 +5,13 @@
  *
  * - Services calling (click one to inspect it) and calls per week.
  * - Cargo out / in: TEU the plan carries from and to the port, against the lane demand of the dataset.
- * - Transshipment: TEU changing ship here (flows whose path transfers at this port).
+ * - Transshipment: TEU changing ship here, its weekly cost at the port's tariff, the service connections and the
+ *   lanes that transfer here (`hub`: utils/transshipment.js, the same split as Network → Transshipment).
  * - Unserved: demand from / to the port the plan leaves uncarried, and its largest lanes.
  * - Port tariffs from the dataset (handling, call, transshipment cost; draft).
+ * - Port card (design D8): satellite thumbnail, code, name, region and the IMF PortWatch match.
+ * - Sentinel-2 cloudless image of the port (components/console/PortSatellite.jsx, EOX tiles).
+ * - Sentinel-1 radar ship count on demand (components/console/PortRadarShips.jsx, backend/sarships.py).
  *
  * Figures come from utils/portFlows.portActivity (routed flows of the run's ledger + the dataset's demand).
  * Without the backend the demand side is unknown: those rows say so instead of showing zeros.
@@ -17,6 +21,10 @@ import React from 'react';
 import { getPortName } from '../../utils/portLookup.js';
 import { portGeoRegion } from '../../utils/geoRegion.js';
 import { fmtNum, fmtUsd } from '../../utils/formatters.js';
+import PortSatellite from './PortSatellite.jsx';
+import PortRadarShips from './PortRadarShips.jsx';
+import PortThumb from './PortThumb.jsx';
+import { usePortLocation } from '../../services/portLocate.js';
 
 const LANES_SHOWN = 6;
 
@@ -39,7 +47,31 @@ function ServedBar({ served, demand, label }) {
   );
 }
 
-export default function PortDetailPanel({ code, activity, tariffs = null, onInspectService, onOpenPort, onClose }) {
+function PortCard({ code, onClose }) {
+  const { portwatch: pw, loaded } = usePortLocation(code);
+  return (
+    <div className="pt-card pb-2 border-b border-white/10">
+      <PortThumb code={code} size={88} />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-bold text-white tracking-wider">{code}</div>
+        <div className="text-slate-300 truncate">{getPortName(code)}</div>
+        <div className="text-slate-400">{portGeoRegion(code) || 'region unknown'}</div>
+        <div className="text-slate-400 mt-1">
+          {!loaded ? 'Locating the port…' : pw
+            ? `PortWatch: ${pw.name}${pw.km_from_dataset != null ? ` · ${Number(pw.km_from_dataset).toFixed(1)} km from the dataset point` : ''}`
+            : 'No PortWatch match · image at the dataset point'}
+        </div>
+      </div>
+      {onClose && (
+        <button type="button" onClick={onClose} className="self-start text-[12px] px-2 py-1 rounded bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-white">
+          ✕ CLOSE
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function PortDetailPanel({ code, activity, tariffs = null, hub = null, onInspectService, onOpenPort, onClose }) {
   if (!code) return null;
   const p = activity?.ports.get(code) || null;
   const hasDemand = Boolean(activity?.hasDemand);
@@ -50,18 +82,7 @@ export default function PortDetailPanel({ code, activity, tariffs = null, onInsp
 
   return (
     <div className="p-3 font-mono text-[12px] leading-tight space-y-3">
-      <div className="flex justify-between items-start pb-2 border-b border-white/10 gap-2">
-        <div className="min-w-0">
-          <div className="text-xs font-bold text-white tracking-wider">{code}</div>
-          <div className="text-slate-300 truncate">{getPortName(code)}</div>
-          <div className="text-slate-400">{portGeoRegion(code) || 'region unknown'}</div>
-        </div>
-        {onClose && (
-          <button type="button" onClick={onClose} className="text-[12px] px-2 py-1 rounded bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-white">
-            ✕ CLOSE
-          </button>
-        )}
-      </div>
+      <PortCard code={code} onClose={onClose} />
 
       <div className="grid grid-cols-3 gap-1.5">
         <div className="bg-white/[0.02] p-2 border border-white/5">
@@ -78,6 +99,9 @@ export default function PortDetailPanel({ code, activity, tariffs = null, onInsp
         </div>
       </div>
 
+      <PortSatellite code={code} />
+      <PortRadarShips code={code} />
+
       <div className="bg-white/[0.02] p-2 border border-white/5 space-y-2">
         <div className="text-slate-400 uppercase tracking-wider font-semibold pb-1 border-b border-white/5">Cargo · TEU / week</div>
         <ServedBar label="Out (export)" served={p?.exportTeu || 0} demand={hasDemand ? p?.demandOut || 0 : null} />
@@ -88,6 +112,29 @@ export default function PortDetailPanel({ code, activity, tariffs = null, onInsp
         </div>
         {!hasDemand && <div className="text-slate-400">Demand per lane needs the backend (/api/datasets/…/demand); served cargo is from the run file.</div>}
       </div>
+
+      {hub && (
+        <div className="bg-white/[0.02] p-2 border border-white/5 space-y-1" aria-label="Transshipment at this port">
+          <div className="flex justify-between text-slate-400 uppercase tracking-wider font-semibold pb-1 border-b border-white/5">
+            <span>Transshipment hub</span><span>{hub.shareOfMoves.toFixed(1)}% of transfers</span>
+          </div>
+          <div className="flex justify-between"><span className="text-slate-400">Cost / week</span><span className="text-slate-100 font-semibold">{hub.cost != null ? `${fmtUsd(hub.cost)} (${fmtUsd(hub.costPerTeu)}/TEU)` : '—'}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">OD flows changing ship</span><span className="text-slate-200">{hub.flows}</span></div>
+          <div className="text-slate-400 pt-1">Connections (arriving on → leaving on)</div>
+          <ul className="pd-ts-list">
+            {hub.pairs.slice(0, 5).map((pr) => (
+              <li key={`${pr.from}-${pr.to}`}><span className="text-slate-300">{pr.from} → {pr.to}</span><span className="text-slate-200">{fmtNum(Math.round(pr.teu))}</span></li>
+            ))}
+            {hub.pairs.length > 5 && <li className="text-slate-400">+{hub.pairs.length - 5} more · Network → Transshipment</li>}
+          </ul>
+          <div className="text-slate-400 pt-1">Largest lanes transferring here</div>
+          <ul className="pd-ts-list">
+            {hub.lanes.slice(0, 4).map((l) => (
+              <li key={`${l.o}-${l.d}-${l.services.join()}`}><span className="text-slate-300">{l.o} → {l.d}</span><span className="text-slate-200">{fmtNum(Math.round(l.teu))}</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="bg-white/[0.02] p-2 border border-white/5">
         <div className="flex justify-between text-slate-400 uppercase tracking-wider font-semibold pb-1 mb-1 border-b border-white/5">

@@ -32,6 +32,7 @@ import SystemRail from '../components/console/SystemRail.jsx';
 import CommandPalette from '../components/console/CommandPalette.jsx';
 import ViewSkeleton, { Reveal } from '../components/console/ViewSkeleton.jsx';
 import PresentationHud from '../components/console/PresentationHud.jsx';
+import PresentationCallouts from '../components/console/PresentationCallouts.jsx';
 import Toaster from '../components/common/Toaster.jsx';
 import { toast } from '../services/toastStore.js';
 import '../services/prefsStore.js'; // applies the saved theme / density / motion before first paint
@@ -56,12 +57,18 @@ const ScenarioAnalysis = lazy(tabLoaders.scenario_analysis);
 const Benchmarks = lazy(tabLoaders.benchmarks);
 const RunDiff = lazy(tabLoaders.run_diff);
 const WhatIf = lazy(tabLoaders.whatif);
+const TransitFinder = lazy(tabLoaders.transit_finder);
+const Schedules = lazy(tabLoaders.schedules);
+const Transshipment = lazy(tabLoaders.transshipment);
+const SeaConditions = lazy(tabLoaders.sea_conditions);
+const Reliability = lazy(tabLoaders.reliability);
+const Emissions = lazy(tabLoaders.emissions);
 const Telemetry = lazy(tabLoaders.telemetry);
 const DataSources = lazy(tabLoaders.data_sources);
 const SystemHealth = lazy(tabLoaders.system_health);
 
 // Presentation mode: the main views in story order, each shown for PRESENT_DWELL_MS.
-const PRESENT_TABS = ['command_center', 'network_intel', 'demand_intel', 'port_intel', 'fleet_intel', 'decision_center', 'benchmarks', 'scenario_analysis'];
+const PRESENT_TABS = ['command_center', 'network_intel', 'transshipment', 'demand_intel', 'port_intel', 'fleet_intel', 'decision_center', 'benchmarks', 'scenario_analysis'];
 const PRESENT_DWELL_MS = 12000;
 
 const isTyping = (el) => /^(INPUT|TEXTAREA|SELECT)$/.test(el?.tagName || '') || el?.isContentEditable;
@@ -77,7 +84,7 @@ function ScrollRestore({ tab, positions }) {
 
 const TAB_IDS = new Set(navItems.map((n) => n.id));
 // Tabs that read the selected run's file; they show a skeleton until it has loaded once.
-const RUN_TABS = new Set(['command_center', 'network_intel', 'fleet_intel', 'demand_intel', 'port_intel', 'pipeline_ops',
+const RUN_TABS = new Set(['command_center', 'network_intel', 'transshipment', 'fleet_intel', 'demand_intel', 'port_intel', 'pipeline_ops',
   'regional_agents', 'ga_milp', 'feedback_loop', 'decision_center', 'scenario_analysis', 'system_health']);
 const DEFAULT_TAB = 'command_center';
 
@@ -137,6 +144,12 @@ export default function App() {
 
   // Presentation mode: { index, paused } while presenting, null otherwise.
   const [presenting, setPresenting] = useState(null);
+  // Guided-tour callouts on each slide (design D11); C toggles them, the choice is remembered.
+  const [callouts, setCallouts] = useState(() => { try { return localStorage.getItem('liner.present.callouts') !== 'off'; } catch (_) { return true; } });
+  const toggleCallouts = useCallback(() => setCallouts((v) => {
+    try { localStorage.setItem('liner.present.callouts', v ? 'off' : 'on'); } catch (_) { /* not remembered */ }
+    return !v;
+  }), []);
   const enteredFullscreen = useRef(false);
   const stopPresenting = useCallback(() => {
     setPresenting(null);
@@ -177,6 +190,7 @@ export default function App() {
         if (e.key === ' ') { e.preventDefault(); setPresenting((p) => p && { ...p, paused: !p.paused }); return; }
         if (e.key === 'ArrowRight') { e.preventDefault(); stepPresentation(1); return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); stepPresentation(-1); return; }
+        if (e.key === 'c' || e.key === 'C') { e.preventDefault(); toggleCallouts(); return; }
       }
       if (/^[1-8]$/.test(e.key)) {
         const g = navGroups[Number(e.key) - 1];
@@ -194,7 +208,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [presenting, setActiveNav, stepPresentation, stopPresenting]);
+  }, [presenting, setActiveNav, stepPresentation, stopPresenting, toggleCallouts]);
 
   // Close the drawer with Escape.
   useEffect(() => {
@@ -293,7 +307,13 @@ export default function App() {
       case 'scenario_analysis':  return <ScenarioAnalysis {...common} />;
       case 'benchmarks':         return <Benchmarks />;
       case 'run_diff':           return <RunDiff />;
-      case 'whatif':             return <WhatIf />;
+      case 'whatif':             return <WhatIf {...common} />;
+      case 'transit_finder':     return <TransitFinder {...common} />;
+      case 'schedules':          return <Schedules {...common} />;
+      case 'transshipment':      return <Transshipment {...common} />;
+      case 'sea_conditions':     return <SeaConditions {...common} />;
+      case 'reliability':        return <Reliability {...common} />;
+      case 'emissions':          return <Emissions {...common} />;
       case 'telemetry':          return <Telemetry maritimeOverview={maritimeOverview} />;
       case 'data_sources':       return <DataSources maritimeOverview={maritimeOverview} />;
       case 'system_health':      return <SystemHealth maritimeOverview={maritimeOverview} runtime={runtime} />;
@@ -355,7 +375,12 @@ export default function App() {
           onNext={() => stepPresentation(1)}
           onTogglePause={() => setPresenting((p) => p && { ...p, paused: !p.paused })}
           onStop={stopPresenting}
+          callouts={callouts}
+          onToggleCallouts={toggleCallouts}
         />
+      )}
+      {presenting && callouts && (
+        <PresentationCallouts tab={PRESENT_TABS[presenting.index]} slideKey={presenting.index} runtime={runtime} optimizationState={optimizationState} />
       )}
       <Toaster />
     </div>

@@ -4,7 +4,8 @@
  * Pick plan A and plan B (any run in the catalog — latest local run, runs_extra, benchmark seeds — and either
  * its final plan or one iteration). Services are matched by rotation + vessel class (utils/runDiff.js), so a
  * service that came back under a new id still counts as kept. Shows KPI and cost-line deltas, the routes on
- * one map (B only / A only / both), and the service list with what happened to each.
+ * one map (B only / A only / both) or split screen (A | B, cameras linked: design D7), and the service list with
+ * what happened to each.
  *
  * Without the backend only the latest local run is available; its iterations can still be compared.
  */
@@ -14,9 +15,12 @@ import PageHead from '../../components/console/PageHead.jsx';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import WorldMap from '../../components/map/WorldMap.jsx';
 import { Provenance } from '../../components/console/p12.jsx';
+import { SourceChip } from '../../components/common/Figure.jsx';
 import { apiClient } from '../../services/apiClient.js';
 import { getSelectedRun, runKey, runOutputUrl } from '../../services/runSelection.js';
-import { planOf, planKpis, diffPlans, diffOverlay } from '../../utils/runDiff.js';
+import { useScenarioIntent } from '../../services/scenarioIntent.js';
+import { toast } from '../../services/toastStore.js';
+import { planOf, planKpis, diffPlans, diffOverlay, diffSide } from '../../utils/runDiff.js';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
 import { downloadCsv } from '../../utils/exportData.js';
 
@@ -33,6 +37,8 @@ function loadOutput(run) {
 const datasetOfRaw = (raw, run) => String(
   (run?.kind === 'benchmark' && run.dataset) || raw?.dataset_run?.dataset || raw?.test_scorecard?.dataset_run?.dataset || 'WorldSmall',
 ).toLowerCase();
+
+const MAP_MODE_KEY = 'liner.runDiff.mapMode';
 
 const STATUS = {
   added:   { label: 'only in B', tone: 'var(--viz-1)' },
@@ -110,6 +116,13 @@ export default function RunDiff() {
   const [aIter, setAIter] = useState(null);
   const [bIter, setBIter] = useState(undefined);   // undefined: pick a default once B's run has loaded
   const [filter, setFilter] = useState('all');
+  const [mapMode, setMapModeState] = useState(() => { try { return localStorage.getItem(MAP_MODE_KEY) === 'split' ? 'split' : 'overlay'; } catch (_) { return 'overlay'; } });
+  const setMapMode = (m) => { setMapModeState(m); try { localStorage.setItem(MAP_MODE_KEY, m); } catch (_) { /* private window */ } };
+
+  // "compare with seed 7" from the command palette (design D10): A = the run on screen (final plan), B = that seed
+  // of the same dataset. The catalog may still be loading, so the request waits for it.
+  const [seedAsk, setSeedAsk] = useState(null);
+  useScenarioIntent('diff', (it) => setSeedAsk(it.seed));
 
   const optOf = (k) => opts.find((o) => o.key === k) || (k === runKey(initial) ? { key: k, run: initial, label: k } : opts[0]);
   const aOpt = optOf(aKey); const bOpt = optOf(bKey);
@@ -126,6 +139,16 @@ export default function RunDiff() {
   const dsA = aRaw ? datasetOfRaw(aRaw, aOpt.run) : null;
   const dsB = bRaw ? datasetOfRaw(bRaw, bOpt.run) : null;
   const sameDs = dsA && dsB && dsA === dsB;
+  useEffect(() => {
+    if (seedAsk == null || !loaded) return;
+    const onScreen = runKey(initial);
+    if (aKey !== onScreen || aIter != null) { setAKey(onScreen); setAIter(null); return; }   // A first, then its dataset
+    if (!aRaw) return;
+    const hit = opts.find((o) => o.run.kind === 'benchmark' && o.run.seed === seedAsk && o.run.dataset === dsA);
+    if (hit) { setBKey(hit.key); setBIter(null); toast(`Run diff: on screen (A) against ${hit.label} (B)`); }
+    else toast(`No seed ${seedAsk} with a saved plan for ${dsA} in the catalog`, { tone: 'warn' });
+    setSeedAsk(null);
+  }, [seedAsk, loaded, aKey, aIter, aRaw, dsA]); // eslint-disable-line react-hooks/exhaustive-deps
   const planA = useMemo(() => (aRaw ? planOf(aRaw, aIter) : null), [aRaw, aIter]);
   const planB = useMemo(() => (bRaw && bIter !== undefined ? planOf(bRaw, bIter) : null), [bRaw, bIter]);
   const ready = planA && planB && sameDs;
@@ -133,6 +156,8 @@ export default function RunDiff() {
   const kA = useMemo(() => planKpis(planA), [planA]);
   const kB = useMemo(() => planKpis(planB), [planB]);
   const overlay = useMemo(() => (diff ? diffOverlay(diff.rows) : null), [diff]);
+  const sideA = useMemo(() => (diff && mapMode === 'split' ? diffSide(diff.rows, 'A') : null), [diff, mapMode]);
+  const sideB = useMemo(() => (diff && mapMode === 'split' ? diffSide(diff.rows, 'B') : null), [diff, mapMode]);
   const rows = useMemo(() => (diff ? diff.rows.filter((r) => filter === 'all' || r.status === filter).sort((x, y) => Math.abs(y.dProfit) - Math.abs(x.dProfit)) : []), [diff, filter]);
   const samePlan = aKey === bKey && aIter === bIter;
 
@@ -167,10 +192,11 @@ export default function RunDiff() {
         <>
           <div className="wi-kpis">
             {[
-              ['Weekly profit', 'profit', fmtUsd, 'up'], ['Coverage', 'coverage_pct', (v) => fmtPct(v), 'up'],
-              ['TEU carried / wk', 'served_teu', fmtNum, 'up'], ['Services', 'services', fmtNum, null],
-              ['Departures / wk', 'departures', fmtNum, null], ['Vessels', 'vessels', fmtNum, null],
-            ].map(([k, f, fmt, good]) => {
+              ['Weekly profit', 'profit', fmtUsd, 'up', 'revenue − cost, $/week'], ['Coverage', 'coverage_pct', (v) => fmtPct(v), 'up', 'TEU served ÷ weekly demand'],
+              ['TEU carried / wk', 'served_teu', fmtNum, 'up', 'recorded flows of each run'], ['Services', 'services', fmtNum, null, 'services in the plan'],
+              ['Departures / wk', 'departures', fmtNum, null, 'Σ service frequency'], ['Vessels', 'vessels', fmtNum, null, 'Σ vessels deployed'],
+              ['Transshipped TEU / wk', 'transship_teu', (v) => fmtNum(Math.round(v)), null, 'TEU of flows riding 2+ services'], ['Transfer hubs', 'transship_hubs', fmtNum, null, 'ports where cargo changes ship'],
+            ].map(([k, f, fmt, good, def]) => {
               const d = kA[f] != null && kB[f] != null ? kB[f] - kA[f] : null;
               const dTxt = f === 'coverage_pct' && d != null ? `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} pp` : sgn(d, fmt);
               return (
@@ -178,21 +204,45 @@ export default function RunDiff() {
                   <div className="k">{k}</div>
                   <div className="v">{kB[f] != null ? fmt(kB[f]) : '—'}</div>
                   <div className={`d ${good ? toneOf(d, good) : ''}`}>{dTxt} <span>vs A {kA[f] != null ? fmt(kA[f]) : '—'}</span></div>
+                  <SourceChip src="Run files A · B" def={def} />
                 </div>
               );
             })}
           </div>
 
           <div className="grid grid-cols-12 gap-3 items-stretch">
-            <div className="col-span-12 xl:col-span-8 min-w-0">
-              <InstrumentPanel title="Routes that changed" right={<span className="text-[12px] text-slate-400">B only · A only (dashed) · both</span>} bodyPadding="flush">
-                <div style={{ height: 420 }}>
-                  <WorldMap optimizationState={null} selectedServices={overlay.services} diff={overlay.status}
-                    drawKey={`diff|${aKey}|${aIter}|${bKey}|${bIter}`} />
-                </div>
+            <div className={`col-span-12 ${mapMode === 'split' ? '' : 'xl:col-span-8'} min-w-0`}>
+              <InstrumentPanel title="Routes that changed" bodyPadding="flush"
+                right={(
+                  <span className="rd-maphead">
+                    <span className="text-[12px] text-slate-400">{mapMode === 'split' ? 'A | B · cameras linked' : 'B only · A only (dashed) · both'}</span>
+                    <span className="mk-toggle" role="group" aria-label="Map layout">
+                      <button type="button" className="cmp-btn" aria-pressed={mapMode === 'overlay'} onClick={() => setMapMode('overlay')}>Overlay</button>
+                      <button type="button" className="cmp-btn" aria-pressed={mapMode === 'split'} onClick={() => setMapMode('split')}>Split A | B</button>
+                    </span>
+                  </span>
+                )}>
+                {mapMode === 'split' ? (
+                  <div className="rd-split">
+                    {[['A', sideA, nameOf(aOpt, aIter)], ['B', sideB, nameOf(bOpt, bIter)]].map(([side, d, name]) => (
+                      <figure key={side} className="rd-split-pane" aria-label={`Plan ${side}: ${name}`}>
+                        <figcaption><b>{side}</b> {name} <span>{d.services.length} services</span></figcaption>
+                        <div className="rd-split-map">
+                          <WorldMap optimizationState={null} selectedServices={d.services} diff={d.status} diffSide={side} fitPorts={d.fitPorts}
+                            syncGroup="rundiff" dataset={dsA || undefined} drawKey={`diff${side}|${aKey}|${aIter}|${bKey}|${bIter}`} />
+                        </div>
+                      </figure>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ height: 420 }}>
+                    <WorldMap optimizationState={null} selectedServices={overlay.services} diff={overlay.status} dataset={dsA || undefined}
+                      drawKey={`diff|${aKey}|${aIter}|${bKey}|${bIter}`} />
+                  </div>
+                )}
               </InstrumentPanel>
             </div>
-            <div className="col-span-12 xl:col-span-4 min-w-0">
+            <div className={`col-span-12 ${mapMode === 'split' ? 'xl:col-span-6' : 'xl:col-span-4'} min-w-0`}>
               <InstrumentPanel title="Weekly money, A → B">
                 <table className="viz-table wi-table">
                   <thead><tr><th>Line</th><th className="r">A</th><th className="r">B</th><th className="r">B − A</th></tr></thead>

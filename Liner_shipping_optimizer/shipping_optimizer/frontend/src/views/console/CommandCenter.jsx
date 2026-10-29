@@ -12,18 +12,22 @@
  * - Headline figures roll to their new value on a run or iteration switch and flash once.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { whenSnapshot } from '../../services/mapSnapshot.js';
+import { downloadPlanReport } from '../../services/planReportPdf.js';
+import { toast } from '../../services/toastStore.js';
 import InstrumentPanel from '../../components/console/InstrumentPanel.jsx';
 import MapCanvas from '../../components/console/MapCanvas.jsx';
 import LlmDiagnosticsPanel from '../../components/console/LlmDiagnosticsPanel.jsx';
 import VsMean from '../../components/common/VsMean.jsx';
-import { Sparkline, Provenance, RollingValue } from '../../components/common/Figure.jsx';
+import { Sparkline, SourceChip, RollingValue } from '../../components/common/Figure.jsx';
 import ComparePanel from '../../components/console/ComparePanel.jsx';
 import { useBenchBaseline } from '../../services/benchBaseline.js';
 import { CostWaterfall, ProfitCoverage, ServicePnl, AgentCoverage } from '../../components/charts/PlanCharts.jsx';
 import StageTimeBar, { stageTimingOf } from '../../components/charts/StageTimeBar.jsx';
 import { usePresence } from '../../utils/motion.js';
 import { fmtNum, fmtPct, fmtUsd } from '../../utils/formatters.js';
+import { useTransshipment } from '../../services/transshipmentData.js';
 import {
   buildProfitSeries,
   buildCoverageSeries,
@@ -64,6 +68,25 @@ export default function CommandCenter({
     const open = () => setComparing(true);
     window.addEventListener('vr:compare', open);
     return () => window.removeEventListener('vr:compare', open);
+  }, []);
+  // One-click PDF plan report (design D12): the button below, or the command palette (event, after this tab opens).
+  const [reporting, setReporting] = useState(false);
+  const reportRef = useRef(null);
+  reportRef.current = async () => {
+    if (reporting) return;
+    setReporting(true);
+    try {
+      await whenSnapshot('plan', 8000);
+      await new Promise((r) => setTimeout(r, 600));   // let the lanes finish drawing on a freshly opened map
+      await downloadPlanReport({ runtime: optState, bench: benchRef.current, label: runLabel, iteration: canonicalSel, sourceFile: optState?.source?.url || 'pipeline_output.json' });
+    } catch (e) {
+      toast(`The PDF report could not be made: ${e?.message || e}`, { tone: 'warn', ms: 6000 });
+    } finally { setReporting(false); }
+  };
+  useEffect(() => {
+    const go = () => reportRef.current?.();
+    window.addEventListener('vr:plan-report', go);
+    return () => window.removeEventListener('vr:plan-report', go);
   }, []);
 
   const canonicalSel = selectedIterationOf(optState);
@@ -160,6 +183,8 @@ export default function CommandCenter({
   }, [viewRegions]);
 
   // Weekly cost lines of the selected run (summary_metrics); operating = vessel operating cost.
+  // Where cargo changes ship (the plan's own ledger flows): a line under the waterfall, details in Network → Transshipment.
+  const transship = useTransshipment(optState);
   const costLines = [
     ['operating', sm.operatingCost],
     ['fuel', sm.fuelCost],
@@ -183,6 +208,8 @@ export default function CommandCenter({
   const verdict = sm.decision_output?.evaluation?.status;
   // Frozen 30-seed benchmark of the same dataset: the yardstick for the headline figures.
   const bench = useBenchBaseline(datasetKeyOf(optState));
+  const benchRef = useRef(bench);
+  benchRef.current = bench;
   const marginPct = viewIter?.marginPct ?? (useSummary ? num(sm.margin) : null);
   // Where each headline figure is read from, for the provenance popovers and the per-iteration sparklines.
   const viewIdx = iterationsResolved.findIndex((i) => i.iter === viewIterNum);
@@ -262,6 +289,8 @@ export default function CommandCenter({
             title="Current Decision"
             right={
               <div style={{ display: 'inline-flex', gap: 6 }}>
+                <button type="button" className="cmp-btn" onClick={() => reportRef.current?.()} disabled={reporting}
+                  title="One page: KPIs, map, revenue-to-profit waterfall and service table (final plan)">{reporting ? 'Making PDF…' : 'PDF report'}</button>
                 <button type="button" className="cmp-btn" aria-pressed={comparing} onClick={() => setComparing((v) => !v)}
                   title="Two iterations side by side, each against the 30-seed mean" disabled={iterationsResolved.length < 2}>Compare</button>
                 <span className="cx-badge cx-badge--purple">ITER {viewIterNum != null ? pad2(viewIterNum) : EM}</span>
@@ -277,40 +306,44 @@ export default function CommandCenter({
                 </span>
               </div>
               <div className="cd-tile">
-                <span className="lbl">WEEKLY P&amp;L <Provenance rows={provOf('weekly_profit', 'summary_metrics.weekly_profit')} /></span>
+                <span className="lbl">WEEKLY P&amp;L</span>
                 <span className="v-row">
                   <span className={`v ${weeklyProfit != null && weeklyProfit < 0 ? 'text-red-400' : 'text-cyan-400'}`}><RollingValue value={weeklyProfit} format={fmtUsd} memKey="cc.profit" /></span>
                   <Sparkline values={series('profit')} active={viewIdx} label="Weekly profit by iteration" />
                 </span>
                 <span className="sub">{useSummary && sm.revenue != null ? `REVENUE ${fmtUsd(sm.revenue)}` : `ITER ${viewIterNum != null ? pad2(viewIterNum) : EM}`}</span>
                 <VsMean value={weeklyProfit} stat={bench?.profit} unit="usd" n={bench?.n} excluded={bench?.excluded} />
+                <SourceChip src="Ledger" def="revenue − cost" rows={provOf('weekly_profit', 'summary_metrics.weekly_profit')} />
               </div>
               <div className="cd-tile">
-                <span className="lbl" title="Served TEU / total weekly demand (demand-weighted)">COVERAGE <Provenance rows={provOf('global_demand_weighted_coverage', 'summary_metrics.coverage')} /></span>
+                <span className="lbl" title="Served TEU / total weekly demand (demand-weighted)">COVERAGE</span>
                 <span className="v-row">
                   <span className="v text-emerald-400"><RollingValue value={coverage} format={fmtPct} memKey="cc.coverage" /></span>
                   <Sparkline values={series('coverage')} active={viewIdx} label="Coverage by iteration" />
                 </span>
                 <span className="sub">{teuServed != null ? `${fmtNum(Math.round(teuServed))} TEU SERVED` : EM}</span>
                 <VsMean value={coverage} stat={bench?.coverage} unit="pct" n={bench?.n} excluded={bench?.excluded} />
+                <SourceChip src="Ledger" def="served ÷ demand" rows={provOf('global_demand_weighted_coverage', 'summary_metrics.coverage')} />
               </div>
               <div className="cd-tile">
-                <span className="lbl">SERVICES <Provenance rows={[...provOf('services_deployed', 'selected_services.length')].map(([k, v]) => (k === 'Field' ? [k, viewServices.length ? `iteration_results[iter ${viewIterNum}].selected_services (count)` : v] : [k, v]))} /></span>
+                <span className="lbl">SERVICES</span>
                 <span className="v-row">
                   <span className="v text-slate-100"><RollingValue value={servicesCount} format={fmtCount} memKey="cc.services" units={false} /></span>
                   <Sparkline values={series('servicesDeployed')} active={viewIdx} label="Services by iteration" />
                 </span>
                 <span className="sub">IN ITER {viewIterNum != null ? pad2(viewIterNum) : EM}</span>
                 <VsMean value={servicesCount} stat={bench?.services} unit="count" n={bench?.n} excluded={bench?.excluded} />
+                <SourceChip src="Optimizer" def="in the plan" rows={[...provOf('services_deployed', 'selected_services.length')].map(([k, v]) => (k === 'Field' ? [k, viewServices.length ? `iteration_results[iter ${viewIterNum}].selected_services (count)` : v] : [k, v]))} />
               </div>
               <div className="cd-tile">
-                <span className="lbl" title="Weekly profit / weekly revenue">MARGIN <Provenance rows={provOf('profit_margin_pct', 'summary_metrics.weekly_profit / revenue')} /></span>
+                <span className="lbl" title="Weekly profit / weekly revenue">MARGIN</span>
                 <span className="v-row">
                   <span className="v text-slate-100"><RollingValue value={marginPct} format={fmtPct} memKey="cc.margin" /></span>
                   <Sparkline values={series('marginPct')} active={viewIdx} label="Margin by iteration" />
                 </span>
                 <span className="sub">ON REVENUE</span>
                 <VsMean value={marginPct} stat={bench?.marginPct} unit="pct" n={bench?.n} excluded={bench?.excluded} />
+                <SourceChip src="Ledger" def="profit ÷ revenue" rows={provOf('profit_margin_pct', 'summary_metrics.weekly_profit / revenue')} />
               </div>
             </div>
 
@@ -392,6 +425,12 @@ export default function CommandCenter({
       <div className="cc-viz-grid">
         <InstrumentPanel title="Revenue to Profit" right={<span className="text-[12px] font-mono text-slate-400 uppercase">{inspecting ? `SELECTED ITER ${canonicalSel != null ? pad2(canonicalSel) : EM}` : 'WEEKLY'}</span>}>
           <CostWaterfall exportBase={runLabel} revenue={num(sm.revenue)} lines={costLines.map(([k, v]) => [k, Number(v)])} profit={num(sm.weeklyProfit)} />
+          {!inspecting && transship.model && transship.model.totals.transferTeu > 0 && (
+            <div className="cc-ts-note">
+              <span>Transshipment {sm.transshipCost != null ? `${fmtUsd(sm.transshipCost)}/wk` : ''}: {fmtNum(Math.round(transship.model.totals.transferTeu))} TEU ({transship.model.totals.share.toFixed(1)}% of cargo) change ship at {transship.model.totals.hubs} hubs; busiest {transship.model.hubs.slice(0, 3).map((h) => h.code).join(', ')}.</span>
+              <a href="#/network/transshipment" className="cc-ts-link">Hubs and connections →</a>
+            </div>
+          )}
         </InstrumentPanel>
         <InstrumentPanel title="Profit vs Coverage" right={<span className="text-[12px] font-mono text-slate-400 uppercase">{bench ? `${bench.n} SEEDS · PARETO` : 'ITERATIONS'}</span>}>
           <ProfitCoverage

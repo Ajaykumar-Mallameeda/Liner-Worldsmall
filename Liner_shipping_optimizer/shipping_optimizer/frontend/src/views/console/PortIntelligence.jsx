@@ -23,6 +23,9 @@ import { portGeoRegion } from '../../utils/geoRegion.js';
 import { getRegionColor } from '../../components/map/WorldMap.jsx';
 import { fmtNum } from '../../utils/formatters.js';
 import { datasetKeyOf } from '../../runtime/consoleSelectors.js';
+import PortOutsideData from '../../components/console/PortOutsideData.jsx';
+import { useTransshipment } from '../../services/transshipmentData.js';
+import { hubAt } from '../../utils/transshipment.js';
 
 const EM = '—';
 const n0 = (v) => (v == null || Number.isNaN(Number(v)) ? EM : fmtNum(Math.round(Number(v))));
@@ -73,6 +76,8 @@ export default function PortIntelligence({
 
   const [rawDatasets, setRawDatasets] = useState(null);
   const [selectedHub, setSelectedHub] = useState(null);
+  // Cargo that actually changes ship at each port (the plan's routed flows): does a designated hub work as one?
+  const transship = useTransshipment(opt);
 
   // The raw files of the run's dataset (static files: loaded once per dataset, no polling).
   useEffect(() => {
@@ -177,7 +182,7 @@ export default function PortIntelligence({
       {/* Hub ports + busiest ports */}
       <div className="grid grid-cols-12 gap-3 items-stretch">
         <div className="col-span-12 xl:col-span-6 flex flex-col">
-          <InstrumentPanel title="Hub Ports" right={`${hubPortsList.length} HUBS · REGION BY PORT LOCATION`} bodyPadding="flush">
+          <InstrumentPanel title="Hub Ports" right={`${hubPortsList.length} HUBS · REGION BY PORT LOCATION · TEU = CARGO CHANGING SHIP THERE`} bodyPadding="flush">
             {hubPortsList.length === 0 ? (
               <div className="cx-compact-empty">This run lists no hub ports for its regional agents.</div>
             ) : (
@@ -201,6 +206,10 @@ export default function PortIntelligence({
                         <span className="px-1.5 py-0.5 font-semibold uppercase tracking-wider" style={{ background: `${hb.color}20`, color: hb.color }}>{hb.geo || EM}</span>
                         <span className="px-1.5 py-0.5 bg-white/10 text-slate-300" title="Regional agent that uses this hub (optimizer label)">agent {hb.agent || EM}</span>
                         <span className="px-1.5 py-0.5 text-slate-300 w-[86px] text-right" title="Selected services calling this port">{hb.calls} services</span>
+                        {transship.model && (() => {
+                          const h = hubAt(transship.model, hb.code);
+                          return <span className={`px-1.5 py-0.5 w-[118px] text-right ${h ? 'text-slate-100' : 'text-slate-500'}`} title={h ? `${fmtNum(Math.round(h.teu))} TEU a week change ship here${h.cost != null ? `, transshipment ${fmtNum(Math.round(h.cost))} USD a week` : ''} (Network → Transshipment)` : 'No routed cargo changes ship here in this plan'}>{h ? `${fmtNum(Math.round(h.teu))} TEU transfer` : 'no transfers'}</span>;
+                        })()}
                       </span>
                     </button>
                   );
@@ -313,6 +322,8 @@ export default function PortIntelligence({
           </InstrumentPanel>
         </div>
       </div>
+
+      <PortOutsideData />
 
       <Provenance
         source={`${opt?.source?.url || 'pipeline_output.json'} + data/raw/${spec ? spec.dir : datasetKey}/ (ports.csv, dist_dense.csv, ${spec?.demand || 'demand'}, ${spec?.fleet || 'fleet'})`}

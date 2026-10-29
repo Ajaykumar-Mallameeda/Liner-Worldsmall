@@ -140,6 +140,7 @@ export default function MapCanvas({
           selectedServices={effectiveServices}
           regionFilter={region}
           layerVisibility={layers}
+          snapshotId="plan"
           drawKey={`${optimizationState?.source?.url || ''}|${optimizationState?.source?.modifiedIso || sm.run_id || ''}|command`}
         />
 

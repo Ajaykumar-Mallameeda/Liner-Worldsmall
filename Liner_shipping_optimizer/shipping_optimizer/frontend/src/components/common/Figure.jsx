@@ -3,6 +3,7 @@
  *   UnitValue   "$45.0M" → number in full ink, currency and unit set smaller and dimmer
  *   Sparkline   one value per iteration; the iteration on screen is marked
  *   Provenance  "where does this number come from": file, field, run — a click-open popover
+ *   SourceChip  always-visible source + definition under a figure (design D6), optional Provenance details
  *   RollingValue  a figure that rolls to its new value (300 ms) on a run or iteration switch and flashes once
  */
 
@@ -94,6 +95,22 @@ export function Provenance({ rows = [], label = 'Where this number comes from' }
           ))}
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * src: who produced the number (short: "Engine ledger", "Model", "Sea-Intelligence"); def: what it measures, in a few
+ * words ("revenue − cost, $ / week"); rows: optional [[label, value]] for the details popover. Shown on every tile so
+ * figures from different sources or definitions are never read as the same thing.
+ */
+export function SourceChip({ src, def, rows }) {
+  if (!src && !def) return null;
+  return (
+    <span className="src-chip">
+      {src && <span className="src-chip-src">{src}</span>}
+      {def && <span className="src-chip-def">{def}</span>}
+      {rows?.length ? <Provenance rows={rows} label={`Details: ${src || def}`} /> : null}
     </span>
   );
 }
