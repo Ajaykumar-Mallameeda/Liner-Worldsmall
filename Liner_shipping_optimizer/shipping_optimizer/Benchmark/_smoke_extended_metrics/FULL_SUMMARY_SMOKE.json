@@ -1,0 +1,940 @@
+{
+  "generated_utc": "2026-10-21T05:43:38+00:00",
+  "root": "C:\\Users\\WINDOWS\\Liner-Worldsmall\\Liner_shipping_optimizer\\shipping_optimizer\\Benchmark\\_smoke_extended_metrics",
+  "schema_new_fields": [
+    {
+      "path": "contribution_margin.contribution_margin_usd",
+      "unit": "USD/week",
+      "definition": "revenue - cargo-variable costs (handling + transshipment + per-TEU port variable); profit = contribution margin - fixed service cost (vessel + fuel + port calls)"
+    },
+    {
+      "path": "contribution_margin.contribution_margin_per_teu_usd",
+      "unit": "USD/TEU",
+      "definition": "contribution margin / served TEU"
+    },
+    {
+      "path": "contribution_margin.contribution_margin_pct_of_revenue",
+      "unit": "%",
+      "definition": "100 x contribution margin / revenue"
+    },
+    {
+      "path": "vessel_utilisation_teu.average",
+      "unit": "0-1",
+      "definition": "network carried TEU-legs / offered TEU-legs (capacity-weighted); also *_service_unweighted and *_vessel_weighted"
+    },
+    {
+      "path": "vessel_utilisation_teu.min / .max",
+      "unit": "0-1",
+      "definition": "lowest / highest service load factor (each vessel inherits its service's value); leg_min / leg_max over single legs"
+    },
+    {
+      "path": "transit_time_days.mean",
+      "unit": "days",
+      "definition": "TEU-weighted mean transit time of the routed flows (sailing + port stays + transfer dwell); mean_per_flow is unweighted"
+    },
+    {
+      "path": "transit_time_days.min / .max",
+      "unit": "days",
+      "definition": "shortest / longest transit time over the routed flows; p50, p90, mean_direct, mean_transshipped also stored"
+    },
+    {
+      "path": "transshipment.teu",
+      "unit": "TEU/week",
+      "definition": "TEU of flows that change service at least once"
+    },
+    {
+      "path": "transshipment.share_of_served_teu_pct",
+      "unit": "%",
+      "definition": "100 x transshipped TEU / served TEU"
+    },
+    {
+      "path": "transshipment.transfer_moves_teu",
+      "unit": "TEU-moves/week",
+      "definition": "TEU x number of transfers (a two-transfer container counts twice)"
+    },
+    {
+      "path": "compute_time_sec.pipeline_total",
+      "unit": "s",
+      "definition": "the pipeline call end to end (includes LLM calls and every stage)"
+    },
+    {
+      "path": "compute_time_sec.driver_wall",
+      "unit": "s",
+      "definition": "the driver's wall time around the whole test process (adds start-up and report writing)"
+    },
+    {
+      "path": "compute_time_sec.optimiser_plan_total",
+      "unit": "s",
+      "definition": "network plan stage only (paths, MILP, local search, flow re-optimisation, ledger)"
+    },
+    {
+      "path": "compute_time_sec.llm_call_latency_sum",
+      "unit": "s",
+      "definition": "summed latency of the LLM calls; components may overlap, so it can exceed the wall time"
+    },
+    {
+      "path": "llm_runtime.http_429 / fallback_uses",
+      "unit": "count",
+      "definition": "rate-limited LLM calls and rule-based fallbacks; the run continues on the fallback"
+    }
+  ],
+  "datasets": {
+    "baltic": {
+      "dataset": "baltic",
+      "runs": {
+        "seeds_found": [
+          0
+        ],
+        "n_runs": 1,
+        "n_with_pipeline_output": 1,
+        "n_exit_code_0": 1,
+        "n_ledger_verified": 1,
+        "failed_or_killed_runs": [],
+        "n_distinct_profit_values": 1,
+        "ledger_discrepancies_total": 0
+      },
+      "headline": {
+        "weekly_profit_usd": {
+          "n": 1,
+          "min": 597747.2380952381,
+          "max": 597747.2380952381,
+          "mean": 597747.2380952381,
+          "median": 597747.2380952381,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "weekly_revenue_usd": {
+          "n": 1,
+          "min": 2596440.0,
+          "max": 2596440.0,
+          "mean": 2596440.0,
+          "median": 2596440.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "weekly_total_cost_usd": {
+          "n": 1,
+          "min": 1998692.761904762,
+          "max": 1998692.761904762,
+          "mean": 1998692.761904762,
+          "median": 1998692.761904762,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "profit_margin_on_revenue": {
+          "n": 1,
+          "min": 0.23021800545948995,
+          "max": 0.23021800545948995,
+          "mean": 0.23021800545948995,
+          "median": 0.23021800545948995,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "coverage_pct": {
+          "n": 1,
+          "min": 58.82952691680261,
+          "max": 58.82952691680261,
+          "mean": 58.82952691680261,
+          "median": 58.82952691680261,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "served_teu": {
+          "n": 1,
+          "min": 5770.0,
+          "max": 5770.0,
+          "mean": 5770.0,
+          "median": 5770.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "unserved_teu": {
+          "n": 1,
+          "min": 4038.0,
+          "max": 4038.0,
+          "mean": 4038.0,
+          "median": 4038.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "services_operated": {
+          "n": 1,
+          "min": 3.0,
+          "max": 3.0,
+          "mean": 3.0,
+          "median": 3.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "departures_per_week": {
+          "n": 1,
+          "min": 3.0,
+          "max": 3.0,
+          "mean": 3.0,
+          "median": 3.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "vessels_assigned": {
+          "n": 1,
+          "min": 4.0,
+          "max": 4.0,
+          "mean": 4.0,
+          "median": 4.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "vessels_idle": {
+          "n": 1,
+          "min": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "median": 2.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "deployment_ratio (vessel utilisation)": {
+          "n": 1,
+          "min": 0.6666666666666666,
+          "max": 0.6666666666666666,
+          "mean": 0.6666666666666666,
+          "median": 0.6666666666666666,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "productive_load_factor (capacity utilisation)": {
+          "n": 1,
+          "min": 0.6708620689655173,
+          "max": 0.6708620689655173,
+          "mean": 0.6708620689655173,
+          "median": 0.6708620689655173,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "profit_per_assigned_vessel_usd": {
+          "n": 1,
+          "min": 149436.80952380953,
+          "max": 149436.80952380953,
+          "mean": 149436.80952380953,
+          "median": 149436.80952380953,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "pipeline_runtime_sec": {
+          "n": 1,
+          "min": 167.7,
+          "max": 167.7,
+          "mean": 167.7,
+          "median": 167.7,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "driver_wall_sec": {
+          "n": 1,
+          "min": 187.4,
+          "max": 187.4,
+          "mean": 187.4,
+          "median": 187.4,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "global_solver_integer_phase_sec": {
+          "n": 1,
+          "min": 0.136,
+          "max": 0.136,
+          "mean": 0.136,
+          "median": 0.136,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "gap_to_lp_bound_pct": {
+          "n": 1,
+          "min": 14.76931680848073,
+          "max": 14.76931680848073,
+          "mean": 14.76931680848073,
+          "median": 14.76931680848073,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "contribution_margin_usd": {
+          "n": 1,
+          "min": 1239905.0,
+          "max": 1239905.0,
+          "mean": 1239905.0,
+          "median": 1239905.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "contribution_margin_per_teu_usd": {
+          "n": 1,
+          "min": 214.8882149046794,
+          "max": 214.8882149046794,
+          "mean": 214.8882149046794,
+          "median": 214.8882149046794,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "contribution_margin_pct_of_revenue": {
+          "n": 1,
+          "min": 47.75404014727858,
+          "max": 47.75404014727858,
+          "mean": 47.75404014727858,
+          "median": 47.75404014727858,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_vessel_utilisation_average": {
+          "n": 1,
+          "min": 0.6708620689655173,
+          "max": 0.6708620689655173,
+          "mean": 0.6708620689655173,
+          "median": 0.6708620689655173,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_vessel_utilisation_min": {
+          "n": 1,
+          "min": 0.5208333333333334,
+          "max": 0.5208333333333334,
+          "mean": 0.5208333333333334,
+          "median": 0.5208333333333334,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_vessel_utilisation_max": {
+          "n": 1,
+          "min": 0.785625,
+          "max": 0.785625,
+          "mean": 0.785625,
+          "median": 0.785625,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transit_time_days_average (TEU-weighted)": {
+          "n": 1,
+          "min": 2.3305211686060905,
+          "max": 2.3305211686060905,
+          "mean": 2.3305211686060905,
+          "median": 2.3305211686060905,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transit_time_days_min": {
+          "n": 1,
+          "min": 1.0773809523809523,
+          "max": 1.0773809523809523,
+          "mean": 1.0773809523809523,
+          "median": 1.0773809523809523,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transit_time_days_max": {
+          "n": 1,
+          "min": 9.819444444444445,
+          "max": 9.819444444444445,
+          "mean": 9.819444444444445,
+          "median": 9.819444444444445,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_through_transshipment": {
+          "n": 1,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": null
+        },
+        "teu_through_transshipment_share_pct": {
+          "n": 1,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": null
+        },
+        "transshipment_transfer_moves_teu": {
+          "n": 1,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": null
+        },
+        "compute_time_pipeline_sec": {
+          "n": 1,
+          "min": 167.7,
+          "max": 167.7,
+          "mean": 167.7,
+          "median": 167.7,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_driver_wall_sec": {
+          "n": 1,
+          "min": 187.4,
+          "max": 187.4,
+          "mean": 187.4,
+          "median": 187.4,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_optimiser_plan_sec": {
+          "n": 1,
+          "min": 0.253,
+          "max": 0.253,
+          "mean": 0.253,
+          "median": 0.253,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_llm_latency_sum_sec": {
+          "n": 1,
+          "min": 117.7961,
+          "max": 117.7961,
+          "mean": 117.7961,
+          "median": 117.7961,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        }
+      },
+      "llm_resilience": {
+        "runs_with_http_429": 1,
+        "http_429_total": 5,
+        "fallback_uses_total": 5,
+        "runs_with_llm_failure_lines": 1
+      },
+      "llm_regimes": {
+        "llm_assisted": {
+          "runs": 1,
+          "seeds": [
+            0
+          ],
+          "mean_weekly_profit_usd": 597747.2380952381,
+          "median_pipeline_total_sec": 167.7,
+          "median_optimiser_plan_sec": 0.253
+        },
+        "full_fallback": {
+          "runs": 0,
+          "seeds": [],
+          "mean_weekly_profit_usd": null,
+          "median_pipeline_total_sec": null,
+          "median_optimiser_plan_sec": null
+        }
+      },
+      "reproducibility_vs_reference": {
+        "seeds_compared": 1,
+        "identical_profit_to_1_cent": 1,
+        "max_abs_profit_diff_usd": 0.0,
+        "mean_abs_profit_diff_usd": 0.0,
+        "reference_mean_profit_usd": 597747.2380952381,
+        "this_run_mean_profit_usd_same_seeds": 597747.2380952381
+      },
+      "metric_count_all_metrics": 121
+    },
+    "WAF": {
+      "status": "no summary"
+    },
+    "worldsmall": {
+      "dataset": "WorldSmall",
+      "runs": {
+        "seeds_found": [
+          0
+        ],
+        "n_runs": 1,
+        "n_with_pipeline_output": 1,
+        "n_exit_code_0": 1,
+        "n_ledger_verified": 1,
+        "failed_or_killed_runs": [],
+        "n_distinct_profit_values": 1,
+        "ledger_discrepancies_total": 0
+      },
+      "headline": {
+        "weekly_profit_usd": {
+          "n": 1,
+          "min": 47334393.61089891,
+          "max": 47334393.61089891,
+          "mean": 47334393.61089891,
+          "median": 47334393.61089891,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "weekly_revenue_usd": {
+          "n": 1,
+          "min": 147334220.0,
+          "max": 147334220.0,
+          "mean": 147334220.0,
+          "median": 147334220.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "weekly_total_cost_usd": {
+          "n": 1,
+          "min": 99999826.38910109,
+          "max": 99999826.38910109,
+          "mean": 99999826.38910109,
+          "median": 99999826.38910109,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "profit_margin_on_revenue": {
+          "n": 1,
+          "min": 0.3212722313315869,
+          "max": 0.3212722313315869,
+          "mean": 0.3212722313315869,
+          "median": 0.3212722313315869,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "coverage_pct": {
+          "n": 1,
+          "min": 48.68894080884215,
+          "max": 48.68894080884215,
+          "mean": 48.68894080884215,
+          "median": 48.68894080884215,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "served_teu": {
+          "n": 1,
+          "min": 134622.0,
+          "max": 134622.0,
+          "mean": 134622.0,
+          "median": 134622.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "unserved_teu": {
+          "n": 1,
+          "min": 141872.0,
+          "max": 141872.0,
+          "mean": 141872.0,
+          "median": 141872.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "services_operated": {
+          "n": 1,
+          "min": 30.0,
+          "max": 30.0,
+          "mean": 30.0,
+          "median": 30.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "departures_per_week": {
+          "n": 1,
+          "min": 33.0,
+          "max": 33.0,
+          "mean": 33.0,
+          "median": 33.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "vessels_assigned": {
+          "n": 1,
+          "min": 176.0,
+          "max": 176.0,
+          "mean": 176.0,
+          "median": 176.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "vessels_idle": {
+          "n": 1,
+          "min": 87.0,
+          "max": 87.0,
+          "mean": 87.0,
+          "median": 87.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "deployment_ratio (vessel utilisation)": {
+          "n": 1,
+          "min": 0.6692015209125475,
+          "max": 0.6692015209125475,
+          "mean": 0.6692015209125475,
+          "median": 0.6692015209125475,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "productive_load_factor (capacity utilisation)": {
+          "n": 1,
+          "min": 0.5328491620111732,
+          "max": 0.5328491620111732,
+          "mean": 0.5328491620111732,
+          "median": 0.5328491620111732,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "profit_per_assigned_vessel_usd": {
+          "n": 1,
+          "min": 268945.4182437438,
+          "max": 268945.4182437438,
+          "mean": 268945.4182437438,
+          "median": 268945.4182437438,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "pipeline_runtime_sec": {
+          "n": 1,
+          "min": 490.7,
+          "max": 490.7,
+          "mean": 490.7,
+          "median": 490.7,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "driver_wall_sec": {
+          "n": 1,
+          "min": 492.4,
+          "max": 492.4,
+          "mean": 492.4,
+          "median": 492.4,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "global_solver_integer_phase_sec": {
+          "n": 1,
+          "min": 101.123,
+          "max": 101.123,
+          "mean": 101.123,
+          "median": 101.123,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "gap_to_lp_bound_pct": {
+          "n": 1,
+          "min": 24.50558415931205,
+          "max": 24.50558415931205,
+          "mean": 24.50558415931205,
+          "median": 24.50558415931205,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "contribution_margin_usd": {
+          "n": 1,
+          "min": 117599724.0,
+          "max": 117599724.0,
+          "mean": 117599724.0,
+          "median": 117599724.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "contribution_margin_per_teu_usd": {
+          "n": 1,
+          "min": 873.5550207246959,
+          "max": 873.5550207246959,
+          "mean": 873.5550207246959,
+          "median": 873.5550207246959,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "contribution_margin_pct_of_revenue": {
+          "n": 1,
+          "min": 79.81833683987331,
+          "max": 79.81833683987331,
+          "mean": 79.81833683987331,
+          "median": 79.81833683987331,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_vessel_utilisation_average": {
+          "n": 1,
+          "min": 0.5328491620111732,
+          "max": 0.5328491620111732,
+          "mean": 0.5328491620111732,
+          "median": 0.5328491620111732,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_vessel_utilisation_min": {
+          "n": 1,
+          "min": 0.27152777777777776,
+          "max": 0.27152777777777776,
+          "mean": 0.27152777777777776,
+          "median": 0.27152777777777776,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_vessel_utilisation_max": {
+          "n": 1,
+          "min": 0.8622222222222222,
+          "max": 0.8622222222222222,
+          "mean": 0.8622222222222222,
+          "median": 0.8622222222222222,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transit_time_days_average (TEU-weighted)": {
+          "n": 1,
+          "min": 23.04555635989905,
+          "max": 23.04555635989905,
+          "mean": 23.04555635989905,
+          "median": 23.04555635989905,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transit_time_days_min": {
+          "n": 1,
+          "min": 0.012626262626262626,
+          "max": 0.012626262626262626,
+          "mean": 0.012626262626262626,
+          "median": 0.012626262626262626,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transit_time_days_max": {
+          "n": 1,
+          "min": 63.33035714285715,
+          "max": 63.33035714285715,
+          "mean": 63.33035714285715,
+          "median": 63.33035714285715,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_through_transshipment": {
+          "n": 1,
+          "min": 29072.0,
+          "max": 29072.0,
+          "mean": 29072.0,
+          "median": 29072.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "teu_through_transshipment_share_pct": {
+          "n": 1,
+          "min": 21.595281603304066,
+          "max": 21.595281603304066,
+          "mean": 21.595281603304066,
+          "median": 21.595281603304066,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "transshipment_transfer_moves_teu": {
+          "n": 1,
+          "min": 29072.0,
+          "max": 29072.0,
+          "mean": 29072.0,
+          "median": 29072.0,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_pipeline_sec": {
+          "n": 1,
+          "min": 490.7,
+          "max": 490.7,
+          "mean": 490.7,
+          "median": 490.7,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_driver_wall_sec": {
+          "n": 1,
+          "min": 492.4,
+          "max": 492.4,
+          "mean": 492.4,
+          "median": 492.4,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_optimiser_plan_sec": {
+          "n": 1,
+          "min": 114.729,
+          "max": 114.729,
+          "mean": 114.729,
+          "median": 114.729,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        },
+        "compute_time_llm_latency_sum_sec": {
+          "n": 1,
+          "min": 36.0016,
+          "max": 36.0016,
+          "mean": 36.0016,
+          "median": 36.0016,
+          "std_dev": 0.0,
+          "variance": 0.0,
+          "range": 0.0,
+          "cv_pct": 0.0
+        }
+      },
+      "llm_resilience": {
+        "runs_with_http_429": 1,
+        "http_429_total": 6,
+        "fallback_uses_total": 10,
+        "runs_with_llm_failure_lines": 1
+      },
+      "llm_regimes": {
+        "llm_assisted": {
+          "runs": 1,
+          "seeds": [
+            0
+          ],
+          "mean_weekly_profit_usd": 47334393.61089891,
+          "median_pipeline_total_sec": 490.7,
+          "median_optimiser_plan_sec": 114.729
+        },
+        "full_fallback": {
+          "runs": 0,
+          "seeds": [],
+          "mean_weekly_profit_usd": null,
+          "median_pipeline_total_sec": null,
+          "median_optimiser_plan_sec": null
+        }
+      },
+      "reproducibility_vs_reference": {
+        "seeds_compared": 1,
+        "identical_profit_to_1_cent": 0,
+        "max_abs_profit_diff_usd": 441958.08333332837,
+        "mean_abs_profit_diff_usd": 441958.08333332837,
+        "reference_mean_profit_usd": 47776351.69423224,
+        "this_run_mean_profit_usd_same_seeds": 47334393.61089891
+      },
+      "metric_count_all_metrics": 134
+    },
+    "world500": {
+      "status": "no summary"
+    },
+    "world1000": {
+      "status": "no summary"
+    }
+  }
+}

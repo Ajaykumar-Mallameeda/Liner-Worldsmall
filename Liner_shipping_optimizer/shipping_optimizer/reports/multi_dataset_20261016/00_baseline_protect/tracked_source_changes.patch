@@ -1,0 +1,383 @@
+diff --git a/Liner_shipping_optimizer/shipping_optimizer/src/network/network_milp.py b/Liner_shipping_optimizer/shipping_optimizer/src/network/network_milp.py
+index ff51989..f2516d8 100644
+--- a/Liner_shipping_optimizer/shipping_optimizer/src/network/network_milp.py
++++ b/Liner_shipping_optimizer/shipping_optimizer/src/network/network_milp.py
+@@ -480,7 +480,6 @@ def solve_network(
+     port_capacity: Optional[Dict[str, float]] = None,
+     min_served_fraction: Optional[float] = None,
+     path_rebuild=None,
+-    path_augment=None,
+ ) -> NetworkSolution:
+     """Solve the network design problem. Never raises for solver outcomes: the
+     status field says what happened and ``usable`` says whether values may be used."""
+@@ -539,49 +538,6 @@ def solve_network(
+             lp_guided = False        # fall back to the unrestricted integer solve
+         else:
+             sol.relaxation_bound = float(pulp.value(lp["prob"].objective) or 0.0)
+-            if path_augment is not None:
+-                # opt-in targeted path additions (one round, ``targeted_paths``): add a few excluded paths for a few
+-                # high-value ODs, re-solve the LP once; on any failure the original LP and path set are kept
+-                t_aug = time.perf_counter()
+-                aug_rep: Dict = {"applied": False}
+-                sol.formulation["targeted_paths"] = aug_rep
+-                try:
+-                    extra, rep_sel = path_augment(lp, paths_by_od)
+-                    aug_rep.update(rep_sel)
+-                    if extra and not rep_sel.get("resolve_lp", True):
+-                        # no second LP: the integer problem simply gets the added paths (their services are in the LP support)
+-                        from src.network.targeted_paths import merge_paths
+-                        merged = merge_paths(paths_by_od, extra)
+-                        aug_rep.update({"applied": True, "lp_bound_before": sol.relaxation_bound, "lp_bound_after": None,
+-                                        "q_columns_before": len(lp["q"]), "q_columns_after": None})
+-                        paths_by_od, paths_int = merged, merged
+-                        sol.paths_by_od = merged
+-                        sol.n_paths = sum(len(v) for v in merged.values())
+-                    elif extra:
+-                        from src.network.targeted_paths import merge_paths
+-                        merged = merge_paths(paths_by_od, extra)
+-                        lp2 = _build_and_solve(models, demands, merged, class_vessel_limit, referenced,
+-                                               integer=False, penalty=unserved_penalty_per_teu, fixed=None,
+-                                               initial=None, max_departures_cap=max_departures_cap,
+-                                               time_limit_sec=min(60.0, budget * 0.4), threads=threads,
+-                                               total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
+-                                               min_served_fraction=min_served_fraction, vub=vub)
+-                        if lp2["error"] or lp2["prob"].status != pulp.LpStatusOptimal:
+-                            aug_rep["reason"] = "LP with the added paths not solved: original LP and paths kept"
+-                        else:
+-                            aug_rep.update({"applied": True, "lp_bound_before": sol.relaxation_bound,
+-                                            "lp_bound_after": float(pulp.value(lp2["prob"].objective) or 0.0),
+-                                            "q_columns_before": len(lp["q"]), "q_columns_after": len(lp2["q"])})
+-                            lp, paths_by_od, paths_int = lp2, merged, merged
+-                            sol.paths_by_od = merged
+-                            sol.n_paths = sum(len(v) for v in merged.values())
+-                            sol.relaxation_bound = aug_rep["lp_bound_after"]
+-                            sol.formulation["vub_rows_lp_relaxation"] = int(lp2.get("vub_rows", 0))
+-                    else:
+-                        aug_rep["reason"] = "no qualifying demand: nothing added"
+-                except Exception as exc:                                  # noqa: BLE001
+-                    aug_rep["error"] = f"{type(exc).__name__}: {exc}"
+-                aug_rep["round_sec"] = round(time.perf_counter() - t_aug, 2)
+             used = [si for si in lp["active"] if (lp["f"][si].varValue or 0.0) > lp_keep_threshold]
+             cap_k = support_cap_from_environment()
+             if cap_k and len(used) > cap_k:
+diff --git a/Liner_shipping_optimizer/shipping_optimizer/src/network/plan.py b/Liner_shipping_optimizer/shipping_optimizer/src/network/plan.py
+index 6e20508..7099227 100644
+--- a/Liner_shipping_optimizer/shipping_optimizer/src/network/plan.py
++++ b/Liner_shipping_optimizer/shipping_optimizer/src/network/plan.py
+@@ -28,7 +28,6 @@ from src.network.local_search import (
+     variants_from_environment as local_search_variants_from_environment,
+     variants_floor_from_environment as local_search_variants_floor_from_environment,
+ )
+-from src.network.targeted_paths import select_targeted_paths, targeted_from_environment, targeted_resolve_from_environment
+ from src.network.solve_semantics import classify_solve
+ from src.network.network_milp import NetworkSolution, solve_network
+ from src.network.paths import (
+@@ -208,36 +207,6 @@ class NetworkPlanner:
+                 return build_paths(demands, models, self.port_lookup, self.assumptions,
+                                    max_paths_per_od=include_k, config=cfg_inc,
+                                    only_services=sorted(services_used))[0]
+-        targeted_cfg = targeted_from_environment() if fixed is None else None
+-        path_augment = None
+-        if targeted_cfg is not None:
+-            import dataclasses as _dc2
+-            k_ods, m_paths = targeted_cfg
+-            t_resolve = targeted_resolve_from_environment()
+-
+-            def path_augment(lp, current_paths):
+-                # the paths are enumerated (without a cap) only for the highest-value candidate demands: those whose
+-                # LP-unserved revenue is largest.  A full enumeration of every demand costs ~30 s of the 120 s stage,
+-                # which leaves CBC too little time to reach its first incumbent (measured, reports/continuation_20261015).
+-                cand = []
+-                for di, d in enumerate(demands):
+-                    if d.weekly_teu > 0 and di in lp["u"]:
+-                        u = float(lp["u"][di].varValue or 0.0)
+-                        if u > 1e-6 * float(d.weekly_teu):
+-                            cand.append((u * float(d.revenue_per_teu), di))
+-                cand.sort(key=lambda x: (-x[0], x[1]))
+-                pick = [di for _v, di in cand[:max(100, 4 * k_ods)]]
+-                cfg_v = _dc2.replace(self.path_config, selection=SELECT_FASTEST, budget=BUDGET_FIXED)
+-                sub, _st = build_paths([demands[di] for di in pick], models, self.port_lookup, self.assumptions,
+-                                       max_paths_per_od=10 ** 9, config=cfg_v)
+-                valid = {pick[i]: pl for i, pl in sub.items()}
+-                allowed = None
+-                if not t_resolve:
+-                    allowed = {si for si in lp["active"] if (lp["f"][si].varValue or 0.0) > 1e-6}      # the LP support
+-                extra, rep = select_targeted_paths(lp, demands, current_paths, valid, k_ods, m_paths, allowed_services=allowed)
+-                rep["enumerated_ods"] = len(pick)
+-                rep["resolve_lp"] = bool(t_resolve)
+-                return extra, rep
+         t_solve0 = time.perf_counter()
+         sol = solve_network(
+             models, demands, paths, limits,
+@@ -245,7 +214,7 @@ class NetworkPlanner:
+             fixed_frequencies=fixed, initial_frequencies=init,
+             time_limit_sec=milp_budget, lp_guided=lp_guided,
+             total_vessel_limit=total_vessel_limit, port_capacity=port_capacity,
+-            min_served_fraction=min_served_fraction, path_rebuild=path_rebuild, path_augment=path_augment,
++            min_served_fraction=min_served_fraction, path_rebuild=path_rebuild,
+         )
+         if sol.paths_by_od is not None:
+             paths = sol.paths_by_od                  # the path set the integer problem actually used
+diff --git a/Liner_shipping_optimizer/shipping_optimizer/src/network/reconcile.py b/Liner_shipping_optimizer/shipping_optimizer/src/network/reconcile.py
+index 1cc2885..eb2cb72 100644
+--- a/Liner_shipping_optimizer/shipping_optimizer/src/network/reconcile.py
++++ b/Liner_shipping_optimizer/shipping_optimizer/src/network/reconcile.py
+@@ -37,11 +37,6 @@ from src.network.trunk_candidates import (
+     augment_trunk_candidates as _augment_trunk, count_from_environment as _trunk_count,
+     max_ports_from_environment as _trunk_max_ports, diverse_from_environment as _trunk_diverse,
+ )
+-from src.network.trunk_lanes import (
+-    augment_lane_candidates as _augment_lanes, classes_from_environment as _lane_classes,
+-    count_from_environment as _lane_count, lanes_from_environment as _lanes_env,
+-    max_ports_from_environment as _lane_max_ports,
+-)
+ from src.network.class_variants import (
+     augment_candidates as _augment_candidates, fraction_from_environment as _class_variant_fraction,
+ )
+@@ -289,23 +284,6 @@ def reconcile(
+         cands = list(cands) + list(extra_t)
+         time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_tk))
+ 
+-    # Opt-in trans-Pacific / Atlantic trunk family (``LINER_TRUNK_LANES``); ordinary candidates, the MILP decides.
+-    lane_report = None
+-    lanes_on = _lanes_env()
+-    if lanes_on:
+-        t_ln = time.perf_counter()
+-        extra_l, lane_report = _augment_lanes(problem, assumptions, cands, lanes=lanes_on, per_class=_lane_count(),
+-                                              classes=_lane_classes(), max_ports=_lane_max_ports(),
+-                                              deadline=t_ln + 0.25 * float(time_limit_sec))
+-        for add in lane_report.get("by_lane", {}).values():
+-            for a_ in add.get("additions", []):
+-                ctr = Counter(region_of_od.get((x_, y_)) for x_ in a_["ports"] for y_ in a_["ports"] if x_ != y_)
+-                ctr.pop(None, None)
+-                owner[a_["service_id"]] = ctr.most_common(1)[0][0] if ctr else None
+-                proposers[a_["service_id"]] = [owner[a_["service_id"]]] if owner[a_["service_id"]] else []
+-        cands = list(cands) + list(extra_l)
+-        time_limit_sec = max(1.0, float(time_limit_sec) - (time.perf_counter() - t_ln))
+-
+     initial = None
+     if hints:
+         # hints are keyed by regional ids; map through the canonical rotation
+@@ -587,7 +565,6 @@ def reconcile(
+         "path_model": plan.path_stats.to_dict() if plan.path_stats else {},
+         "candidate_augmentation": class_variant_report or {"enabled": False},
+         "trunk_candidates": trunk_report or {"enabled": False},
+-        "trunk_lanes": lane_report or {"enabled": False},
+         "violations": list(led.violations),
+         "assumptions": {
+             "port_stay_hours": a.port_stay_hours,
+diff --git a/Liner_shipping_optimizer/shipping_optimizer/src/network/trunk_candidates.py b/Liner_shipping_optimizer/shipping_optimizer/src/network/trunk_candidates.py
+index fe3d563..666abda 100644
+--- a/Liner_shipping_optimizer/shipping_optimizer/src/network/trunk_candidates.py
++++ b/Liner_shipping_optimizer/shipping_optimizer/src/network/trunk_candidates.py
+@@ -98,18 +98,8 @@ def _mark_covered(ev, D, ports, cls) -> None:
+ 
+ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_class: int,
+                              max_ports: int = DEFAULT_MAX_PORTS, deadline: Optional[float] = None,
+-                             id_prefix: str = "tk", diverse: bool = False,
+-                             classes: Optional[Sequence[str]] = None, port_filter: Optional[set] = None,
+-                             seed_groups: Optional[Tuple[set, set]] = None,
+-                             collect_rejected: Optional[List[Dict]] = None) -> Tuple[List, Dict]:
+-    """Return (new candidates, report).  Never raises for an unattainable rotation: it is counted in the report.
+-
+-    Optional restrictions (used by ``trunk_lanes``; all default None = the original behaviour, unchanged):
+-      ``classes``      explicit target classes instead of the under-subscription rule;
+-      ``port_filter``  rotations may only call at these ports (in addition to the class draft rule);
+-      ``seed_groups``  (A, B): every seed OD has one end in A and the other in B, so the rotation joins the two groups;
+-      ``collect_rejected``  a list that receives every grown rotation rejected for a non-positive stand-alone profit (the
+-                       input of ``dual_screen``; it changes nothing about what is returned)."""
++                             id_prefix: str = "tk", diverse: bool = False) -> Tuple[List, Dict]:
++    """Return (new candidates, report).  Never raises for an unattainable rotation: it is counted in the report."""
+     from src.network.plan import Candidate
+     from src.services.demand_coherent import DemandCoherentConfig, _canonical, _Demand, _Evaluator
+ 
+@@ -121,11 +111,8 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
+     fleet = problem.fleet
+     inventory = {c.vessel_class: int(c.quantity) for c in fleet.classes}
+     count = Counter(c.vessel_class for c in candidates)
+-    if classes is not None:
+-        targets = [c.vessel_class for c in fleet.classes if c.vessel_class in set(classes) and inventory[c.vessel_class] > 0]
+-    else:
+-        targets = [c.vessel_class for c in fleet.classes
+-                   if inventory[c.vessel_class] > 0 and count.get(c.vessel_class, 0) / inventory[c.vessel_class] < PRESSURE_RATIO]
++    targets = [c.vessel_class for c in fleet.classes
++               if inventory[c.vessel_class] > 0 and count.get(c.vessel_class, 0) / inventory[c.vessel_class] < PRESSURE_RATIO]
+     rep["target_classes"] = {k: {"candidates": count.get(k, 0), "inventory": inventory[k]} for k in sorted(targets)}
+     if not targets:
+         rep["reason"] = "no under-subscribed class"
+@@ -148,22 +135,8 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
+         cls = fleet.get_class(cname)
+         cdraft = float(getattr(cls, "draft", 0.0) or 0.0)
+         elig = {p for p in lookup if p in known and float(getattr(lookup[p], "draft", 0.0) or 0.0) + 1e-9 >= cdraft}
+-        draft_eligible = len(elig)
+-        if port_filter is not None:
+-            elig &= set(port_filter)
+-
+-        def _cross(k):
+-            if seed_groups is None:
+-                return True
+-            a_, b_ = seed_groups
+-            return (k[0] in a_ and k[1] in b_) or (k[0] in b_ and k[1] in a_)
+-
+-        seeds = sorted((k for k in D.teu if k[0] in elig and k[1] in elig and k[0] < k[1] and _cross(k)),
++        seeds = sorted((k for k in D.teu if k[0] in elig and k[1] in elig and k[0] < k[1]),
+                        key=lambda k: (-D.opportunity(k), k))[:SEED_PAIRS]
+-        crep = {"draft_eligible_ports": draft_eligible, "eligible_ports": len(elig), "seed_pairs": len(seeds),
+-                "grown_rotations": 0, "rejected_nonpositive_standalone": 0, "rejected_existing_in_pool": 0,
+-                "rejected_near_duplicate": 0, "rejected_by_cap": 0, "retained": 0}
+-        rep.setdefault("per_class", {})[cname] = crep
+         grown: Dict[Tuple[str, ...], Dict] = {}
+         for sd in seeds:
+             if deadline is not None and time.perf_counter() > deadline:
+@@ -204,27 +177,16 @@ def augment_trunk_candidates(problem, assumptions, candidates: Sequence, *, per_
+             if diverse and cur is not None and len(ports) >= 3 and cur["standalone"] > 0.0:
+                 _mark_covered(ev, D, ports, cls)
+         chosen: List[Dict] = []
+-        crep["grown_rotations"] = len(grown)
+         for g in sorted(grown.values(), key=lambda g: (-(g["marg"] if diverse else g["m"]["standalone"]), tuple(g["ports"]))):
+-            if g["m"]["standalone"] <= 0.0:
+-                crep["rejected_nonpositive_standalone"] += 1
+-                if collect_rejected is not None:
+-                    collect_rejected.append({"ports": list(g["ports"]), "vessel_class": cname,
+-                                             "standalone": float(g["m"]["standalone"]), "source": id_prefix})
+-                continue
+-            if len(chosen) >= per_class:
+-                crep["rejected_by_cap"] += 1
++            if g["m"]["standalone"] <= 0.0 or len(chosen) >= per_class:
+                 continue
+             key = _canonical(g["ports"])
+             if (key, cname) in existing:
+-                crep["rejected_existing_in_pool"] += 1
+                 continue
+             pset = set(g["ports"])
+             if any(len(pset & set(s["ports"])) / len(pset | set(s["ports"])) >= NEAR_DUPLICATE_JACCARD for s in chosen):
+-                crep["rejected_near_duplicate"] += 1
+                 continue
+             chosen.append(g)
+-        crep["retained"] = len(chosen)
+         for g in chosen:
+             m = g["m"]
+             rep["additions"].append({
+diff --git a/Liner_shipping_optimizer/shipping_optimizer/tests/test_orchestrator.py b/Liner_shipping_optimizer/shipping_optimizer/tests/test_orchestrator.py
+index 491ed63..cea8b56 100644
+--- a/Liner_shipping_optimizer/shipping_optimizer/tests/test_orchestrator.py
++++ b/Liner_shipping_optimizer/shipping_optimizer/tests/test_orchestrator.py
+@@ -1,5 +1,6 @@
+ 
+ import json
++import os
+ import sys
+ import time
+ import re
+@@ -2709,6 +2710,62 @@ def section_network_ledger_validation(result: Dict, problem: "Problem") -> Dict[
+     return {"verified": True, "recomputed": rc}
+ 
+ 
++def section_c3_configuration_and_reference(result: Dict) -> None:
++    """N2. The plan reports the C3 flags as applied, and its headline numbers are shown next to the frozen C3
++    reference (20 seeds).  One end-to-end run is ONE seed: it is expected to lie inside the 20-seed range
++    but not to equal the mean, so the comparison is reported (a warning outside the range), never asserted."""
++    print_section_header("N2 . C3 CONFIGURATION AND FROZEN-REFERENCE COMPARISON")
++    led = result.get("network_ledger") or {}
++    opt = led.get("optimality") or {}
++    form = opt.get("formulation") or {}
++    lsr = opt.get("local_search") or {}
++    trunk = led.get("trunk_candidates") or {}
++    assert_true(all(_C3_env == v for _C3_env, v in ((os.environ.get(k), v) for k, v in C3_CONFIGURATION.items())),
++                "the C3 flags are in force for this run", f"{ {k: os.environ.get(k) for k in C3_CONFIGURATION} }")
++    assert_true(bool(form.get("vub_requested")) and bool(form.get("vub_applied")),
++                "C3: the vessel-upper-bound inequality was requested and added to the model that was solved", f"{form!r}")
++    assert_true(bool(lsr.get("enabled")), "C3: the local search was enabled", f"{lsr!r}")
++    assert_true(trunk.get("requested_per_class") == int(C3_CONFIGURATION["LINER_TRUNK_CANDIDATES"])
++                and trunk.get("max_ports") == int(C3_CONFIGURATION["LINER_TRUNK_MAX_PORTS"])
++                and trunk.get("diverse") is True and "pool_unique" in trunk,
++                "C3: the trunk-candidate generator ran with 12 per class, <= 10 ports, diverse selection",
++                f"requested={trunk.get('requested_per_class')} max_ports={trunk.get('max_ports')} "
++                f"diverse={trunk.get('diverse')} added={trunk.get('added')}")
++    assert_true(float(os.environ.get("GLOBAL_STAGE_TIME_LIMIT_SEC", "120") or 120.0) <= 120.0,
++                "the 120 s global-stage budget is preserved")
++    assert_true(str(opt.get("solver_backend", "")).lower() == "cbc",
++                "the solver backend is still PuLP/CBC", f"{opt.get('solver_backend')!r}")
++    sc = form.get("support_cap")
++    if sc:
++        print_kv("Support cap", f"{sc}")
++    w = led.get("weekly_usd") or {}
++    d = led.get("demand_teu_per_week") or {}
++    fb = led.get("fleet_by_class") or {}
++    used = sum(int(v.get("used", 0)) for v in fb.values())
++    owned = sum(int(v.get("available", 0)) for v in fb.values())
++    run = {"profit_M": float(w.get("operating_profit", 0.0)) / 1e6, "revenue_M": float(w.get("revenue", 0.0)) / 1e6,
++           "coverage_pct": float(d.get("coverage_pct", 0.0)), "services": (led.get("services") or {}).get("operated"),
++           "assigned": used, "owned": owned}
++    print_kv("This run: profit", f"{run['profit_M']:.2f} M USD/week   (revenue {run['revenue_M']:.2f} M)")
++    print_kv("This run: coverage", f"{run['coverage_pct']:.1f} %   services {run['services']}   vessels assigned {used}/{owned}")
++    print_kv("MILP status", f"{led.get('status')}  ({opt.get('solve_conclusion')})")
++    if not C3_FREEZE_FILE.exists():
++        print(f"  {warn('frozen C3 reference file not found: ' + str(C3_FREEZE_FILE))}")
++        return
++    ref = json.loads(C3_FREEZE_FILE.read_text(encoding="utf-8"))
++    sm = ref["summary"]
++    pr, cv, sv, va = sm["profit_usd_wk"], sm["coverage_pct"], sm["services"], sm["vessels_assigned"]
++    print(f"\n  {C.BOLD}Frozen C3 reference ({pr['n']} seeds, all feasible, ledger-verified){C.RESET}")
++    print_kv("Profit mean (median)", f"{pr['mean'] / 1e6:.2f} M ({pr['median'] / 1e6:.2f})   range {pr['min'] / 1e6:.1f} .. {pr['max'] / 1e6:.1f} M USD/week")
++    print_kv("Coverage mean", f"{cv['mean']:.1f} %   range {cv['min']:.1f} .. {cv['max']:.1f}")
++    print_kv("Services mean", f"{sv['mean']:.1f}   range {sv['min']:.0f} .. {sv['max']:.0f}")
++    print_kv("Vessels assigned mean", f"{va['mean']:.1f} of 263   range {va['min']:.0f} .. {va['max']:.0f}")
++    warn_if(not (pr["min"] / 1e6 <= run["profit_M"] <= pr["max"] / 1e6),
++            f"this run's profit {run['profit_M']:.2f} M lies inside the frozen C3 20-seed range "
++            f"{pr['min'] / 1e6:.1f}..{pr['max'] / 1e6:.1f} M")
++    print_kv("This run vs the frozen mean", f"{run['profit_M'] - pr['mean'] / 1e6:+.2f} M")
++
++
+ def section_decision_layer_economics(result: Dict, ledger_check: Dict[str, Any]) -> None:
+     """O. F-15 - the decision layer reports the same economics as the ledger.
+ 
+@@ -2883,6 +2940,30 @@ def section_candidate_pool_and_classes(result: Dict, problem: "Problem", ledger_
+ 
+ 
+ 
++# -- C3: the working optimiser configuration (class-mismatch / continuation campaigns) ------------------------
++# C3 = MILP vessel-upper-bound inequality + local search + 12 trunk candidates per under-subscribed class
++# (diverse, <= 10 ports) + the integer problem keeps at most 105 of the LP-support services.  Solver stays
++# PuLP/CBC (single thread) with the 120 s global-stage budget; none of these flags changes either.
++# Frozen reference: reports/continuation_20261015/ws1_provenance/C3_baseline_freeze.json (20 seeds).
++C3_CONFIGURATION = {
++    "LINER_MILP_VUB": "1",
++    "LINER_LOCAL_SEARCH": "1",
++    "LINER_TRUNK_CANDIDATES": "12",
++    "LINER_TRUNK_DIVERSE": "1",
++    "LINER_TRUNK_MAX_PORTS": "10",
++    "LINER_MILP_SUPPORT_CAP": "105",
++}
++C3_FREEZE_FILE = (Path(__file__).parent.parent / "reports" / "continuation_20261015" / "ws1_provenance"
++                  / "C3_baseline_freeze.json")
++
++
++def apply_c3_configuration() -> Dict[str, str]:
++    """Force the C3 flags into the process environment (a stray shell value must not change the run)."""
++    for k, v in C3_CONFIGURATION.items():
++        os.environ[k] = v
++    return dict(C3_CONFIGURATION)
++
++
+ def test_orchestrator():
+     global _PASS, _FAIL, _WARN
+ 
+@@ -2893,6 +2974,8 @@ def test_orchestrator():
+     # -- Initialise ---------------------------------------------------------
+     print(hdr("0 . INITIALISATION"))
+     print(f"  {sep()}")
++    c3_flags = apply_c3_configuration()
++    print(ok("C3 configuration applied: " + " ".join(f"{k}={v}" for k, v in c3_flags.items())))
+     orchestrator = OrchestratorAgent()
+     print(ok("OrchestratorAgent created"))
+     print(ok(f"Regional agents: {[a.name for a in orchestrator.regional_agents]}"))
+@@ -2955,6 +3038,8 @@ def test_orchestrator():
+ 
+     # -- N: independent recomputation of the network plan from raw data ---------
+     ledger_check = section_network_ledger_validation(result, problem)
++    # -- N2: the plan was produced under C3 and is compared with the frozen C3 reference ------------------
++    section_c3_configuration_and_reference(result)
+     # -- O: decision layer reports the same economics as the ledger (F-15) --------
+     section_decision_layer_economics(result, ledger_check)
+     # -- P: candidate pool composition and class use (Tasks 9 / 10) ----------------

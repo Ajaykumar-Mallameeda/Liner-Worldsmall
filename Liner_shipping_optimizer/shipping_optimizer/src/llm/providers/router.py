@@ -289,6 +289,11 @@ class ProviderRouter:
             if not chosen:
                 continue
             plan.append((name, chosen))
+            # Same-provider backups (each model has its own quota/breaker).
+            if model_override is None:
+                for fb in cfg.fallback_models:
+                    if (name, fb) not in plan:
+                        plan.append((name, fb))
         return plan
 
     def _max_retries_within(self, provider: str, model: str) -> int:

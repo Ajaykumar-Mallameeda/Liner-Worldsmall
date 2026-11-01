@@ -5,13 +5,21 @@ import react from '@vitejs/plugin-react'
 // (Windows Hyper-V can reserve 7961-8060).
 const API_TARGET = `http://127.0.0.1:${process.env.API_PORT || 8000}`
 
+// DASHBOARD_RUN_FROM_API=1 (set by launch_dashboard.bat): the default view's /pipeline_output.json comes from the
+// backend's current run (PIPELINE_OUTPUT) instead of the public/ copy. Off, the dashboard works without a backend.
+const runFromApi = process.env.DASHBOARD_RUN_FROM_API === '1'
+  ? { '/pipeline_output.json': { target: API_TARGET, changeOrigin: true, rewrite: () => '/api/runs/current/pipeline_output' } }
+  : {}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    strictPort: true,
+    // next free port when 5173 is taken (a second dev server, another app) instead of refusing to start
+    strictPort: false,
     proxy: {
+      ...runFromApi,
       '/api': {
         target: API_TARGET,
         changeOrigin: true,

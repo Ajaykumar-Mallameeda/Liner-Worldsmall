@@ -1,0 +1,134 @@
+{
+  "note": "Runtime telemetry for WorldSmall adaptive budget — v1 resolution (corrected)",
+  "date": "2026-09-13",
+  "instance": {
+    "name": "WorldSmall",
+    "num_ports": 47,
+    "num_lanes": 1764,
+    "total_demand_teu": 276446.8,
+    "avg_demand_per_lane": 156.7,
+    "density_pct": 81.6,
+    "fleet_vessels": 263
+  },
+  "adaptive_budget": {
+    "tier": "large",
+    "complexity_factor": 1.396,
+    "service_generation": {
+      "direct_target": 698,
+      "hub_loop_target": 14,
+      "feeder_target": 140,
+      "heuristic_target": 209,
+      "trunk_target": 44,
+      "candidate_cap": 1105
+    },
+    "service_ga": {
+      "population_size": 140,
+      "max_generations": 120,
+      "stagnation_limit": 11
+    },
+    "frequency_ga": {
+      "population_size": 60,
+      "max_generations": 80,
+      "stagnation_limit": 10
+    },
+    "filter": {
+      "max_services": 600,
+      "raw_value": 846.4
+    },
+    "milp": {
+      "max_transfer_pairs": 3264,
+      "time_limit_sec": 73
+    }
+  },
+  "pre_adaptive_baseline": {
+    "service_ga": {
+      "pop_size": "threshold-based (100 for 100<=n<500)",
+      "max_generations": 120,
+      "stagnation_limit": 8
+    },
+    "frequency_ga": {
+      "pop_size": 40,
+      "max_generations": 60,
+      "stagnation_limit": 8
+    },
+    "filter_max_services": 400,
+    "milp_transfer_pairs": 2000,
+    "milp_time_limit_sec": 120
+  },
+  "ab_comparison": {
+    "baseline_run": {
+      "runtime_sec": 326.4,
+      "total_services": 307,
+      "weekly_profit_usd": 290760000,
+      "coverage_pct": 88.62,
+      "negative_profit_count": 30,
+      "negative_profit_total_usd": -86000000,
+      "ga_telemetry": {
+        "asia": {"actual_generations_executed": 120, "max_generations": 120, "early_stop_reason": "completed"},
+        "europe": {"actual_generations_executed": 120, "max_generations": 120, "early_stop_reason": "completed"},
+        "americas": {"actual_generations_executed": 120, "max_generations": 120, "early_stop_reason": "completed"}
+      }
+    },
+    "adaptive_run_1": {
+      "total_services": 311,
+      "weekly_profit_usd": 304985475,
+      "coverage_pct": 89.35,
+      "negative_profit_count": 39,
+      "negative_profit_total_usd": -83379110,
+      "note": "Run saved before total_runtime fix; runtime not recorded"
+    },
+    "adaptive_run_2": {
+      "runtime_sec": 353.9,
+      "total_services": 281,
+      "weekly_profit_usd": 244950364,
+      "coverage_pct": 90.93,
+      "negative_profit_count": 32,
+      "negative_profit_total_usd": -89000000,
+      "ga_telemetry": {
+        "asia": {"actual_generations_executed": 44, "max_generations": 120, "early_stop_reason": "max_runtime_reached"},
+        "europe": {"actual_generations_executed": 120, "max_generations": 120, "early_stop_reason": "completed"},
+        "americas": {"actual_generations_executed": 75, "max_generations": 120, "early_stop_reason": "max_runtime_reached"}
+      },
+      "milp_telemetry": {
+        "asia": {"transfer_pair_budget": 2104, "time_limit_sec": 75, "status": "Optimal"},
+        "europe": {"transfer_pair_budget": 1891, "time_limit_sec": 67, "status": "Optimal"},
+        "americas": {"transfer_pair_budget": 2269, "time_limit_sec": 64, "status": "Optimal"}
+      }
+    },
+    "adaptive_run_3": {
+      "runtime_sec": 320.4,
+      "total_services": 305,
+      "weekly_profit_usd": 259362744,
+      "coverage_pct": 87.40,
+      "negative_profit_count": 40,
+      "ga_telemetry": {
+        "asia": {"actual_generations_executed": 111, "max_generations": 120, "early_stop_reason": "max_runtime_reached"},
+        "europe": {"actual_generations_executed": 120, "max_generations": 120, "early_stop_reason": "completed"},
+        "americas": {"actual_generations_executed": 120, "max_generations": 120, "early_stop_reason": "completed"}
+      },
+      "milp_telemetry": {
+        "asia": {"transfer_pair_budget": 2104, "time_limit_sec": 75, "status": "Optimal"},
+        "europe": {"transfer_pair_budget": 1891, "time_limit_sec": 67, "status": "Optimal"},
+        "americas": {"transfer_pair_budget": 2269, "time_limit_sec": 64, "status": "Optimal"}
+      }
+    }
+  },
+  "test_results": {
+    "worldsmall_integration": "29 passed",
+    "adaptive_budget": "28 passed",
+    "orchestrator": "1 passed",
+    "total": "58 passed, 0 failed",
+    "pre_existing_failures": [
+      "test_ga.py::test_genetic_algorithms:123 (unrelated _tune_parameters bug)",
+      "test_milp.py::test_milp (unrelated Pulp False-constraint bug)"
+    ]
+  },
+  "llm_status": {
+    "successful_calls": 0,
+    "total_attempts": 306,
+    "error": "Client.__init__() got an unexpected keyword argument 'proxies'",
+    "state": "fallback-driven (unchanged from baseline)"
+  },
+  "alpha_unserved_note": "alpha_unserved = 300 USD/TEU kept exactly unchanged. Future objective-calibration experiment — not part of adaptive budget engineering.",
+  "telemetry_fix_note": "total_runtime was previously None in adaptive output because OrchestratorAgent.process() did not record end-to-end runtime. Fixed by adding _t0=time.perf_counter() at process entry and metrics.setdefault('total_runtime', float(_elapsed)) before return."
+}

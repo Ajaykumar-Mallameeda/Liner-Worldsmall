@@ -56,6 +56,9 @@ class ProviderConfig:
         HTTP request timeout per call.
     max_retries:
         Retries within a single provider (NOT across providers).
+    fallback_models:
+        Same-provider backup models, tried in order after the role model
+        fails (e.g. per-model 429).  Each has its own breaker and quota.
     extra:
         Free-form provider-specific extra config (e.g. Gemini uses
         ``x-goog-api-key`` instead of bearer; base_url is suffixed with
@@ -72,6 +75,7 @@ class ProviderConfig:
     iteration_selector_model: str = ""
     timeout_sec: float = 30.0
     max_retries: int = 1
+    fallback_models: List[str] = field(default_factory=list)
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def model_for(self, role: str) -> str:

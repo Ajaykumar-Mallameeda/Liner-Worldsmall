@@ -384,6 +384,29 @@ npm run build
 npx serve dist
 ```
 
+### One-click launch (Windows)
+
+```bat
+cd shipping_optimizer
+launch_dashboard.bat                 :: newest run: repo root, reports\dataset_runs\*, runs_extra\*
+launch_dashboard.bat runs_extra\worldsmall_seed00_20261024   :: or a specific run (file or folder)
+```
+
+It picks a free backend port (8000, else 8090, ...), starts the backend and the dev server in their own windows
+and opens the browser. Nothing is copied: the chosen run is served as "current" through `PIPELINE_OUTPUT`.
+
+### Backend API (manual)
+
+```bash
+cd shipping_optimizer
+venv\Scripts\activate
+python -m uvicorn backend.server:app --port 8000     # or: python backend/server.py (from any folder)
+# optional: PIPELINE_OUTPUT=<path to a pipeline_output.json> serves that run as "current"
+```
+
+If Windows refuses port 8000 (`netsh int ipv4 show excludedportrange tcp` lists a reserved range around it), use
+another port for the backend and give the dev server the same one: `set API_PORT=8090` before `npm run dev`.
+
 ### Mock WebSocket Server (for dashboard)
 
 ```bash

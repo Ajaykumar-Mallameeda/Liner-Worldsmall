@@ -1,0 +1,161 @@
+---
+# ─────────────────────────────────────────────────────────────
+#  Liner Shipping Network Optimizer — Kubernetes Manifests
+#  Resources: Deployment, Service, ConfigMap, Secret template
+# ─────────────────────────────────────────────────────────────
+
+# ── Namespace ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lsno
+  labels:
+    project: liner-shipping-optimizer
+
+---
+# ── ConfigMap (non-sensitive configuration) ───────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lsno-config
+  namespace: lsno
+data:
+  ORCHESTRATOR_MODEL: "openrouter/gpt-oss-120b"
+  REGIONAL_MODEL: "meta-llama/llama-3.1-8b-instruct"
+  GA_POPULATION_SIZE: "80"
+  GA_GENERATIONS: "120"
+  MILP_TIME_LIMIT: "120"
+  MAX_TRANSFER_PAIRS: "2000"
+  COVERAGE_TARGET: "70"
+  LOG_LEVEL: "INFO"
+
+---
+# ── Secret template (replace with sealed-secrets or Vault) ────
+# kubectl create secret generic lsno-secrets \
+#   --from-literal=OPENROUTER_API_KEY=sk-or-...
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lsno-secrets
+  namespace: lsno
+type: Opaque
+stringData:
+  OPENROUTER_API_KEY: "REPLACE_ME"
+
+---
+# ── API Deployment ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lsno-api
+  namespace: lsno
+  labels:
+    app: lsno-api
+    tier: backend
+spec:
+  replicas: 1                     # single replica: in-memory state limits horizontal scaling
+  selector:
+    matchLabels:
+      app: lsno-api
+  template:
+    metadata:
+      labels:
+        app: lsno-api
+    spec:
+      containers:
+        - name: api
+          image: liner-shipping-optimizer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: lsno-config
+            - secretRef:
+                name: lsno-secrets
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+            limits:
+              memory: "16Gi"      # large instances need up to 8 GB
+              cpu: "8000m"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+              readOnly: true
+            - name: results-volume
+              mountPath: /app/results
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: lsno-data-pvc
+        - name: results-volume
+          persistentVolumeClaim:
+            claimName: lsno-results-pvc
+
+---
+# ── API Service ───────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: lsno-api-service
+  namespace: lsno
+spec:
+  selector:
+    app: lsno-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ── Persistent Volume Claims ──────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lsno-data-pvc
+  namespace: lsno
+spec:
+  accessModes: [ReadOnlyMany]
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lsno-results-pvc
+  namespace: lsno
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# ── Notes ─────────────────────────────────────────────────────
+# Horizontal scaling requires:
+#   1. Redis-based distributed state (replaces in-memory Problem object)
+#   2. Async regional workers decoupled from API via a task queue (Celery / RQ)
+#   3. Shared results storage (PostgreSQL or object store)
+#
+# When those are in place, increase replicas to match concurrency:
+#   - API replicas: 2–4 (stateless after Redis migration)
+#   - Worker replicas: N (one per concurrent optimization run)

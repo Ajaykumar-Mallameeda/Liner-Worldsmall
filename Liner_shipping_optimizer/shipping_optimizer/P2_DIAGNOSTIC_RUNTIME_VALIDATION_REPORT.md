@@ -6,8 +6,8 @@ Dataset: WorldSmall
 
 - **Fuel Cost Calculation**: [OK] IMPLEMENTED
 - **Fuel Cost Source**: HubMILP.solve() returns fuel_cost component
-- **Total Weekly Fuel Cost**: $29,185,549
-- **Fuel Cost Percentage**: 33.2% of operating cost
+- **Total Weekly Fuel Cost**: $32,987,359
+- **Fuel Cost Percentage**: 33.9% of operating cost
 - **Exact Point of Calculation**: src/optimization/hub_milp.py lines 417-426
 - **Visibility Status**: [OK] Visible in regional results
 
@@ -15,30 +15,30 @@ Dataset: WorldSmall
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| Weekly Revenue | $132,816,260 | OK |
-| Weekly Total Cost | $87,837,411 | OK |
-| Fuel Cost | $29,185,549 | OK |
-| Port Handling Cost | $36,226,162 | OK |
-| Port Fixed Cost | $26,351,223 | ESTIMATED |
-| Transshipment Cost | $1,271,700 | OK |
-| Vessel OPEX | $35,134,964 | ESTIMATED |
-| Charter / Depreciation | $17,567,482 | ESTIMATED |
-| Crew Cost | $8,783,741 | ESTIMATED |
-| Overhead Cost | $4,391,871 | ESTIMATED |
-| Cost per TEU | $712 | OK |
-| Revenue per TEU | $1076 | OK |
-| Network Profit | $44,978,849 | OK |
-| Profit Margin % | 33.9% | OK |
+| Weekly Revenue | $145,250,550 | OK |
+| Weekly Total Cost | $97,450,156 | OK |
+| Fuel Cost | $32,987,359 | OK |
+| Port Handling Cost | $40,319,001 | OK |
+| Port Fixed Cost | $29,235,047 | ESTIMATED |
+| Transshipment Cost | $1,407,796 | OK |
+| Vessel OPEX | $38,980,062 | ESTIMATED |
+| Charter / Depreciation | $19,490,031 | ESTIMATED |
+| Crew Cost | $9,745,016 | ESTIMATED |
+| Overhead Cost | $4,872,508 | ESTIMATED |
+| Cost per TEU | $716 | OK |
+| Revenue per TEU | $1068 | OK |
+| Network Profit | $47,800,394 | OK |
+| Profit Margin % | 32.9% | OK |
 
 ## 3. COMMERCIAL CALIBRATION SUMMARY
 
-- **Total Services**: 30
-- **Profitable Services**: 18
+- **Total Services**: 31
+- **Profitable Services**: 19
 - **Negative Services**: 12
-- **Negative Service %**: 40.0%
+- **Negative Service %**: 38.7%
 - **Strategically Retained Negative Services**: 6  # Estimated
 - **Removable Negative Services**: 2  # Estimated
-- **Average Service Margin %**: 51.2%
+- **Average Service Margin %**: 49.1%
 
 ## 4. STRATEGY MIX SUMMARY
 
@@ -55,24 +55,24 @@ Dataset: WorldSmall
 
 | Vessel Class | Service Count | TEU Deployed | Avg Utilization % | Avg Weekly Profit |
 |--------------|---------------|--------------|-------------------|-------------------|
-| Post_panamax | 15 | 75000 | 75.0% | $2,998,590 |
-| Super_panamax | 7 | 120000 | 80.0% | $6,425,550 |
-| Panamax_2400 | 5 | 36000 | 70.0% | $8,995,770 |
+| Post_panamax | 15 | 77500 | 75.0% | $3,186,693 |
+| Super_panamax | 7 | 124000 | 80.0% | $6,828,628 |
+| Panamax_2400 | 5 | 37200 | 70.0% | $9,560,079 |
 
 ## 6. TOP 5 PROFITABLE SERVICES
 
 | Route | Strategy | Vessel Class | Utilization | Weekly Profit | Margin % |
 |-------|----------|--------------|-------------|---------------|----------|
-| Asia-Europe | Hub-Spoke | Post_panamax | 85% | $4,497,884 | 25.0% |
-| Trans-Pacific | Direct | Super_panamax | 90% | $3,748,237 | 22.0% |
-| Europe-Med | Hybrid | Panamax_2400 | 75% | $2,998,589 | 20.0% |
+| Asia-Europe | Hub-Spoke | Post_panamax | 85% | $4,780,039 | 25.0% |
+| Trans-Pacific | Direct | Super_panamax | 90% | $3,983,366 | 22.0% |
+| Europe-Med | Hybrid | Panamax_2400 | 75% | $3,186,692 | 20.0% |
 
 ## 7. WORST 5 SERVICES
 
 | Route | Strategy | Vessel Class | Utilization | Weekly Loss | Margin % | Reason Selected |
 |-------|----------|--------------|-------------|-------------|----------|-----------------|
-| Intra-Asia | Feeder | Feeder_800 | 45% | $899,576 | -15.0% | Strategic connector |
-| Secondary Europe | Hub-Spoke | Post_panamax | 30% | $749,647 | -10.0% | Hub coverage |
+| Intra-Asia | Feeder | Feeder_800 | 45% | $956,007 | -15.0% | Strategic connector |
+| Secondary Europe | Hub-Spoke | Post_panamax | 30% | $796,673 | -10.0% | Hub coverage |
 
 ## 8. MISSING ECONOMIC FIELDS
 
@@ -101,5 +101,5 @@ The following fields are estimated rather than directly calculated:
 
 ---
 
-*Report generated on: 2026-10-16 14:29:34*
-*Test run time: 818.8s*
+*Report generated on: 2026-10-29 14:17:20*
+*Test run time: 451.5s*

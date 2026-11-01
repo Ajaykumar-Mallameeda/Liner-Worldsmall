@@ -1,0 +1,67 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────
+#  Liner Shipping Network Optimizer — Docker Compose
+#  Topology: API backend + optimization worker + frontend
+# ─────────────────────────────────────────────────────────────
+
+services:
+
+  # ── FastAPI + WebSocket backend ──────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: lsno-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - ORCHESTRATOR_MODEL=${ORCHESTRATOR_MODEL:-openrouter/gpt-oss-120b}
+      - REGIONAL_MODEL=${REGIONAL_MODEL:-meta-llama/llama-3.1-8b-instruct}
+      - GA_POPULATION_SIZE=${GA_POPULATION_SIZE:-80}
+      - GA_GENERATIONS=${GA_GENERATIONS:-120}
+      - MILP_TIME_LIMIT=${MILP_TIME_LIMIT:-120}
+      - MAX_TRANSFER_PAIRS=${MAX_TRANSFER_PAIRS:-2000}
+      - COVERAGE_TARGET=${COVERAGE_TARGET:-70}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data:ro          # read-only dataset mount
+      - ./logs:/app/logs             # log persistence
+      - ./results:/app/results       # result output
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - lsno-network
+
+  # ── Frontend dashboard ───────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lsno-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://api:8000
+      - VITE_WS_URL=ws://api:8000/ws/stream
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - lsno-network
+
+networks:
+  lsno-network:
+    driver: bridge
+
+volumes:
+  logs:
+  results:

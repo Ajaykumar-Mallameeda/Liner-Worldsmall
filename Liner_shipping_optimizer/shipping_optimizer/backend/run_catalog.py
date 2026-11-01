@@ -18,7 +18,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CURRENT_OUTPUT = REPO_ROOT / "pipeline_output.json"
+# PIPELINE_OUTPUT points "current" at another run's pipeline_output.json (launch_dashboard.bat sets it to the newest run)
+CURRENT_OUTPUT = Path(os.environ.get("PIPELINE_OUTPUT") or REPO_ROOT / "pipeline_output.json").resolve()
 BENCHMARK_ROOT = Path(os.environ.get("BENCHMARK_ROOT", REPO_ROOT / "Benchmark" / "seed-30"))
 FULL_SUMMARY = BENCHMARK_ROOT / "FULL_SUMMARY_30_SEEDS.json"
 # Runs kept outside the frozen benchmark (one folder per run, each with pipeline_output.json and an optional

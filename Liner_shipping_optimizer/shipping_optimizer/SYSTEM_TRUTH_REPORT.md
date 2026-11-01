@@ -133,15 +133,15 @@ Total dead AI output fields: 0
 
 | Metric | Value |
 |--------|-------|
-| Weekly Profit | $44,978,849 |
-| Annual Profit | $2,338,900,152 |
-| Demand Coverage | 44.6% |
-| Total Services | 30 |
+| Weekly Profit | $47,800,394 |
+| Annual Profit | $2,485,620,496 |
+| Demand Coverage | 49.2% |
+| Total Services | 31 |
 | Profit Margin | 0.0% |
 
-  - Asia: $36,130,829/wk, 55.8% coverage, 26 services
-  - Europe: $3,612,468/wk, 22.5% coverage, 2 services
-  - Americas: $5,235,552/wk, 37.5% coverage, 2 services
+  - Asia: $43,146,272/wk, 58.1% coverage, 24 services
+  - Europe: $3,370,309/wk, 25.6% coverage, 1 services
+  - Americas: $1,283,813/wk, 47.1% coverage, 6 services
 
 ---
 

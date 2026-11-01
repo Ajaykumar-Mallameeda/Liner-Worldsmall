@@ -74,6 +74,9 @@ def _provider_config_from_env(name: str) -> ProviderConfig:
         iteration_selector_model=os.getenv(f"{base}_ITERATION_SELECTOR_MODEL", ""),
         timeout_sec=float(os.getenv(f"{base}_TIMEOUT_SEC", "30")),
         max_retries=int(os.getenv(f"{base}_MAX_RETRIES", "1")),
+        fallback_models=[
+            m.strip() for m in os.getenv(f"{base}_FALLBACK_MODELS", "").split(",") if m.strip()
+        ],
     )
 
 

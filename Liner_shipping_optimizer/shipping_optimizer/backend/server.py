@@ -15,6 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
+# `python backend/server.py` (from any folder) needs the repository root on sys.path for the `backend.*` imports
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -65,7 +70,8 @@ if repo_root_data.exists():
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    # any local port: Vite moves to 5174+ when 5173 is taken
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -108,8 +114,7 @@ current_state = {
 def load_pipeline_data():
     """Load pipeline data from the JSON file created by test_orchestrator.py"""
     try:
-        parent_dir = Path(__file__).parent.parent
-        output_file = parent_dir / "pipeline_output.json"
+        from backend.run_catalog import CURRENT_OUTPUT as output_file
 
         if not output_file.exists():
             logger.warning(f"Pipeline output file not found: {output_file}")
@@ -2565,8 +2570,7 @@ async def run_actual_pipeline(connection_manager, config):
         })
 
         # Path to the output file
-        parent_dir = Path(__file__).parent.parent
-        output_file = parent_dir / "pipeline_output.json"
+        from backend.run_catalog import CURRENT_OUTPUT as output_file
 
         # Check if file exists
         if not output_file.exists():
@@ -2778,7 +2782,9 @@ async def complete_stage(connection_manager, index):
 
 if __name__ == "__main__":
     uvicorn.run(
-        "server:app",
+        "backend.server:app",
+        app_dir=str(REPO_ROOT),
+        reload_dirs=[str(REPO_ROOT / "backend")],
         host="0.0.0.0",
         # API_PORT overrides 8000 (some Windows hosts reserve 7961-8060 for Hyper-V)
         port=int(os.environ.get("API_PORT", "8000")),
