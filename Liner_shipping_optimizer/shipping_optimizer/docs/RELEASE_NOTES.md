@@ -109,7 +109,7 @@
 
 ## Installation
 
-See [README.md](../README.md#-quick-start) for complete setup instructions.
+See [README.md](../../../README.md#quick-start) for complete setup instructions.
 
 ```bash
 # Backend
@@ -125,7 +125,7 @@ cd frontend && npm install && npm run dev
 
 ## Links
 
-- **README**: [../README.md](../README.md)
+- **README**: [README](../../../README.md)
 - **Documentation**: [./](.)
 - **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
 - **Benchmarks**: [BENCHMARKS.md](BENCHMARKS.md)
