@@ -129,5 +129,3 @@ cd frontend && npm install && npm run dev
 - **Documentation**: [./](.)
 - **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
 - **Benchmarks**: [BENCHMARKS.md](BENCHMARKS.md)
-- **Gallery**: [PROJECT_GALLERY.md](PROJECT_GALLERY.md)
-- **Screenshots**: [SCREENSHOTS.md](SCREENSHOTS.md)
